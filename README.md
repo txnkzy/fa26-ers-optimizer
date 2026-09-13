@@ -58,7 +58,15 @@ Reads the car's physics from **your own copy** of the mod and caches them in
 after backing them up. Reads lap files from
 `Documents\Assetto Corsa\fa26_baseline`. It never connects to the internet.
 
-## Licensing and the car
+## Licence
+
+Free to download and use; **not** free to redistribute, fork publicly, or
+modify and publish. The source is here so you can see what an unsigned
+executable does before running it, not as an invitation to take it. See
+[LICENSE](LICENSE) for what that allows in full, and open an issue if you
+want to do something it does not.
+
+## The car
 
 This repository contains **no part of the VRC Formula Alpha 2026**. The car's
 physics are unpacked at runtime from the copy you already own, into a cache

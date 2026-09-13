@@ -1,0 +1,66 @@
+FA26 ERS Deployment Optimizer
+Copyright (c) 2026 txnkzy. All rights reserved.
+
+This program is free to download and use. The source is published so that
+anyone can see exactly what it does before running an unsigned executable --
+not as an invitation to take it.
+
+
+YOU MAY
+
+  * Download, install and run the program, for free, for any purpose
+    including streaming, competition and paid coaching.
+  * Read the source, in full, to satisfy yourself about what it does.
+  * Report problems, request features, and post lap times, screenshots or
+    videos of it in use.
+  * Keep a private copy of the source, and change that private copy for your
+    own use on your own machine.
+
+
+YOU MAY NOT
+
+  * Redistribute the program or the source, modified or unmodified, in whole
+    or in part. Link to the official releases instead:
+    https://github.com/txnkzy/fa26-ers-optimizer/releases
+  * Publish a modified version, a fork, a port to another car or game, or
+    anything derived from this source.
+  * Sell it, bundle it with anything sold, or put it behind a paywall,
+    subscription or donation wall.
+  * Remove or obscure this notice, or present the work as your own.
+
+
+ABOUT FORKS ON GITHUB
+
+While this repository is public, GitHub's Terms of Service let any GitHub
+user fork it through GitHub's own interface, and nothing here overrides that.
+What this licence withholds is the right to publish, distribute or release
+anything built from such a fork. A fork kept for reading or for a private
+change is fine; shipping one is not.
+
+
+OTHER PEOPLE'S WORK
+
+This repository contains no part of the VRC Formula Alpha 2026. The car's
+physics are read at runtime from the copy each user already owns, and nothing
+of VRC's is redistributed here.
+
+The bundled typefaces are not covered by this notice and keep their own
+licences -- Barlow under SIL OFL 1.1 and JetBrains Mono under Apache 2.0.
+See ui/fonts/LICENSES.txt.
+
+
+NO WARRANTY
+
+This program is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and non-infringement. In no event shall the
+author be liable for any claim, damages or other liability arising from the
+use of this program.
+
+It writes deployment maps into Assetto Corsa setup files you choose. It makes
+a backup copy first, and it changes only deployment maps 1 to 3. Even so, the
+setups it touches are yours, and so is the responsibility for keeping copies
+of anything you care about.
+
+
+If you want to do something this notice does not allow, ask. Open an issue.

@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent
 
 #: Files shipped as they are.
 FILES = [
+    "LICENSE",
     "fa26_app.py",
     "fa26_gui.py",
     "check_app.py",
