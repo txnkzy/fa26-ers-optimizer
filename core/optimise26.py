@@ -529,7 +529,49 @@ def _variants(split: fa26.Split, profile) -> list[fa26.Split]:
                           _level_deploy(split, direction)):
             if candidate is not None:
                 out.append(candidate)
+
+    quiet = _floor_off(split)
+    if quiet is not None:
+        out.append(quiet)
     return [ensure_live_exit(sanitise(c, profile), profile) for c in out]
+
+
+#: Enough harvesting to hold `cmd_clip > 0` through the throttle application.
+#: The suppression is the point, not the energy: on a qualifying lap the
+#: harvest cap is already saturated, so 50 kW and 350 kW give the same lap to
+#: the millisecond, and the smaller figure costs less traction at the corner
+#: exit it sits on.
+FLOOR_OFF_CLIP_KW = 50
+
+
+def _floor_off(split: fa26.Split) -> fa26.Split | None:
+    """The same zone, harvesting from its first metre: no deployment at all.
+
+    The only way a map can decline the 200 kW floor. The car holds that floor
+    for a second after every throttle application whatever the map commands,
+    and the demand latch then pins the zone there, so setting a short zone's
+    deploy power to 0 changes nothing -- measured: three of eleven Albert Park
+    zones give an identical lap time at 0 kW and at 350. The simulator gates
+    the floor on `cmd_clip <= 0`, so a clip live at the throttle application
+    is the one thing that turns it off.
+
+    The shape is not new -- `build_recharge` has always written it for STRAT 3
+    -- but the search could not reach it. `_with_clip` relocates `clip_start`
+    only when there is no clip region at all, and then to the split's
+    midpoint; from there the start is several 15% nudges away, each scored on
+    its own, and the intermediate steps do not pay. So a hill climb turns back
+    before arriving.
+
+    Offered as a single move, it is quicker at 8 of 10 circuits and slower at
+    none. Madrid gained 0.802 s in the model and 0.660 s on track, against a
+    lap that gave some of it back with a mistake in the last sector.
+    """
+    if split.clip_kw > 0 and split.clip_start_m <= split.start_m:
+        return None
+    if split.end_m - split.start_m < MIN_CLIP_M:
+        return None
+    return fa26.Split(split.start_m, split.start_m, split.start_m,
+                      split.end_m, 0, FLOOR_OFF_CLIP_KW)
 
 
 def _more_harvest(split: fa26.Split) -> fa26.Split | None:

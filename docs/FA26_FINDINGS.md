@@ -891,6 +891,54 @@ One more, found while testing: picking a lap outside 3% of the session best
 silently substituted the best lap instead. It still does -- that is the right
 behaviour -- but it now says which lap it used and why.
 
+## Declining the 200 kW floor
+
+The car holds 200 kW for a second after every throttle application whatever
+the map commands, and the demand latch then pins the zone at that level. So a
+short zone's deploy power is **inert**: three of eleven Albert Park zones give
+an identical lap time at 0 kW and at 350, to the millisecond. The search was
+exploring eight power levels on a dial that was not connected.
+
+The simulator gates the floor on `cmd_clip <= 0`, so a clip live at the
+throttle application is the one thing that turns it off -- and the shape was
+always expressible, since `build_recharge` has written it for STRAT 3 all
+along. The search could not reach it: `_with_clip` relocates `clip_start`
+only when there is no clip region at all, and then to the split's midpoint.
+From there the start is several 15% nudges away, each scored alone, and the
+intermediate steps do not pay, so a hill climb turns back before arriving.
+
+`_floor_off` offers the destination as a single move. Quicker at 8 circuits,
+slower at none: Madrid -0.802 s, Red Bull Ring -0.212, Albert Park -0.113,
+Suzuka -0.097. It does nothing on race maps, which is right -- turning a zone
+off lowers the sustainable level on a lap that has to repeat, so the search
+declines it there.
+
+Confirmed on track. Two Madrid laps back to back, same session, same driver:
+the current solver's map gave 1:39.945 and the new one 1:39.285, a gain of
+0.660 s against a predicted 0.802, on a lap that gave about 0.14 s back with
+a mistake in the last sector. The map that won deployed 1.71 MJ more and
+finished at 8% where the other stranded 45% -- energy the floor had been
+spending at corner exits where the command was inert.
+
+The clip level is irrelevant: 50 kW and 350 kW give the same lap to the
+millisecond, because a qualifying lap already saturates its harvest cap. The
+smaller figure is used since it costs least traction at the exit it sits on.
+
+Two things this cost before it was right. The first identification of which
+map a lap was driven on used `deploy_kw - store_kw`, which reads 334 kW of
+"deployment" where the car is coasting and recovering -- it reported that
+none of the laps had used the new map when they all had. And a traction
+explanation for why the floor wastes energy was wrong: only 4% of those
+samples are traction-limited. The reason is duller -- the floor makes "spend
+nothing here" inexpressible, so that energy could not be moved to zones where
+the command works.
+
+Tried and rejected alongside it: indexing braking by track position the way
+drag already is (1.09% -> 1.06%, not worth a second position-indexed system),
+and optimising the flip to STRAT 1 on the run to the line (the model said a
+full-battery entry was worth 0.56 s; measured back to back it was 0.030 s,
+and the entry charge equalises within a quarter of a lap).
+
 ## One file
 
 `build_exe.py` freezes the whole thing with PyInstaller into

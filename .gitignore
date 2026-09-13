@@ -36,6 +36,17 @@ logger/fa25_baseline/
 Run Optimizer.bat
 docs/FINDINGS.md
 
+# --- local instrumentation --------------------------------------------------
+# A build that records every solve, for improving the model. It changes no
+# tracked file -- it wraps the app's methods at start-up -- so the program
+# testers run stays byte-identical to the program measured here. It is not
+# published, and neither are the records.
+dev_run.py
+dev_entry.py
+dev_floor.py
+Run FA26 Optimizer (dev).bat
+runs/
+
 # --- build output -----------------------------------------------------------
 build/
 dist/
