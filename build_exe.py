@@ -23,7 +23,30 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent
 OUT = Path(r"E:\FA26 Optimizer")
 NAME = "FA26 Optimizer"
-VERSION = (1, 0, 0, 0)
+
+
+def version() -> tuple:
+    """The version, taken from the newest git tag.
+
+    Hardcoding it meant the 1.0.1 build shipped claiming to be 1.0.0 in its
+    own file properties -- the code was right and the label was a lie, which
+    is the worst way round for a file people are being asked to trust.
+    """
+    import re
+    import subprocess
+    try:
+        tag = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"], cwd=SRC,
+            capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        return (0, 0, 0, 0)
+    parts = [int(n) for n in re.findall(r"\d+", tag)][:3]
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts) + (0,)
+
+
+VERSION = version()
 
 #: Modules reached by bare name after a `sys.path` insert. PyInstaller's
 #: analysis follows imports, not path manipulation, so every one of these has
