@@ -1,0 +1,338 @@
+{
+  "albertpark": {
+    "round": 1,
+    "venue": "Melbourne",
+    "centreline_km": 5.278,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.0,
+      "race_overtake": 8.5,
+      "qualifying": 7.0,
+      "free_practice": 8.5,
+      "outlap": 8.5
+    },
+    "power_reduction_rate_kw_s": 50,
+    "power_limited_distance_m": 3518,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Base - Standard",
+      "Base - Overtake"
+    ],
+    "exceptions_raw": "2026 AUSTRALIAN GRAND PRIX\n06 - 08 March 2026\nThe FIA Formula One Race Director\nFrom\nThe FIA Formula One Race Director\nTo\nAll Teams, All Officials\nDocument\n6\nDate\n05 March 2026\nTime\n17:28\nTitle\nPower Unit Information\nDescription Power Unit Information\nEnclosed\n01AUS - PU Info.pdf\nRui Marques\n\nROUND No.\nR01\nVENUE\nMelbourne\nCENTRELINE\n5.278 km\nFORMAT\nStandard\nDATE\n06-08 March\nNormal lap\nOvertake\n8.0 MJ\n8.5 MJ\n7.0 MJ\n8.5 MJ\n8.5 MJ\n3518 m\n50 kW/s\nStandard\nOverride\nBase - Standard\nBase - Overtake\n1.0 s\n4650 m (TBC)\n(L21)\n4713 m\n(L22/SC1)\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT11-T13\n4100-4550\n350kW\nExit T5\n1450-1600\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where PU power reduction at the start of a\nPower Limited Pending period can be greater than 150kW\nArticle C5.12.5\nSectors where a reset of\nMGUK power reduction is permitted\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOVERTAKE\nArticle B7.2\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 AUSTRALIAN GRAND PRIX\nCOMPETITION INFORMATION\nRate Limit\nPOWER AND ENERGY LIMITS\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice sessions Out laps other than in \nRace\nPower Limited \nDistance\n0\n50\n100\n150\n200\n250\n300\n350\n400\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\n"
+  },
+  "shanghai": {
+    "round": 2,
+    "venue": "Shanghai",
+    "centreline_km": 5.451,
+    "format": "Alternative",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 9.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 3125,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Base - Standard",
+      "Base - Overtake"
+    ],
+    "exceptions_raw": "2026 CHINESE GRAND PRIX\n13 - 15 March 2026\nThe FIA Formula One Race Director\nFrom\nThe FIA Formula One Race Director\nTo\nAll Teams, All Officials\nDocument\n2\nDate\n12 March 2026\nTime\n08:40\nTitle\nPower Unit Information\nDescription Power Unit Information\nEnclosed\nR02_China_Power_Unit_Information.pdf\nRui Marques\n\nROUND No.\nR02\nVENUE\nShanghai\nCENTRELINE\n5.451 km\nFORMAT\nAlternative\nDATE\n15-15 March\nOvertake not active\nOvertake active\n8.5 MJ\n9.0 MJ\n9.0 MJ\n9.0 MJ\n9.0 MJ\n3125 m\n100 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\n1.0 s\n5130 m\n(L22/SC1)\n5250 m\n(L23)\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT7-T9\nT11-T12\n1950-2500\n3100-3200\n350kW\n350kW\n-\n-\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where PU power reduction at the start of a\nPower Limited Pending period can be greater than 150kW\nArticle C5.12.5\nSectors where a reset of\nMGUK power reduction is permitted\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOVERTAKE\nArticle B7.2\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nSprint & Race\nSprint Qualifying & \nQualifying\nFree Practice sessions Out laps other than in \nSprint and Race\nPower Limited \nDistance\nRate Limit\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 CHINESE GRAND PRIX\nCOMPETITION INFORMATION\nPOWER AND ENERGY LIMITS\n0\n50\n100\n150\n200\n250\n300\n350\n400\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\n"
+  },
+  "suzuka": {
+    "round": 3,
+    "venue": "Suzuka",
+    "centreline_km": 5.807,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 8.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 3472,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Base - Standard",
+      "Base - Overtake"
+    ],
+    "exceptions_raw": " No.\nR03\nVENUE\nSuzuka\nCENTRELINE\n5.807 km\nFORMAT\nStandard\nDATE\n27-29 March\nOvertake not active\nOvertake active\n8.5 MJ\n9.0 MJ\n8.0 MJ\n9.0 MJ\n9.0 MJ\n3472 m\n100 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\n1.0 s\n5480 m (TBC)\n(L24)\n5562 m\n(L25/SC1)\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT3-T6\nT8-T9\nT13-T14\n1100-1500\n2270-2400\n3800-3920\n350kW\n350kW\n350kW\n-\n-\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 JAPANESE GRAND PRIX\nCOMPETITION INFORMATION\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice \nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where PU power reduction at the start of a\nPower Limited Pending period can be greater than 150kW\nArticle C5.12.5\nSectors where a reset of\nMGUK power reduction is permitted\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOVERTAKE\nArticle B7.2\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n0\n50\n100\n150\n200\n250\n300\n350\n400\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\n"
+  },
+  "miami": {
+    "round": 4,
+    "venue": "Miami",
+    "centreline_km": 5.412,
+    "format": "Alternative",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 8.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 3346,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "ance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT1-T8\nT11-T16\n370-1550\n3100-3520\nT4-T8\nT11-T16\n[T17-T19]\n1140-1600\n3100-3520\n[4800-5200]\n350kW\n350kW\n[350kW]\n[Exit T18]\n[5000-5500]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\nT1-T3\nT5-T8\n370-650\n1250-1550\n240km/h\n240km/h\n1.0 s\n4908 m\n(L24)\n5057 m\n(L25/SC1)\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nMain Overtaking Zones\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nSprint & Race\nSprint Qualifying & \nQualifying\nFree Practice\nsessions\nOut laps other than in \nSprint and Race\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 MIAMI GRAND PRIX\nCOMPETITION INFORMATION\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "montreal": {
+    "round": 5,
+    "venue": "Montr\u00e9al",
+    "centreline_km": 4.361,
+    "format": "Alternative",
+    "recharge_mj": {
+      "race": 8.0,
+      "race_overtake": 8.5,
+      "qualifying": 6.0,
+      "free_practice": 8.5,
+      "outlap": 8.5
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 2682,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "dard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT1-T6\n220-1200\nT5-T6\n[T13-Exit T14]\n980-1100\n[3850-4050]\n350kW\n[350kW]\n[Exit T14]\n[4000-4400]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n-\n-\n-\n1.0 s\n3870 m\n(L18/SC1)\n3982 m\n(L19)\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nMain Overtaking Zones\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nSprint & Race\nSprint Qualifying & \nQualifying\nFree Practice\nsessions\nOut laps other than in \nSprint and Race\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 CANADIAN GRAND PRIX\nCOMPETITION INFORMATION\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "monaco": {
+    "round": 6,
+    "venue": "Monte Carlo",
+    "centreline_km": 3.337,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 9.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 1388,
+    "curve_standard": "Rev 1 - Standard",
+    "curve_override": "Rev 1 - Overtake",
+    "curve_alternative": [
+      "Rev 1 - Overtake",
+      "Rev 1 - Standard",
+      "Rev 1 - Overtake"
+    ],
+    "exceptions_raw": " June\nOvertake not active\nOvertake active\n8.5 MJ\n9.0 MJ\n9.0 MJ\n9.0 MJ\n9.0 MJ\n1388 m\n100 kW/s\nOvertake not active\nOvertake active\nRev 1 - Standard\nRev 1 - Overtake\nNo such sectors \ndefined\nRev 1 - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\n-\n-\n[Exit T19]\n[2980-3200]\n[350kW]\n[Exit T19]\n[3070-3400]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n2805 m\n2950 m\nL19\nL20/SC1\nAny Practice Session \nincl. Qualifying \nSessions\n-\n-\n-\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\nMain Overtaking Zones\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nSprint & Race\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 MONACO GRAND PRIX\nCOMPETITION INFORMATION\n0\n50\n100\n150\n200\n250\n300\n350\n400\n180\n200\n220\n240\n260\n280\n300\n320\nMGUK DC Power (kW)\nvCar (km/h)\nRev 1 - Standard\nRev 1 - Overtake\n"
+  },
+  "barcelona": {
+    "round": 7,
+    "venue": "Barcelona",
+    "centreline_km": 4.657,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 7.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 2440,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": " T14\n1150-1400\n2850-3050\n4300-4700\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n4047 m\n4271 m\nL19\nL20/SC1\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 BARCELONA-CATALUNYA GRAND PRIX\nCOMPETITION INFORMATION\nT2-T3\nT9\nT13\n1000-1200\n2800-2950\n3980-4100\n260km/h\n260km/h\n260km/h\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q \nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "redbullring": {
+    "round": 8,
+    "venue": "Spielberg",
+    "centreline_km": 4.236,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.0,
+      "race_overtake": 8.5,
+      "qualifying": 6.0,
+      "free_practice": 8.5,
+      "outlap": 8.5
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 2923,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "-28 June\nOvertake not active\nOvertake active\n8.0 MJ\n8.5 MJ\n6.0 MJ\n8.5 MJ\n8.5 MJ\n2923 m\n100 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT4-T7\nT9-T10\n2170-2960\n3720-3920\nT6-T7\nT9-T10\n[Exit T10]\n2700-3000\n3750-3900\n[3950-4150]\n350kW\n350kW\n[350kW]\n[Exit T10]\n[4100-4400]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n3936 m\n4088 m\nL19\nL20\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q \nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n-\n-\n-\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 AUSTRIA\nCOMPETITION INFORMATION\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "silverstone": {
+    "round": 9,
+    "venue": "Silverstone",
+    "centreline_km": 5.891,
+    "format": "Alternative",
+    "recharge_mj": {
+      "race": 8.0,
+      "race_overtake": 8.5,
+      "qualifying": 6.5,
+      "free_practice": 8.5,
+      "outlap": 8.5
+    },
+    "power_reduction_rate_kw_s": 50,
+    "power_limited_distance_m": 3833,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "\n8.5 MJ\n8.5 MJ\n3833 m\n50 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT1-T4\nT15-T16\n350-1000\n4950-5450\nT1-T4\nT6-T7\nT15-T16\n[Exit T17]\n350-1000\n1950-2100\n4950-5200\n[5550-5750]\n350kW\n350kW\n350kW\n[350kW]\nExit T1\nExit T9\n[Exit T17-T18]\n400-550\n3000-3300\n[5650-5900]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n5560 m (TBC)\n5631 m\nL25\nL26\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\nT11-T14\nT18\n3700-4150\n5600-5800\n300km/h\n230km/h\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 BRITISH GRAND PRIX\nCOMPETITION INFORMATION\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nSprint & Race\nSprint Qualifying & \nQualifying\nFree Practice\nsessions\nOut laps other than in \nSprint and Race\nPower Limited \nDistance\nRate Limit\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "spa": {
+    "round": 10,
+    "venue": "Spa-Francorchamps",
+    "centreline_km": 7.004,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 7.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 50,
+    "power_limited_distance_m": 4594,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "\n50 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT5-T14\n2400-4900\nT5-T9\nT10-T11\nT12-T14\n[Exit T19]\n2350-3250\n3750-4000\n4450-4850\n[6730-6900]\n350kW\n350kW\n350kW\n[350kW]\nExit T3\nExit T7\nExit T10\nExit T17\n[Exit T19]\n1150-1400\n2650-2750\n3800-4000\n6150-6350\n[6800-7000]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n6745 m\n6885 m\nL27/SC1\nL28\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\nT6-Exit T7\nT12-T13\n2500-2680\n4450-4650\n240km/h\n240km/h\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 BELGIAN GRAND PRIX\nCOMPETITION INFORMATION\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "hungaroring": {
+    "round": 11,
+    "venue": "Budapest",
+    "centreline_km": 4.381,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 9.0,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 1885,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "0\n2570-2700\n3500-4000\n[4000-4200]\n350kW\n350kW\n350kW\n[350kW]\n[Exit T14]\n[4150-4400]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n3974 m\n4121 m\nL20/SC1\nL21\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 HUNGARIAN GRAND PRIX\nCOMPETITION INFORMATION\nT2-Exit T3\n1150-1400\n240km/h\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "zandvoort": {
+    "round": 12,
+    "venue": "Zandvoort",
+    "centreline_km": 4.259,
+    "format": "Alternative",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 7.5,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 2411,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "670-800\n2000-2450\n[3450-3650]\n350kW\n350kW\n[350kW]\n[Exit T14]\n[3700-4200]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n3431 m\n3648 m\nL20\nL21\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nSprint & Race\nSprint Qualifying & \nQualifying\nFree Practice\nsessions\nOut laps other than in \nSprint and Race\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 DUTCH GRAND PRIX\nCOMPETITION INFORMATION\n-\n-\n-\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "monza": {
+    "round": 13,
+    "venue": "Monza",
+    "centreline_km": 5.793,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 7.0,
+      "race_overtake": 7.5,
+      "qualifying": 5.0,
+      "free_practice": 7.5,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 50,
+    "power_limited_distance_m": 4218,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake",
+      "Base - Standard",
+      "Base - Overtake",
+      "Alt 1"
+    ],
+    "exceptions_raw": "793 km\nFORMAT\nStandard\nDATE\n04-06 September\nOvertake not active\nOvertake active\n7.0 MJ\n7.5 MJ\n5.0 MJ\n7.5 MJ\n9.0 MJ\n4218 m\n50 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT4-T7\n2100-2800\nT4-T7\n[Exit T11]\n2100-2800\n[5050-5350]\n350kW\n[350kW]\n[Exit T11]\n[5300-5800]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\n5050 m (TBC)\n5249 m\nL18\nL19\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n-\n-\n-\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 ITALIAN GRAND PRIX\nCOMPETITION INFORMATION\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  },
+  "madrid": {
+    "round": 14,
+    "venue": "Madrid",
+    "centreline_km": 5.416,
+    "format": "Standard",
+    "recharge_mj": {
+      "race": 8.5,
+      "race_overtake": 9.0,
+      "qualifying": 7.5,
+      "free_practice": 9.0,
+      "outlap": 9.0
+    },
+    "power_reduction_rate_kw_s": 100,
+    "power_limited_distance_m": 3206,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": [
+      "Alt 1",
+      "Base - Overtake"
+    ],
+    "exceptions_raw": "2026\u00a0SPANISH\u00a0GRAND\u00a0PRIX\n11\u00a0-\u00a013\u00a0September\u00a02026\nThe\u00a0FIA\u00a0Formula\u00a01\u00a0Race\u00a0Director\nFrom\nThe\u00a0FIA\u00a0Formula\u00a01\u00a0Race\u00a0Director\nTo\nAll\u00a0Teams,\u00a0All\u00a0Officials\nDocument\n3\nDate\n10\u00a0September\u00a02026\nTime\n15:53\nTitle\nPower\u00a0Unit\u00a0Information\nDescription Power\u00a0Unit\u00a0Information\nEnclosed\nR14_Spain_Power_Unit_Information.pdf\nRui\u00a0Marques\n\nROUND No.\nR14\nVENUE\nMadrid\nCENTRELINE\n5.416 km\nFORMAT\nStandard\nDATE\n11-13 September\nOvertake not active\nOvertake active\n8.5 MJ\n9.0 MJ\n7.5 MJ\n9.0 MJ\n9.0 MJ\n3206 m\n100 kW/s\nOvertake not active\nOvertake active\nBase - Standard\nBase - Overtake\nAlt 1\nBase - Overtake\nIdentification of \nSectors\nLap distance window \n[m]\nIdentification of \nSectors\nLap distance window \n[m]\nMaximum PU power \nreduction permitted\nIdentification of \nSectors\nLap distance window \n[m]\nT5-T22\n1500-5100*\nT15-T16\nT18-T19\nT20-T21\n[Exit T22]\n3600-3800\n4100-4300\n4600-4800\n[5100-5300]\n350kW\n350kW\n350kW\n[350kW]\n[Exit T22]\n[5200-5400]\nIdentification of \nSectors\nLap distance window \n[m]\nSpeed threshold\nDetection Gap \nDetection Line\n[sLap & Loop]\n(Art. B7.2.1b.viii)\nActivation Line\n[sLap & Loop]\n(Art. B7.2.1b.ix)\nTBC\nTBC\nL24\nL25\nArticle C5.2.10\nMaximum Recharge per lap\nArticle C5.12.8\nMaximum PU Power Reduction Rate\nRace\nQualifying\nFree Practice\nsessions\nOut laps other than in \nRace\nPower Limited \nDistance\nRate Limit\nPOWER AND ENERGY LIMITS\nF1 POWER UNIT INFORMATION TO THE TEAMS AND PUMs\n2026 SPANISH GRAND PRIX\nCOMPETITION INFORMATION\n-\n-\n-\n1.0 s\nOVERTAKE\nArticle C5.12.7\nSectors with a higher speed threshold\nArticle B7.2\nArticle C5.2.8\nMaximum DC power of\nERS-K function of car speed\nOther parts of the Lap\nIDENTIFICATION OF SECTORS WHERE EXCEPTIONS APPLY\nArticle C5.12.4\nSectors where the PU power reduction at the start of a Power\nLimited Pending period can be greater than 150kW\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.12.5\nSectors where a reset of MGUK power \nreduction is permitted\n(sectors indicated by [ ] are for SQ and Q only)\nArticle C5.2.8iii\nSectors where the alternative power curve \ndefined above applies in Sprint & Race\nMain Overtaking Zones\nSprint & Race\nAny Practice Session \nincl. Qualifying \nSessions\n0\n50\n100\n150\n200\n250\n300\n350\n400\n220\n240\n260\n280\n300\n320\n340\n360\nMGUK DC Power (kW)\nvCar (km/h)\nBase - Standard\nBase - Overtake\nAlt 1\n"
+  }
+}

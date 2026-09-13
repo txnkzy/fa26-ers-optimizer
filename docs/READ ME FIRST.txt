@@ -1,0 +1,112 @@
+FA26 ERS DEPLOYMENT OPTIMIZER
+=============================
+
+Works out where to spend battery around a circuit for the VRC Formula Alpha
+2026, from laps you have actually driven, and writes the result into your
+setup. You never have to work out a deployment zone by hand.
+
+
+WHAT YOU NEED
+-------------
+
+  * Assetto Corsa, with Custom Shaders Patch
+  * The VRC Formula Alpha 2026 (this tool only works with that car)
+
+Nothing else. No Python, no installer.
+
+
+GETTING STARTED
+---------------
+
+  1. Run "FA26 Optimizer.exe".
+
+     Windows may warn that it is from an unknown publisher, because it is not
+     code-signed. Click More info, then Run anyway.
+
+  2. The first screen finds Assetto Corsa on its own. If it cannot, paste the
+     folder -- the one with "content" and "apps" inside it.
+
+  3. Press "Install the logger". That puts a small app into Assetto Corsa
+     that records your laps. It is two files and it touches nothing else.
+
+  4. In game, open the apps bar on the right and enable
+     "FA26 Baseline Logger".
+
+
+USING IT
+--------
+
+  1. DRIVE. A few clean laps in one session, on whatever map the car has now.
+     They appear in the optimizer as you finish them.
+
+  2. RUN THE OPTIMIZER. It takes a couple of minutes. You can leave it and go
+     back to the game.
+
+  3. SAVE the result into one of your setups for that circuit. You need to
+     have saved a setup there already -- any name will do.
+
+  4. RESTART THE SESSION before driving. Assetto Corsa only reads a setup
+     when the car loads, so a file saved while you are on track never reaches
+     it. Reloading the setup in the pit menu is NOT enough.
+
+You get three maps:
+
+     STRAT 1   Qualifying   spends the whole battery over one lap
+     STRAT 2   Race         ends the lap with the charge it started
+     STRAT 3   Recharge     puts charge back in, and is meant to feel slow
+
+Switch between them with "STRAT Map" on the pit setup screen. The PU mode
+switch on the wheel does not change it.
+
+Check it worked: STRAT 3 should feel several seconds a lap slower than
+STRAT 1. If all three feel identical, the maps did not reach the car -- you
+probably did not restart the session.
+
+
+WORTH KNOWING
+-------------
+
+  * Drive a few laps on the new map and run it again. The first answer is
+    fitted to a car that was barely using its battery; the second is fitted
+    to one that was, and it is the better of the two.
+
+  * The qualifying map assumes you start the lap with a full battery. Run a
+    lap on STRAT 3 first.
+
+  * Your previous setup is copied to a .bak file before anything is written.
+    Only deployment maps 1 to 3 are touched.
+
+
+IF YOU ARE TESTING THIS
+-----------------------
+
+The most useful thing you can send back is THE LAP TIME YOU ACTUALLY
+ACHIEVED against the one the app predicted. That comparison is what made the
+model accurate, and more circuits is exactly what it is short of.
+
+Also worth saying:
+
+  * Did the first screen find your game without being told where it is?
+  * Which circuit, and did anything look wrong?
+
+Known rough edges, so you do not need to report them:
+
+  * It has been validated properly at Barcelona, Madrid and Suzuka. Other
+    circuits should work but nothing has checked the answer is a good one.
+  * Circuits with no published FIA recharge figure -- the Nordschleife among
+    them -- need that number set by hand on the left. It is the single most
+    important setting there is.
+
+
+WHAT IT DOES TO YOUR MACHINE
+----------------------------
+
+  * Reads the car's physics from your own copy of the mod, and keeps an
+    unpacked copy in AppData\\Local\\FA26 Optimizer.
+  * Writes the logger into Assetto Corsa's apps\\lua folder, when you ask it to.
+  * Writes deployment maps into setups you choose, after making a backup.
+  * Reads the lap files the logger records, in
+    Documents\\Assetto Corsa\\fa26_baseline.
+
+It never connects to the internet, and it does not include any part of the
+VRC car -- it reads the copy you already own.

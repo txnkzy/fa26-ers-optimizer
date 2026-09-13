@@ -1,0 +1,375 @@
+{
+  "albertpark": {
+    "practice": 85,
+    "qualify": 70,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "source": "fia:01",
+    "rate_kw_s": 50,
+    "power_limited_m": 3518,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 5278
+  },
+  "austin": {
+    "practice": 90,
+    "qualify": 80,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "baku": {
+    "practice": 90,
+    "qualify": 85,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "barcelona": {
+    "practice": 90,
+    "qualify": 70,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:07",
+    "rate_kw_s": 100,
+    "power_limited_m": 2440,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "speed_zones": [
+      [
+        1000,
+        1200,
+        260
+      ],
+      [
+        2800,
+        2950,
+        260
+      ],
+      [
+        3980,
+        4100,
+        260
+      ]
+    ],
+    "centreline_m": 4657
+  },
+  "hungaroring": {
+    "practice": 90,
+    "qualify": 90,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:11",
+    "rate_kw_s": 100,
+    "power_limited_m": 1885,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        4150,
+        4400,
+        "q"
+      ]
+    ],
+    "speed_zones": [
+      [
+        1150,
+        1400,
+        240
+      ]
+    ],
+    "centreline_m": 4381
+  },
+  "interlagos": {
+    "practice": 90,
+    "qualify": 65,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "jeddah": {
+    "practice": 90,
+    "qualify": 65,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "lasvegas": {
+    "practice": 90,
+    "qualify": 60,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "lusail": {
+    "practice": 90,
+    "qualify": 80,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "madrid": {
+    "practice": 90,
+    "qualify": 75,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:14",
+    "rate_kw_s": 100,
+    "power_limited_m": 3206,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": "Alt 1",
+    "reset_zones": [
+      [
+        5200,
+        5400,
+        "q"
+      ]
+    ],
+    "centreline_m": 5416
+  },
+  "mexico": {
+    "practice": 90,
+    "qualify": 85,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "miami": {
+    "practice": 90,
+    "qualify": 80,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:04",
+    "rate_kw_s": 100,
+    "power_limited_m": 3346,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        5000,
+        5500,
+        "q"
+      ]
+    ],
+    "speed_zones": [
+      [
+        370,
+        650,
+        240
+      ],
+      [
+        1250,
+        1550,
+        240
+      ]
+    ],
+    "centreline_m": 5412
+  },
+  "monaco": {
+    "practice": 90,
+    "qualify": 90,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:06",
+    "rate_kw_s": 100,
+    "power_limited_m": 1388,
+    "curve_standard": "Rev 1 - Standard",
+    "curve_override": "Rev 1 - Overtake",
+    "centreline_m": 3337
+  },
+  "montreal": {
+    "practice": 85,
+    "qualify": 60,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "source": "fia:05",
+    "rate_kw_s": 100,
+    "power_limited_m": 2682,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        4000,
+        4400,
+        "q"
+      ]
+    ],
+    "centreline_m": 4361
+  },
+  "monza": {
+    "practice": 75,
+    "qualify": 50,
+    "race": 70,
+    "race_overtake": 75,
+    "outlap": 90,
+    "source": "fia:13",
+    "rate_kw_s": 50,
+    "power_limited_m": 4218,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        5300,
+        5800,
+        "q"
+      ]
+    ],
+    "curve_alternative": "Alt 1",
+    "centreline_m": 5793
+  },
+  "redbullring": {
+    "practice": 85,
+    "qualify": 60,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "source": "fia:08",
+    "rate_kw_s": 100,
+    "power_limited_m": 2923,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        4100,
+        4400,
+        "q"
+      ]
+    ],
+    "centreline_m": 4236
+  },
+  "sakhir": {
+    "practice": 90,
+    "qualify": 90,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "shanghai": {
+    "practice": 90,
+    "qualify": 90,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:02",
+    "rate_kw_s": 100,
+    "power_limited_m": 3125,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 5451
+  },
+  "silverstone": {
+    "practice": 85,
+    "qualify": 65,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "source": "fia:09",
+    "rate_kw_s": 50,
+    "power_limited_m": 3833,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "speed_zones": [
+      [
+        3700,
+        4150,
+        300
+      ],
+      [
+        5600,
+        5800,
+        230
+      ]
+    ],
+    "centreline_m": 5891
+  },
+  "singapore": {
+    "practice": 90,
+    "qualify": 90,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "spa": {
+    "practice": 90,
+    "qualify": 70,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:10",
+    "rate_kw_s": 50,
+    "power_limited_m": 4594,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "speed_zones": [
+      [
+        2500,
+        2680,
+        240
+      ],
+      [
+        4450,
+        4650,
+        240
+      ]
+    ],
+    "centreline_m": 7004
+  },
+  "suzuka": {
+    "practice": 90,
+    "qualify": 80,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:03",
+    "rate_kw_s": 100,
+    "power_limited_m": 3472,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 5807
+  },
+  "yasmarina": {
+    "practice": 90,
+    "qualify": 70,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 90,
+    "source": "published:2026"
+  },
+  "zandvoort": {
+    "practice": 90,
+    "qualify": 75,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:12",
+    "rate_kw_s": 100,
+    "power_limited_m": 2411,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "reset_zones": [
+      [
+        3700,
+        4200,
+        "q"
+      ]
+    ],
+    "centreline_m": 4259
+  }
+}

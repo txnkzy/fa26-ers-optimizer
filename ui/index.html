@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FA26 ERS Deployment Optimizer</title>
+<!-- App mode takes its taskbar icon from the favicon, so the window gets
+     the deployment map rather than a generic globe. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0e14'/%3E%3Crect x='5.5' y='17' width='5' height='9' rx='1.5' fill='%23ff5c7a'/%3E%3Crect x='13.5' y='9' width='5' height='17' rx='1.5' fill='%235ec8ff'/%3E%3Crect x='21.5' y='14' width='5' height='12' rx='1.5' fill='%2354d6a0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">ERS Deployment Optimizer</span>
+    <span class="brand-car" id="car-id"></span>
+  </div>
+  <div class="status" id="status" data-state="wait">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">Starting up</span>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- ------------------------------------------------------------ rail -->
+  <aside class="rail" id="rail">
+
+    <section class="block" id="session-block">
+      <h2 class="block-title">
+        This session
+        <span class="live" id="live" hidden><span class="live-dot"></span>live</span>
+      </h2>
+
+      <div class="waiting" id="waiting">
+        <div class="waiting-pulse" id="waiting-pulse" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <p class="waiting-title" id="waiting-title">Waiting for laps</p>
+        <p class="waiting-text" id="waiting-text">
+          Drive with the logger running. Laps appear here as you finish them.
+        </p>
+        <div class="last-session" id="last-session" hidden>
+          <p class="last-label">Last session</p>
+          <p class="last-name" id="last-name"></p>
+          <p class="last-meta" id="last-meta"></p>
+          <button type="button" class="ghost small" id="use-last">Use it anyway</button>
+        </div>
+        <p class="waiting-path"><code id="telemetry-path"></code></p>
+      </div>
+
+      <div id="session-card" hidden>
+        <p class="circuit" id="circuit-name"></p>
+        <dl class="facts" id="facts"></dl>
+        <details class="laps" id="lap-detail">
+          <summary><span id="lap-summary"></span></summary>
+          <ul class="lap-list" id="lap-list"></ul>
+        </details>
+      </div>
+    </section>
+
+    <div id="warnings"></div>
+
+    <section class="block" id="limits-block" hidden>
+      <h2 class="block-title">
+        Recharge limit
+        <button type="button" class="link" id="limits-toggle"></button>
+      </h2>
+      <p class="block-note" id="limits-source"></p>
+
+      <div class="sliders" id="sliders">
+        <div class="slider-row">
+          <div class="slider-head">
+            <label for="qualify-range">Qualifying</label>
+            <output class="slider-value" id="qualify-value">7.0<span>MJ</span></output>
+          </div>
+          <input type="range" id="qualify-range" min="40" max="91" step="1" value="70">
+          <div class="slider-scale"><span>4</span><span>6</span><span>8</span><span class="inf">&#8734;</span></div>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head">
+            <label for="race-range">Race</label>
+            <output class="slider-value" id="race-value">8.0<span>MJ</span></output>
+          </div>
+          <input type="range" id="race-range" min="40" max="86" step="1" value="80">
+          <div class="slider-scale"><span>4</span><span>6</span><span>8</span><span class="inf">&#8734;</span></div>
+        </div>
+      </div>
+
+      <p class="hint" id="unlimited-hint" hidden>
+        No limit at all &mdash; VRC's <b>unlimited</b> switch, for circuits
+        with no official figure.
+      </p>
+
+      <label class="check" id="remember-wrap" hidden>
+        <input type="checkbox" id="remember"> <span>Remember for this circuit</span>
+      </label>
+    </section>
+
+    <section class="block" id="options-block" hidden>
+      <label class="check">
+        <input type="checkbox" id="write-alloc" checked>
+        <span>Save the recharge limit too</span>
+      </label>
+      <p class="hint">Off, the car keeps another circuit's limit.</p>
+    </section>
+
+    <div class="rail-actions">
+      <button type="button" class="primary" id="run" disabled>Run optimizer</button>
+    </div>
+  </aside>
+
+  <!-- ---------------------------------------------------------- results -->
+  <section class="content" id="content">
+
+    <!-- shown until the game, the car and the data are all reachable -->
+    <section class="panel firstrun" id="setup" hidden>
+      <h2 id="setup-title">Setting up</h2>
+      <p class="panel-note" id="setup-problem"></p>
+      <div id="setup-path" hidden>
+        <label class="field-label" for="ac-path">Assetto Corsa folder</label>
+        <div class="path-row">
+          <input type="text" id="ac-path" class="filter"
+                 placeholder="D:\Steam Games\steamapps\common\assettocorsa"
+                 spellcheck="false" autocomplete="off">
+          <button type="button" class="primary" id="ac-save">Use this</button>
+        </div>
+        <p class="hint">The folder with <code>content</code> and <code>apps</code> in it.</p>
+      </div>
+      <div id="setup-logger" hidden>
+        <p class="panel-note">
+          The logger records your laps. It goes into Assetto Corsa's
+          <code>apps/lua</code> folder.
+        </p>
+        <button type="button" class="primary" id="install-logger">Install the logger</button>
+      </div>
+      <p class="panel-note" id="setup-error" hidden></p>
+    </section>
+
+    <div class="intro" id="intro" hidden>
+      <h1>Three maps from the laps you just drove.</h1>
+      <p class="lede">
+        The optimizer reads your laps, works out how your car behaves, and
+        finds where to spend battery around the circuit.
+      </p>
+      <div class="strat-grid">
+        <article class="strat-ghost" data-strat="1">
+          <span class="chip">STRAT 1</span>
+          <h3>Qualifying</h3>
+          <p>Spends the whole battery over one lap.</p>
+        </article>
+        <article class="strat-ghost" data-strat="2">
+          <span class="chip">STRAT 2</span>
+          <h3>Race</h3>
+          <p>Ends the lap with the charge it started.</p>
+        </article>
+        <article class="strat-ghost" data-strat="3">
+          <span class="chip">STRAT 3</span>
+          <h3>Recharge</h3>
+          <p>Puts charge back in. Meant to feel slow.</p>
+        </article>
+      </div>
+      <ol class="steps">
+        <li><b>Drive</b> a few clean laps in one session.</li>
+        <li><b>Run the optimizer.</b></li>
+        <li><b>Save, then restart the session</b> &mdash; the car only reads a
+            setup when it loads.</li>
+      </ol>
+    </div>
+
+    <section class="running" id="running" hidden>
+      <div class="running-head">
+        <h2 id="phase">Working</h2>
+        <span class="running-pct" id="pct">0%</span>
+        <button type="button" class="ghost small" id="stop">Stop</button>
+      </div>
+      <div class="bar" id="bar-outer" role="progressbar"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="bar-fill" id="bar"></div>
+      </div>
+      <p class="running-note">
+        <span id="elapsed">0s</span> &middot; a couple of minutes. You can go
+        back to the game.
+      </p>
+    </section>
+
+    <div class="results" id="results" hidden>
+      <div class="results-head">
+        <h1 id="results-title">Results</h1>
+        <button type="button" class="primary" id="apply-open">Save to a setup&hellip;</button>
+      </div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <section class="panel" id="apply-panel" hidden>
+      <h2>Save into a setup</h2>
+      <p class="panel-note" id="apply-note"></p>
+      <div class="setup-list" id="setup-list"></div>
+      <div class="panel-actions">
+        <button type="button" class="primary" id="apply-go" disabled>Save maps</button>
+        <button type="button" class="ghost" id="apply-cancel">Cancel</button>
+      </div>
+    </section>
+
+    <section class="panel done" id="applied" hidden></section>
+
+    <section class="activity-wrap" id="activity-wrap" hidden>
+      <div class="activity-head">
+        <h2>Activity</h2>
+        <div class="activity-controls">
+          <label class="check tiny">
+            <input type="checkbox" id="show-detail">
+            <span>Details</span>
+          </label>
+          <button type="button" class="link" id="activity-toggle">Hide</button>
+        </div>
+      </div>
+      <div class="activity" id="activity" aria-live="polite"></div>
+    </section>
+  </section>
+</main>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>

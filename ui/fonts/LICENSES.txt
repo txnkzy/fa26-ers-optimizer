@@ -1,0 +1,11 @@
+Barlow -- Jeremy Tribby, SIL Open Font License 1.1
+  https://github.com/jeremytribby/barlow
+
+Barlow Condensed -- Jeremy Tribby, SIL Open Font License 1.1
+  https://github.com/jeremytribby/barlow
+
+JetBrains Mono -- JetBrains, Apache License 2.0
+  https://github.com/JetBrains/JetBrainsMono
+
+Both licences permit redistribution with this notice. The files here are
+the latin subsets served by Google Fonts, unmodified.

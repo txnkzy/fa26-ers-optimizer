@@ -1,0 +1,50 @@
+{
+  "albertpark": {
+    "practice": 85,
+    "qualify": 70,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "file": "Australia.ini"
+  },
+  "redbullring": {
+    "practice": 85,
+    "qualify": 60,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "file": "Austria.ini"
+  },
+  "spa": {
+    "practice": 90,
+    "qualify": 70,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "file": "Belgium.ini"
+  },
+  "silverstone": {
+    "practice": 85,
+    "qualify": 65,
+    "race": 80,
+    "race_overtake": 85,
+    "outlap": 85,
+    "file": "Great Britain.ini"
+  },
+  "miami": {
+    "practice": 90,
+    "qualify": 80,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "file": "Miami.ini"
+  },
+  "barcelona": {
+    "practice": 90,
+    "qualify": 70,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "file": "Barcelona.ini"
+  }
+}

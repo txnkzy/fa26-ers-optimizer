@@ -1,0 +1,51 @@
+# Nothing here may reach a public repository.
+#
+# The same three categories `make_release.py` refuses to put in a zip. A
+# public repo is worse than a zip for getting this wrong: history is awkward
+# to scrub once something is pushed.
+
+# --- VRC's car data ---------------------------------------------------------
+# Their paid work. The app unpacks it at runtime from the copy each user
+# already owns; no part of it belongs in here. `out/` is a scratch folder that
+# still holds an unpacked copy from before that change.
+out/
+*.acd
+**/fa26_unpacked/
+**/data_unpacked/
+
+# --- your own driving and setups --------------------------------------------
+# Lap telemetry says where and how you drive; .bak files are copies of your
+# setups.
+*.csv
+*.bak
+**/fa26_baseline/*.csv
+**/maps/
+
+# --- FIA source documents ---------------------------------------------------
+# Published by the FIA, not by this project. The findings cite them; the PDFs
+# themselves do not need redistributing.
+docs/sources/
+
+# --- the FA25 tool ----------------------------------------------------------
+# A separate, earlier program for a different car. The two files FA26 needs
+# out of it -- carphysics.py and acd.py -- live in core/ instead. These stay
+# on disk so that tool keeps working; they are simply not part of this
+# repository.
+fa25opt/
+logger/fa25_baseline/
+Run Optimizer.bat
+docs/FINDINGS.md
+
+# --- build output -----------------------------------------------------------
+build/
+dist/
+*.spec
+*.zip
+ui/app.ico
+
+# --- working files ----------------------------------------------------------
+backup_pre_*/
+__pycache__/
+*.py[cod]
+*.log
+fa26_error.log
