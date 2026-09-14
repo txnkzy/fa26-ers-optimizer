@@ -176,10 +176,23 @@ def main() -> int:
         for name in ("READ ME FIRST.txt", "Installation.pdf"):
             archive.write(OUT / name, name)
 
+    # The same bundle again, with its version in the name. The plain one is
+    # always whatever was built last, which is convenient here and useless
+    # everywhere else: once two downloads are sitting in someone's downloads
+    # folder, or a release has to be re-uploaded, nothing about the file says
+    # which build it is. Keeping both means the newest is always at a stable
+    # name and every version is still on disk to go back to.
+    dotted = ".".join(str(n) for n in VERSION[:3])
+    stamped = OUT / ("%s v%s.zip" % (NAME, dotted))
+    shutil.copy2(bundle, stamped)
+
     print("\n%s" % target)
     print("  %.1f MB" % (target.stat().st_size / 1e6))
     print("%s" % bundle)
-    print("  %.1f MB  -- this is the file to send" % (bundle.stat().st_size / 1e6))
+    print("  %.1f MB  -- always the newest build" % (bundle.stat().st_size / 1e6))
+    print("%s" % stamped)
+    print("  %.1f MB  -- this is the file to upload"
+          % (stamped.stat().st_size / 1e6))
     shutil.rmtree(work, ignore_errors=True)
     shutil.rmtree(dist, ignore_errors=True)
     return 0
