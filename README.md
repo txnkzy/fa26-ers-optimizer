@@ -9,6 +9,29 @@ laps whose map provenance is proven, at Barcelona, Madrid and Suzuka.
 
 ---
 
+## Running an unsigned executable
+
+Windows will warn that the publisher is unknown, because the file is not
+code-signed — that costs a yearly fee and this is free. So the source is
+here in full, and everything below can be checked rather than taken on trust:
+
+- **It makes no network connections.** The whole program is `fa26_app.py` and
+  `core/`; the only network code in it serves the window to itself on
+  `127.0.0.1`, which is why it works with the internet disconnected. Nothing
+  outside that address is contacted, and the port refuses anything that is not
+  this machine.
+- **It writes to four places, and nowhere else.** Its own folder in
+  `%LOCALAPPDATA%`, the logger inside Assetto Corsa when you press the button,
+  and the setups you pick — each backed up to `.bak` first. The in-game logger
+  writes lap files to `Documents\Assetto Corsa\fa26_baseline`.
+- **It reads the registry, never writes it** — only to find where Steam is.
+- **It collects nothing.** No analytics, no accounts, no telemetry leaving the
+  machine, nothing written outside the paths above.
+
+If you would rather not run the executable at all, `python fa26_app.py` runs
+the same program from this source with Python 3.10 or newer and nothing else
+installed.
+
 ## Using it
 
 Download the release, run `FA26 Optimizer.exe`, and follow the first screen.
@@ -57,6 +80,19 @@ Reads the car's physics from **your own copy** of the mod and caches them in
 `apps\lua` when you ask it to. Writes deployment maps into setups you pick,
 after backing them up. Reads lap files from
 `Documents\Assetto Corsa\fa26_baseline`. It never connects to the internet.
+
+## Versions
+
+Every release is on the [releases page](https://github.com/txnkzy/fa26-ers-optimizer/releases);
+the newest is the one to download. Versions not listed here were built and
+tagged but never published.
+
+| | |
+|---|---|
+| **1.0.6** | The window failed to open on the second and later runs, showing the browser's connection error instead of the page. Also: an installation sheet in the bundle, a version number in the app, a *Copy diagnostics* button, and the window itself stopped from talking to anything on the network. |
+| **1.0.2** | The app reports its own version, and one button copies everything needed to answer a question about a run. |
+| **1.0.1** | The search can decline the car's 200 kW floor, which makes "turn this zone off" reachable. Quicker at 8 circuits of 10 and slower at none; confirmed on track at Madrid, 0.66 s. |
+| **1.0.0** | First release. |
 
 ## Licence
 
