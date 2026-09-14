@@ -53,6 +53,7 @@ dist/
 *.spec
 *.zip
 ui/app.ico
+docs/Installation.pdf
 
 # --- working files ----------------------------------------------------------
 backup_pre_*/

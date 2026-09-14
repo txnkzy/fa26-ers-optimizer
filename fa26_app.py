@@ -59,7 +59,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 
 def car_data() -> Path:

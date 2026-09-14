@@ -3,7 +3,8 @@
     python build_exe.py
 
 Produces `E:\\FA26 Optimizer\\FA26 Optimizer.exe` -- one file, no installer, no
-Python needed on the machine that runs it. The page, its fonts, the recharge
+Python needed on the machine that runs it -- and zips it with the read-me and
+the installation sheet, which is the file to hand to anyone else. The page, its fonts, the recharge
 tables and the in-game logger all travel inside the executable; the logger is
 written into Assetto Corsa by the app itself, from its first screen, so there
 is nothing for anyone to copy by hand.
@@ -119,6 +120,12 @@ def main() -> int:
     print("icon")
     subprocess.run([sys.executable, "make_icon.py"], cwd=SRC, check=True)
 
+    # Generated here rather than committed, so the version on the sheet is
+    # always the version of the build it ships inside -- the same reason the
+    # icon is drawn here and the executable's properties come from the tag.
+    print("installation sheet")
+    subprocess.run([sys.executable, "make_pdf.py"], cwd=SRC, check=True)
+
     work = SRC / "build"
     dist = SRC / "dist"
     for folder in (work, dist):
@@ -160,12 +167,14 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     target = OUT / exe.name
     shutil.copy2(exe, target)
-    shutil.copy2(SRC / "docs" / "READ ME FIRST.txt", OUT / "READ ME FIRST.txt")
+    for name in ("READ ME FIRST.txt", "Installation.pdf"):
+        shutil.copy2(SRC / "docs" / name, OUT / name)
 
     bundle = OUT / ("%s.zip" % NAME)
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(target, target.name)
-        archive.write(OUT / "READ ME FIRST.txt", "READ ME FIRST.txt")
+        for name in ("READ ME FIRST.txt", "Installation.pdf"):
+            archive.write(OUT / name, name)
 
     print("\n%s" % target)
     print("  %.1f MB" % (target.stat().st_size / 1e6))

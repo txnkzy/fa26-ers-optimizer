@@ -18,6 +18,8 @@ Nothing else. No Python, no installer.
 GETTING STARTED
 ---------------
 
+(Installation.pdf, in this folder, is these steps as a printable sheet.)
+
   1. Run "FA26 Optimizer.exe".
 
      Windows may warn that it is from an unknown publisher, because it is not
@@ -77,22 +79,32 @@ WORTH KNOWING
     Only deployment maps 1 to 3 are touched.
 
 
-IF YOU ARE TESTING THIS
+IF SOMETHING GOES WRONG
 -----------------------
 
-The most useful thing you can send back is THE LAP TIME YOU ACTUALLY
-ACHIEVED against the one the app predicted. That comparison is what made the
-model accurate, and more circuits is exactly what it is short of.
+Press "Copy diagnostics" in the app, beside "Save to a setup", and paste what
+it gives you wherever you are asking. It carries the version, where your game
+was found, what the optimizer decided and every step it took along the way.
+Without it, a question takes several rounds of back and forth before anyone
+can even guess at the answer.
 
-Also worth saying:
+If the app will not start at all there is nothing to copy, so send this file
+instead:
 
-  * Did the first screen find your game without being told where it is?
-  * Which circuit, and did anything look wrong?
+    %LOCALAPPDATA%\FA26 Optimizer\error.log
+
+
+WORTH SENDING BACK
+------------------
+
+THE LAP TIME YOU ACTUALLY ACHIEVED, against the one the app predicted. That
+comparison is what made the model accurate in the first place, and more
+circuits is exactly what it is still short of.
 
 Known rough edges, so you do not need to report them:
 
   * It has been validated properly at Barcelona, Madrid and Suzuka. Other
-    circuits should work but nothing has checked the answer is a good one.
+    circuits should work, but nothing has checked the answer is a good one.
   * Circuits with no published FIA recharge figure -- the Nordschleife among
     them -- need that number set by hand on the left. It is the single most
     important setting there is.
@@ -102,11 +114,11 @@ WHAT IT DOES TO YOUR MACHINE
 ----------------------------
 
   * Reads the car's physics from your own copy of the mod, and keeps an
-    unpacked copy in AppData\\Local\\FA26 Optimizer.
-  * Writes the logger into Assetto Corsa's apps\\lua folder, when you ask it to.
+    unpacked copy in AppData\Local\FA26 Optimizer.
+  * Writes the logger into Assetto Corsa's apps\lua folder, when you ask it to.
   * Writes deployment maps into setups you choose, after making a backup.
   * Reads the lap files the logger records, in
-    Documents\\Assetto Corsa\\fa26_baseline.
+    Documents\Assetto Corsa\fa26_baseline.
 
 It never connects to the internet, and it does not include any part of the
 VRC car -- it reads the copy you already own.
