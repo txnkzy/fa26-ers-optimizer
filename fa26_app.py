@@ -22,12 +22,14 @@ import csv
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import urllib.request
 import webbrowser
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,7 +61,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 
 def car_data() -> Path:
@@ -1078,6 +1080,12 @@ MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
         ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain"}
 
 
+#: Whether the page has ever actually been handed to a window. The launcher
+#: has no other way to tell a window that was used and closed from one that
+#: was never really ours -- see the end of `main`.
+SERVED = {"pages": 0}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FA26Optimiser"
 
@@ -1121,6 +1129,7 @@ class Handler(BaseHTTPRequestHandler):
         route = url.path
         try:
             if route in ("/", "/index.html"):
+                SERVED["pages"] += 1
                 self._static("index.html")
             elif route.startswith("/ui/"):
                 self._static(route[4:])
@@ -1214,14 +1223,50 @@ BROWSERS = (
 
 
 def window_profile() -> Path:
-    """Where the window keeps its own state, so it reopens as you left it.
+    """A profile directory belonging to this launch alone.
 
     Kept out of the project folder and away from the real browser profile:
-    app mode needs a profile directory of its own, and pointing it at yours
-    makes it refuse to start whenever the browser is already running.
+    app mode needs a directory of its own, and pointing it at yours makes it
+    refuse to start whenever the browser is already open.
+
+    One per launch, though, and that part is not tidiness. Chromium hands its
+    command line to whichever process already owns a profile directory and
+    then exits immediately -- so a shared directory made every run after the
+    first fail: the browser returned at once, the `.wait()` in `open_window`
+    returned with it, and the server was shut down underneath a window that
+    was still loading. What the user saw was the browser's own connection
+    error against a numeric address, with the application already gone.
+
+    Edge leaves background processes alive after its last window closes, so
+    there was nothing rare about this. A directory nobody else owns cannot be
+    handed off, and `.wait()` means what it says again.
     """
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return Path(base) / "FA26 Optimizer" / "window"
+    root = Path(base) / "FA26 Optimizer"
+    root.mkdir(parents=True, exist_ok=True)
+    sweep(root)
+    profile = root / ("window-%d" % os.getpid())
+    profile.mkdir(parents=True, exist_ok=True)
+    return profile
+
+
+def sweep(root: Path) -> None:
+    """Delete profiles left by earlier runs, and never a live one.
+
+    A directory whose files are open cannot be renamed on Windows, which is
+    exactly the test wanted here: a rename that fails belongs to a window
+    somebody still has open, and leaving it alone is the right answer.
+    """
+    for old in list(root.glob("window-*")) + [root / "window"]:
+        if not old.is_dir():
+            continue
+        try:
+            spent = old.with_name(old.name + ".old")
+            shutil.rmtree(spent, ignore_errors=True)
+            old.rename(spent)
+        except OSError:
+            continue
+        shutil.rmtree(spent, ignore_errors=True)
 
 
 def find_browser():
@@ -1293,6 +1338,25 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
     threading.Event().wait()
 
 
+def server_answers(url: str, seconds: float = 8.0) -> bool:
+    """Wait until the page can really be fetched, before showing a window.
+
+    Opening the window first means any failure at all is reported by the
+    browser, as a connection error against a numeric address -- which tells
+    the user nothing except that a program they were told runs locally
+    appears to be failing to reach the network.
+    """
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1) as answer:
+                if answer.status == 200:
+                    return True
+        except Exception:
+            time.sleep(0.1)
+    return False
+
+
 def fatal(message: str) -> None:
     """Report a startup failure when there is no console to print it to.
 
@@ -1344,7 +1408,26 @@ def main(argv=None) -> int:
         if "--headless" in args:
             server.serve_forever()
         else:
+            if not server_answers(url):
+                fatal("The application could not start.\n\n"
+                      "Its own window runs on this machine at %s, and that "
+                      "address did not answer. Nothing here uses the "
+                      "internet; this is the program talking to itself.\n\n"
+                      "Security software blocking a local connection is the "
+                      "usual cause." % url)
+                return 1
             open_window(url, prefer_browser="--browser" in args)
+            # Nothing served means the window never reached us -- the browser
+            # passed our command line to another of its own processes and
+            # quit. The profile above is meant to make that impossible; if it
+            # happens anyway, say so rather than vanish without a word.
+            if not SERVED["pages"]:
+                fatal("The window closed without ever showing the page.\n\n"
+                      "This usually means another copy of the browser took "
+                      "the window over. Close any window titled \"FA26 ERS "
+                      "Deployment Optimizer\" and start the application "
+                      "again.")
+                return 1
     except KeyboardInterrupt:
         pass
     except Exception:
