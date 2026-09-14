@@ -61,7 +61,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 
 def car_data() -> Path:
@@ -1116,6 +1116,32 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _local_only(self) -> bool:
+        """Whether this request really came from our own window.
+
+        A server on loopback is reachable by any page the user happens to
+        have open: the browser sends the request whichever site asked for
+        it. Two things already blunt that -- no CORS header, so nothing can
+        read an answer, and a JSON content type on every call that changes
+        anything, which forces a preflight this server does not answer. What
+        neither covers is a domain that resolves to 127.0.0.1: to the
+        browser that is same-origin, and both defences fall away.
+
+        The attack needs the browser to send the attacker's own name in the
+        Host header, so checking it is what closes the hole. Nothing
+        legitimate reaches this server under any other name.
+        """
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        if host.strip("[]").lower() not in ("127.0.0.1", "localhost",
+                                            "::1", ""):
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            where = (urlparse(origin).hostname or "").lower()
+            if where not in ("127.0.0.1", "localhost", "::1"):
+                return False
+        return True
+
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
@@ -1124,6 +1150,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ get
     def do_GET(self) -> None:
+        if not self._local_only():
+            self.send_error(403)
+            return
         url = urlparse(self.path)
         query = parse_qs(url.query)
         route = url.path
@@ -1154,6 +1183,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ----------------------------------------------------------------- post
     def do_POST(self) -> None:
+        if not self._local_only():
+            self.send_error(403)
+            return
         route = urlparse(self.path).path
         try:
             body = self._body()
@@ -1320,6 +1352,16 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
             exe, _name = found
             profile = window_profile()
             profile.mkdir(parents=True, exist_ok=True)
+            # The window is Edge, so Edge's own habits become this program's
+            # behaviour as far as anyone watching the machine is concerned.
+            # Measured on a real run, an unhardened window opened connections
+            # to four devices on the local network on port 8009 -- Chromecast
+            # discovery, nothing to do with this tool, and not something a
+            # tool that reads your lap times has any business doing. These
+            # switches turn off everything that talks to anything: cast
+            # discovery, component updates, crash reporting, reachability
+            # pings, phishing lookups and translation. Nothing here changes
+            # how the page renders.
             subprocess.Popen([
                 exe,
                 "--app=" + url,
@@ -1329,6 +1371,13 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
                 "--no-default-browser-check",
                 "--disable-background-networking",
                 "--disable-sync",
+                "--disable-features=MediaRouter,Translate,OptimizationHints",
+                "--disable-component-update",
+                "--disable-domain-reliability",
+                "--disable-breakpad",
+                "--disable-client-side-phishing-detection",
+                "--no-pings",
+                "--no-service-autorun",
             ]).wait()
             return
 
@@ -1394,7 +1443,18 @@ def main(argv=None) -> int:
         if "--port" in args:
             wanted = int(args[args.index("--port") + 1])
         port = wanted or free_port()
-        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        except OSError:
+            # `free_port` asks the system for a free port, lets go of it, and
+            # then this binds it -- so two copies started together can both be
+            # handed the same one and the second fails. Someone double-clicking
+            # the icon twice should not get an error message about sockets, so
+            # take whatever port is actually free instead.
+            if wanted:
+                raise
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            port = server.server_address[1]
     except Exception:
         fatal("Could not start the local server.\n\n"
               + traceback.format_exc())
