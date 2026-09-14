@@ -104,6 +104,18 @@ def main() -> int:
         print("PyInstaller is not installed.  python -m pip install pyinstaller")
         return 1
 
+    # One source of truth. A build that misreports its own version makes
+    # every bug report a guess about which build it came from, so a
+    # disagreement stops the build rather than shipping quietly.
+    sys.path.insert(0, str(SRC))
+    import fa26_app
+    tagged = ".".join(str(n) for n in VERSION[:3])
+    if fa26_app.VERSION != tagged:
+        print("version mismatch: fa26_app.VERSION is %s, the git tag says %s."
+              % (fa26_app.VERSION, tagged))
+        print("Update fa26_app.VERSION, or tag the commit you meant to build.")
+        return 1
+
     print("icon")
     subprocess.run([sys.executable, "make_icon.py"], cwd=SRC, check=True)
 

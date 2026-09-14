@@ -55,6 +55,12 @@ import setupfile
 UI_DIR = ROOT / "ui"
 CAR_ID = fa26.CAR_ID
 
+#: Shown in the window and stamped into anything a user sends back. The git
+#: tag is the source of truth: `build_exe.py` refuses to build when this and
+#: the tag disagree, because a build that misreports its own version turns
+#: every bug report into a guess about which one it came from.
+VERSION = "1.0.1"
+
 
 def car_data() -> Path:
     """The car's own files, unpacked from the user's install on first use.
@@ -369,7 +375,8 @@ def readiness() -> dict:
     reached first.
     """
     root = install.find_root()
-    out = {"ok": False, "root": str(root) if root else "",
+    out = {"ok": False, "version": VERSION,
+           "root": str(root) if root else "",
            "found_automatically": root is not None and not install.saved_root(),
            "car": False, "logger": False, "problem": "", "kind": ""}
     if root is None:
@@ -411,7 +418,7 @@ def current() -> dict:
     game = install.game_running()
     key = newest_key()
     payload = {"folder": str(baseline_dir()), "car": CAR_ID,
-               "limits": car_limits(), "game": game}
+               "limits": car_limits(), "game": game, "version": VERSION}
     if key is None:
         payload["session"] = None
         return payload
@@ -1295,6 +1302,8 @@ def fatal(message: str) -> None:
     """
     log = install.app_dir() / "error.log"
     log.parent.mkdir(parents=True, exist_ok=True)
+    message = "FA26 Optimizer %s\n%s\n\n%s" % (
+        VERSION, time.strftime("%Y-%m-%d %H:%M:%S"), message)
     try:
         log.write_text(message, encoding="utf-8")
         message += "\n\nWritten to " + str(log)

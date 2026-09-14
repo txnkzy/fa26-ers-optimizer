@@ -173,6 +173,11 @@ code { font-family: var(--mono); font-size: .92em; color: var(--ink-2); }
   text-overflow: ellipsis;
 }
 
+.brand-version {
+  font-family: var(--mono); font-size: 11px; color: var(--faint);
+  white-space: nowrap;
+}
+
 .status {
   display: flex; align-items: center; gap: 9px;
   padding: 5px 13px 5px 11px;
@@ -530,6 +535,13 @@ input[type="range"]::-moz-range-thumb {
 .primary:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 .primary:disabled { background: var(--line); color: var(--faint); cursor: not-allowed; }
 .results-head .primary, .panel-actions .primary { width: auto; }
+
+/* The heading carries a subtitle and is therefore taller than the buttons,
+ * so they need grouping rather than being three loose flex children -- which
+ * wrapped them onto separate lines at narrower widths. */
+.results-head .actions {
+  display: flex; align-items: center; gap: 10px; margin-left: auto;
+}
 
 .ghost {
   padding: 11px 18px;
@@ -966,4 +978,31 @@ table.split-table {
   .shell { grid-template-columns: 1fr; height: auto; }
   .rail { border-right: 0; border-bottom: 1px solid var(--line); }
   .content { padding: 20px; }
+}
+
+/* Shown only when the clipboard is refused, so the text can be copied by
+ * hand rather than lost. */
+.diag-close {
+  position: fixed; left: 50%; top: calc(50% + 25vh + 14px);
+  transform: translateX(-50%);
+  z-index: 51;
+  padding: 8px 22px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--raise); color: var(--ink-2);
+  font-family: var(--cond); font-size: 13px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+}
+.diag-close:hover { color: var(--ink); border-color: var(--dim); }
+
+.diag-fallback {
+  position: fixed; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, 80vw); height: 50vh;
+  z-index: 50;
+  padding: 14px;
+  background: var(--sunken);
+  color: var(--ink-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-family: var(--mono); font-size: 11.5px;
 }

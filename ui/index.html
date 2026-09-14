@@ -16,6 +16,7 @@
     <span class="brand-mark" aria-hidden="true"></span>
     <span class="brand-name">ERS Deployment Optimizer</span>
     <span class="brand-car" id="car-id"></span>
+    <span class="brand-version" id="version"></span>
   </div>
   <div class="status" id="status" data-state="wait">
     <span class="status-dot" aria-hidden="true"></span>
@@ -190,7 +191,10 @@
     <div class="results" id="results" hidden>
       <div class="results-head">
         <h1 id="results-title">Results</h1>
-        <button type="button" class="primary" id="apply-open">Save to a setup&hellip;</button>
+        <div class="actions">
+          <button type="button" class="ghost small" id="copy-diag">Copy diagnostics</button>
+          <button type="button" class="primary" id="apply-open">Save to a setup&hellip;</button>
+        </div>
       </div>
       <div class="cards" id="cards"></div>
     </div>

@@ -26,6 +26,7 @@ const state = {
   pollId: 0,
   watch: null,
   ready: null,
+  version: "",
   game: null,
   useStale: false,
 };
@@ -164,6 +165,8 @@ async function load(force) {
     return;
   }
   $("car-id").textContent = data.car;
+  $("version").textContent = data.version ? "v" + data.version : "";
+  state.version = data.version || "";
   $("telemetry-path").textContent = data.folder;
 
   state.game = data.game;
@@ -706,6 +709,96 @@ function splitTable(s) {
   return det;
 }
 
+/* ------------------------------------------------------------ diagnostics */
+/* One button, so a report carries what is needed to act on it. Without this a
+ * problem arrives as "the map felt wrong", with no way to tell which build
+ * produced it, at which circuit, on what settings. */
+function diagnostics() {
+  const d = state.detail || {};
+  const g = (state.game || {});
+  const out = [];
+  out.push("FA26 ERS Deployment Optimizer v" + (state.version || "unknown"));
+  out.push(new Date().toISOString());
+  if (state.ready) {
+    out.push("Assetto Corsa: " + (state.ready.root || "not found")
+             + (state.ready.found_automatically ? " (found automatically)"
+                                                : " (set by hand)"));
+    out.push("logger installed: " + state.ready.logger);
+  }
+  out.push("game running: " + !!g.running);
+  out.push("");
+  out.push("SESSION");
+  out.push("  circuit: " + (d.name || "-") + "   (" + (d.circuit || "-") + ")");
+  out.push("  recorded: " + d.when + "   laps: " + d.recorded
+           + ", using " + d.pooled);
+  out.push("  best lap: " + d.best);
+  out.push("  fuel: " + (d.fuel_l == null ? "-" : d.fuel_l.toFixed(1) + " L")
+           + "   battery at start: "
+           + (d.charge == null ? "-" : Math.round(d.charge * 100) + "%"));
+  out.push("  live: " + d.live);
+  out.push("  recharge limit: " + (state.unlimited ? "unlimited"
+           : mj(state.qualify) + " MJ qualifying / " + mj(state.race) + " race")
+           + "   source: " + (d.source || "-")
+           + (d.overridden || state.touched ? "   (changed by hand)" : ""));
+  for (const w of (d.warnings || [])) out.push("  warning: " + w.title);
+
+  if (state.summary.length) {
+    out.push("");
+    out.push("RESULT");
+    for (const s of state.summary) {
+      out.push("  STRAT " + s.strat + "  " + s.label + "  " + s.lap
+               + "   deploy " + s.deploy_mj.toFixed(2) + " MJ"
+               + "   harvest " + s.harvest_mj.toFixed(2) + " MJ"
+               + "   battery " + pct(s.store_start) + " -> " + pct(s.store_end)
+               + "   " + s.map.length + " zones");
+      for (const n of (s.notes || [])) out.push("      note: " + n);
+    }
+  }
+
+  const lines = [...document.querySelectorAll("#activity .say")];
+  if (lines.length) {
+    out.push("");
+    out.push("ACTIVITY");
+    for (const el of lines) out.push("  " + el.textContent);
+  }
+  return out.join("\n");
+}
+
+async function copyDiagnostics() {
+  const button = $("copy-diag");
+  const text = diagnostics();
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch (err) {
+    // Some viewers refuse the clipboard outright. Show the text selected so
+    // it can be copied by hand -- and make sure it can be got rid of again,
+    // because an undismissable box over the app is worse than no button.
+    const box = el("textarea", "diag-fallback");
+    box.value = text;
+    box.readOnly = true;
+    const close = () => {
+      box.remove();
+      hint.remove();
+      document.removeEventListener("keydown", onKey, true);
+      button.textContent = "Copy diagnostics";
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const hint = el("button", "diag-close", "Close");
+    hint.type = "button";
+    hint.onclick = close;
+    document.body.append(box, hint);
+    document.addEventListener("keydown", onKey, true);
+    box.focus();
+    box.select();
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    if (ok) close();
+  }
+  button.textContent = ok ? "Copied" : "Press Ctrl+C";
+  if (ok) setTimeout(() => { button.textContent = "Copy diagnostics"; }, 2000);
+}
+
 /* ------------------------------------------------------------------ apply */
 async function openApply() {
   $("apply-panel").hidden = false;
@@ -825,6 +918,7 @@ $("ac-save").onclick = saveAcPath;
 $("install-logger").onclick = installLogger;
 $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
 $("apply-open").onclick = openApply;
+$("copy-diag").onclick = copyDiagnostics;
 $("apply-cancel").onclick = () => { $("apply-panel").hidden = true; };
 $("apply-go").onclick = applyGo;
 $("show-detail").onchange = applyDetailFilter;
