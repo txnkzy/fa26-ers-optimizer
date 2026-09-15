@@ -303,6 +303,31 @@ def logger_installed(root: Path | None = None) -> bool:
     return bool(target and (target / "manifest.ini").is_file())
 
 
+def logger_current(root: Path | None = None) -> bool:
+    """Whether the installed logger is the one this build ships.
+
+    Compared by content rather than by a version number in the manifest: the
+    number is one more thing to remember to change, and getting it wrong here
+    means a fix silently not reaching the people who need it.
+    """
+    target = logger_target(root)
+    source = logger_source()
+    if target is None or not target.is_dir() or not source.is_dir():
+        return True
+    try:
+        for item in source.iterdir():
+            if not item.is_file():
+                continue
+            mirror = target / item.name
+            if not mirror.is_file():
+                return False
+            if mirror.read_bytes() != item.read_bytes():
+                return False
+    except OSError:
+        return False
+    return True
+
+
 def install_logger(root: Path | None = None) -> Path:
     """Copy the logger into the user's Assetto Corsa.
 

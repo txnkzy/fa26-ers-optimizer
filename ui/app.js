@@ -87,15 +87,18 @@ async function checkReady() {
   // game folder, which stays changeable because detection can be confident
   // and wrong on a machine with more than one install.
   const editing = state.showSetup;
-  $("setup").hidden = blocked ? false : (r.logger && !editing);
+  // An old logger is as much of a blocker as a missing one: it is the thing
+  // recording the laps, and a fix to it reaches nobody who is never told.
+  const needsLogger = !r.logger || r.logger_outdated;
+  $("setup").hidden = blocked ? false : (!needsLogger && !editing);
   $("setup-path").hidden = !blocked && !editing;
-  $("setup-logger").hidden = !!r.logger;
+  $("setup-logger").hidden = !needsLogger;
   $("setup-change").hidden = blocked || editing;
   $("setup-documents").hidden = !editing;
   $("setup-telemetry").hidden = !editing;
   $("setup-close").hidden = !editing;
   $("intro").hidden =
-    (blocked || !r.logger || editing) || state.summary.length > 0;
+    (blocked || needsLogger || editing) || state.summary.length > 0;
 
   if (!blocked) {
     if (editing) {
@@ -105,10 +108,20 @@ async function checkReady() {
       fillPath(r.root);
       showDocuments(r.documents);
       showTelemetry(r.telemetry);
-    } else if (!r.logger) {
-      $("setup-title").textContent = "One more step";
-      $("setup-problem").textContent =
-        "Assetto Corsa found at " + r.root + ".";
+    } else if (needsLogger) {
+      const old_ = r.logger && r.logger_outdated;
+      $("setup-title").textContent = old_ ? "Update the logger"
+                                          : "One more step";
+      $("setup-problem").textContent = old_
+        ? "The logger in your game is older than this version."
+        : "Assetto Corsa found at " + r.root + ".";
+      $("logger-note").textContent = old_
+        ? "This version records your laps differently. Update it, then "
+        + "restart the session so the game loads the new one."
+        : "The logger records your laps. It goes into Assetto Corsa's "
+        + "apps/lua folder.";
+      $("install-logger").textContent = old_ ? "Update the logger"
+                                             : "Install the logger";
     }
     return true;
   }
@@ -393,6 +406,11 @@ function renderSession(grew) {
     showNotice("An earlier session",
                "These laps were not driven in the session now running, so "
                + "they may have been on a different map.");
+  }
+  if (state.ready && state.ready.logger && state.ready.logger_outdated) {
+    showNotice("The logger needs updating",
+               "It records your laps, and this version changed how. "
+               + "Update it from the panel, then restart the session.");
   }
   if (state.ready && !state.ready.logger) {
     showNotice("The logger is not installed",

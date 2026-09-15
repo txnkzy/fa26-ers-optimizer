@@ -33,6 +33,11 @@ class Lap:
     long_g: list[float]
     strat: list[int]
     length_m: float = 0.0
+    #: How much of the circuit this lap covered, 0-1, from the spline.
+    spline_span: float = 1.0
+    #: Distance from integrating speed, which does not depend on the
+    #: logger's idea of how long the track is.
+    driven_m: float = 0.0
 
     # Derived, filled by `differentiate`
     deploy_kw: list[float] = field(default_factory=list)
@@ -91,8 +96,42 @@ def load(path: str | Path) -> Lap:
         strat=[int(float(r.get("mguk_delivery", 0) or 0)) + 1 for r in rows],
     )
     lap.length_m = max(lap.dist)
+    spline = col("spline")
+    lap.spline_span = (max(spline) - min(spline)) if spline else 1.0
+    lap.driven_m = sum((lap.t[i + 1] - lap.t[i])
+                       * (lap.speed[i] + lap.speed[i + 1]) / 2.0
+                       for i in range(len(lap.t) - 1))
     differentiate(lap)
     return lap
+
+
+#: A lap has to cover the circuit, and the distance channel has to agree with
+#: how far the car actually went. Both are loose: 0.5% is the worst
+#: disagreement seen across Monza, Madrid and Suzuka, and a lap ending a few
+#: metres before the line is ordinary.
+MIN_SPAN = 0.90
+MAX_DISTANCE_ERROR = 0.20
+
+
+def problem(lap: "Lap") -> str:
+    """Why this lap cannot be used, or an empty string if it can.
+
+    Checked because a map is written in metres along the lap: if the lap
+    length is wrong, every zone in the map is wrong with it, and the result
+    is a setup that quietly does nothing.
+    """
+    if lap.length_m <= 0:
+        return "no distance was recorded"
+    if lap.spline_span < MIN_SPAN:
+        return ("only %.0f%% of the circuit was recorded, so this is part of "
+                "a lap rather than a whole one" % (lap.spline_span * 100))
+    if lap.driven_m > 0:
+        error = abs(lap.driven_m - lap.length_m) / lap.length_m
+        if error > MAX_DISTANCE_ERROR:
+            return ("the lap is recorded as %.0f m long, but the car drove "
+                    "%.0f m -- the logger has the wrong track length"
+                    % (lap.length_m, lap.driven_m))
+    return ""
 
 
 def differentiate(lap: Lap, window_s: float = DERIVATIVE_WINDOW_S) -> None:

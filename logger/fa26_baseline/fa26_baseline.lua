@@ -16,7 +16,16 @@ local CAR_MATCH = "vrc_formula_alpha_2026"
 local MIN_SAMPLES = 200
 
 local sim = ac.getSim()
-local trackLengthM = sim.trackLengthM
+
+-- Read live, never cached. Taken once at load this is whatever the sim
+-- happened to report at that moment, which is not always the track that ends
+-- up loaded -- and every distance written below is splinePosition times this
+-- number, so a stale value scales an entire lap wrong. The optimiser then
+-- builds a map in metres that do not exist, and the zones collapse.
+local function trackLength()
+  local length = sim.trackLengthM
+  return (length and length > 0) and length or 0
+end
 
 local autoRecord = true
 local onlyValidLaps = true
@@ -129,7 +138,7 @@ local function sample(car, dt)
 
     local parts = {
         string.format("%.4f", elapsed),
-        string.format("%.3f", car.splinePosition * trackLengthM),
+        string.format("%.3f", car.splinePosition * trackLength()),
         string.format("%.6f", car.splinePosition),
         car.isLapValid and "1" or "0",
     }
@@ -214,7 +223,7 @@ function windowMain()
     end
 
     ui.text("Track:  " .. ac.getTrackID())
-    ui.text(string.format("Length: %.1f m", trackLengthM))
+    ui.text(string.format("Length: %.1f m", trackLength()))
     ui.separator()
 
     if ui.button(autoRecord and "Auto-record: ON" or "Auto-record: OFF", vec2(330, 26)) then

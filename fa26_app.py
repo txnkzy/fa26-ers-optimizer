@@ -62,7 +62,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 
 
 def car_data() -> Path:
@@ -489,6 +489,8 @@ def readiness() -> dict:
         out["problem"] = ("Assetto Corsa could not be found. Paste the folder "
                           "that contains content\\cars.")
         return out
+    out["logger_outdated"] = (install.logger_installed(root)
+                              and not install.logger_current(root))
     out["car"] = install.car_folder(CAR_ID, root) is not None
     out["logger"] = install.logger_installed(root)
     if not out["car"]:
@@ -784,6 +786,26 @@ class Engine:
         for i, path in enumerate(paths):
             laps.append(laplib.load(path))
             self.tick(0.2 + 0.8 * (i + 1) / len(paths))
+        # A map is written in metres along the lap, so a wrong lap length is
+        # not a small error -- every zone lands in the wrong place, and
+        # `Split.clamped` folds the whole map onto a single point. A Bahrain
+        # report came back with every zone reading start 0, end 610, which is
+        # a real map clamped to a 610 m lap. Nothing checked, so it reached
+        # the setup and the only symptom was a map that did nothing.
+        usable, rejected = [], []
+        for candidate in laps:
+            why = laplib.problem(candidate)
+            (rejected if why else usable).append((candidate, why))
+        if not usable:
+            raise RuntimeError(
+                "These laps cannot be used: %s. The in-game logger records "
+                "distance from the track length it read when it started, so "
+                "restarting the session with the logger already enabled "
+                "usually fixes it." % rejected[0][1])
+        for candidate, why in rejected:
+            self.note("Left out a lap: %s." % why)
+        laps = [candidate for candidate, _ in usable]
+
         laps.sort(key=lambda l: l.lap_time_s)
         lap = laps[0]
 
