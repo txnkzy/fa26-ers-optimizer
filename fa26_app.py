@@ -1368,6 +1368,24 @@ class Handler(BaseHTTPRequestHandler):
                         "trace": traceback.format_exc()}, code=500)
 
 
+class Server(ThreadingHTTPServer):
+    """The local server, refusing to share a port with anything else.
+
+    ThreadingHTTPServer sets SO_REUSEADDR, which on Windows lets a second
+    process bind a port another process is already listening on -- and then
+    the two of them split the incoming connections arbitrarily. A second copy
+    of this app would silently answer some of the first copy's requests, and
+    an old build left running would answer for a new one. That is not a
+    hypothetical: it is how a test here spent an afternoon proving the build
+    shipped a logger it did not ship, by talking to a stale instance of an
+    older build that was still holding the port.
+
+    Refusing the bind instead is what makes free_port's fallback do its job.
+    """
+
+    allow_reuse_address = False
+
+
 def free_port(preferred: int = 8731) -> int:
     for port in (preferred, 0):
         with socket.socket() as probe:
@@ -1583,7 +1601,7 @@ def main(argv=None) -> int:
             wanted = int(args[args.index("--port") + 1])
         port = wanted or free_port()
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            server = Server(("127.0.0.1", port), Handler)
         except OSError:
             # `free_port` asks the system for a free port, lets go of it, and
             # then this binds it -- so two copies started together can both be
@@ -1592,7 +1610,7 @@ def main(argv=None) -> int:
             # take whatever port is actually free instead.
             if wanted:
                 raise
-            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            server = Server(("127.0.0.1", 0), Handler)
             port = server.server_address[1]
     except Exception:
         fatal("Could not start the local server.\n\n"

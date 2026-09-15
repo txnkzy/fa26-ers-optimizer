@@ -37,6 +37,24 @@ def check(name: str, ok: bool, detail: str = "") -> None:
         fails.append(name)
 
 
+def _kill_tree(proc) -> None:
+    """Kill the launcher and the application it spawned.
+
+    PyInstaller's single-file build runs a bootloader that starts the real
+    process, and killing the bootloader leaves that one running -- still
+    holding its port, still answering, and still carrying whichever build it
+    came from.
+    """
+    if proc is None:
+        return
+    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                   capture_output=True)
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
 def listening() -> set:
     """Loopback ports with something behind them, from the system's view."""
     out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
@@ -110,11 +128,7 @@ def main() -> int:
         running.append(run_once(label, folder))
 
     for proc in running:
-        if proc is not None:
-            try:
-                proc.kill()
-            except OSError:
-                pass
+        _kill_tree(proc)
     # Leave the machine as it was found: these are the app's own windows.
     subprocess.run(
         ["powershell", "-NoProfile", "-c",
