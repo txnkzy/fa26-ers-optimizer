@@ -89,8 +89,7 @@ tagged but never published.
 
 | | |
 |---|---|
-| **1.0.10** | Lap times match the game's timing screen. The logger timed its own laps and came out one frame short, so every lap read a few thousandths quick. |
-| **1.0.9** | A lap whose distances cannot be right is refused instead of producing a map whose zones all collapse onto one point. The logger reads the track length live rather than once at load, and the app notices when the installed logger is older than the build. |
+| **1.1.0** | Finds the recorded laps wherever Windows actually keeps Documents, and every folder the program uses can now be set by hand. A lap whose distances cannot be right is refused rather than producing a map whose zones all collapse onto one point. Lap times match the game's timing screen. The app notices when the logger inside Assetto Corsa is older than the build. |
 | **1.0.8** | Found the laps on machines where Documents is redirected into OneDrive, which left the app waiting forever while the logger recorded perfectly. |
 | **1.0.7** | The Assetto Corsa folder can be changed after setup, not only when the game is not found. |
 | **1.0.6** | The window failed to open on the second and later runs, showing the browser's connection error instead of the page. Also: an installation sheet in the bundle, a version number in the app, a *Copy diagnostics* button, and the window itself stopped from talking to anything on the network. |
