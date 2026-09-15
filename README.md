@@ -87,13 +87,9 @@ Every release is on the [releases page](https://github.com/txnkzy/fa26-ers-optim
 the newest is the one to download. Versions not listed here were built and
 tagged but never published.
 
-Versions carry four fields, the last identifying the build: 1.0.1 and 1.0.2
-below were released before the fourth field was added, and correspond to
-1.0.0.1 and 1.0.0.2.
-
 | | |
 |---|---|
-| **1.0.0.6** | The window failed to open on the second and later runs, showing the browser's connection error instead of the page. Also: an installation sheet in the bundle, a version number in the app, a *Copy diagnostics* button, and the window itself stopped from talking to anything on the network. |
+| **1.0.6** | The window failed to open on the second and later runs, showing the browser's connection error instead of the page. Also: an installation sheet in the bundle, a version number in the app, a *Copy diagnostics* button, and the window itself stopped from talking to anything on the network. |
 | **1.0.2** | The app reports its own version, and one button copies everything needed to answer a question about a run. |
 | **1.0.1** | The search can decline the car's 200 kW floor, which makes "turn this zone off" reachable. Quicker at 8 circuits of 10 and slower at none; confirmed on track at Madrid, 0.66 s. |
 | **1.0.0** | First release. |

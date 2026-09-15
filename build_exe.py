@@ -34,8 +34,8 @@ def version() -> str:
     is the worst way round for a file people are being asked to trust.
 
     The tag's own text is what travels from here, rather than a tuple this
-    reassembles: four fields where the last identifies the build, instead of
-    three fields and a zero Windows appends that nobody chose.
+    reassembles, so the number cannot drift between the tag, the constant in
+    the app, the file properties and the installation sheet.
     """
     import subprocess
     try:
@@ -56,7 +56,8 @@ def numbers(text: str) -> tuple:
     return tuple(parts)
 
 
-#: "1.0.0.6" as written on the tag, and the same thing as four integers.
+#: "1.0.6" as the tag writes it, which is what the properties dialog shows,
+#: plus the four integers the binary version resource is required to hold.
 VERSION = version()
 FILEVERS = numbers(VERSION)
 
