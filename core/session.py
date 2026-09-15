@@ -27,8 +27,21 @@ NAME_RE = re.compile(r"^(?P<prefix>.+)__lap(?P<num>\d+)_(?P<time>[\dm.]+)s(?P<ta
 
 #: Keep laps no slower than this multiple of the session best.
 TOLERANCE = 1.03
+#: And no slower than this, once the slow end has been dropped. Pooling beats
+#: fitting the quickest lap when the laps are alike, which is what it was
+#: measured on. It is worse when they are not: three Bahrain laps spanning
+#: 1.571 s, driven while the circuit was still being learned, described a
+#: driver who no longer existed by the time the map was used.
+#:
+#: Chosen over every session recorded here, not picked: 1.5% cut the mean
+#: replay error from 1.341 s to 1.166 s, improving seven sessions, leaving
+#: eight untouched and costing two a few hundredths.
+CONSISTENT = 1.015
 #: Below this many kept laps, use the single best lap instead of averaging.
-MIN_LAPS = 3
+#: Two is deliberate. At three, dropping an inconsistent third lap threw the
+#: good second one away as well, which cost far more than the third one did --
+#: one Zandvoort session by four seconds.
+MIN_LAPS = 2
 
 
 def parse(path) -> tuple[str, int, float] | None:
@@ -60,7 +73,8 @@ def group(paths) -> dict[str, list[Path]]:
     return out
 
 
-def select(paths, tolerance: float = TOLERANCE, minimum: int = MIN_LAPS) -> list[Path]:
+def select(paths, tolerance: float = TOLERANCE, minimum: int = MIN_LAPS,
+           consistent: float = CONSISTENT) -> list[Path]:
     """The representative laps of one session, best first.
 
     Returns a single lap when there is not enough consistent running to
@@ -71,8 +85,13 @@ def select(paths, tolerance: float = TOLERANCE, minimum: int = MIN_LAPS) -> list
         return [Path(p) for p in paths][:1]
     timed.sort()
     best = timed[0][0]
-    kept = [p for t, p in timed if t <= best * tolerance]
-    return kept if len(kept) >= minimum else [timed[0][1]]
+    kept = [(t, p) for t, p in timed if t <= best * tolerance]
+    # Then drop the slow end until what is left describes one way of driving
+    # the circuit rather than an afternoon of learning it.
+    while len(kept) > 1 and kept[-1][0] > best * consistent:
+        kept.pop()
+    paths = [p for _, p in kept]
+    return paths if len(paths) >= minimum else [timed[0][1]]
 
 
 def for_lap(path, folder=None, **kwargs) -> list[Path]:

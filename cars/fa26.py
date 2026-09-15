@@ -255,10 +255,30 @@ TAPER_CURVES = {
 }
 
 
-def taper_for(curve: str | None) -> tuple[float, float]:
-    """Speed taper for a named FIA power curve, defaulting to Base - Overtake."""
+def taper_for(curve: str | None,
+              fallback: tuple = TAPER_OVERTAKE) -> tuple[float, float]:
+    """Speed taper for a named FIA power curve.
+
+    The fallback is the caller's to choose, and it matters. Ten circuits in
+    the table name no curve for normal running -- Bahrain, Baku, Jeddah,
+    Austin, Las Vegas, Lusail, Mexico, Singapore, Interlagos, Yas Marina --
+    and every circuit that does name one names a Standard variant. Falling
+    back to Overtake for all of them handed the race car 350 kW at 320 km/h,
+    where Standard allows 175: Override power, in a strategy that never runs
+    Override.
+
+    Measured on a Bahrain lap, full throttle above 300 km/h delivered at most
+    202 kW. Standard allows 222 there and Overtake 350, so the car is plainly
+    on the conservative curve and the model was not.
+
+    (Reading the curve out of the telemetry directly was tried and dropped:
+    asked to recover the published curve on circuits that name one, it
+    returned 335 km/h for Barcelona's 290 and could not read half of them at
+    all. The ceiling it measures is only ever the most the driver happened to
+    ask for.)
+    """
     if not curve:
-        return TAPER_OVERTAKE
+        return fallback
     if curve in TAPER_CURVES:
         return TAPER_CURVES[curve]
     return TAPER_BASE if curve.endswith("Standard") else TAPER_OVERTAKE

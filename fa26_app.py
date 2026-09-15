@@ -62,7 +62,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def car_data() -> Path:
@@ -902,8 +902,13 @@ class Engine:
         # Standard curve starts tapering at 290 kph against the Overtake
         # curve's 337 -- so applying one to both overstates race deployment
         # everywhere above 290.
-        taper_for = lambda strat: fa26.taper_for(
-            alloc.curve_override if strat == 1 else alloc.curve_standard)
+        # Unnamed curves fall back differently by strategy: qualifying runs
+        # Override so Overtake is the right guess, the race does not so
+        # Standard is.
+        taper_for = lambda strat: (
+            fa26.taper_for(alloc.curve_override, fa26.TAPER_OVERTAKE)
+            if strat == 1 else
+            fa26.taper_for(alloc.curve_standard, fa26.TAPER_BASE))
 
         deployed, harvested = lap.totals()
         self.detail("As driven      deploy %.2f MJ, harvest %.2f MJ"
