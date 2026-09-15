@@ -27,21 +27,24 @@ NAME_RE = re.compile(r"^(?P<prefix>.+)__lap(?P<num>\d+)_(?P<time>[\dm.]+)s(?P<ta
 
 #: Keep laps no slower than this multiple of the session best.
 TOLERANCE = 1.03
-#: And no slower than this, once the slow end has been dropped. Pooling beats
-#: fitting the quickest lap when the laps are alike, which is what it was
-#: measured on. It is worse when they are not: three Bahrain laps spanning
-#: 1.571 s, driven while the circuit was still being learned, described a
-#: driver who no longer existed by the time the map was used.
-#:
-#: Chosen over every session recorded here, not picked: 1.5% cut the mean
-#: replay error from 1.341 s to 1.166 s, improving seven sessions, leaving
-#: eight untouched and costing two a few hundredths.
-CONSISTENT = 1.015
 #: Below this many kept laps, use the single best lap instead of averaging.
-#: Two is deliberate. At three, dropping an inconsistent third lap threw the
-#: good second one away as well, which cost far more than the third one did --
-#: one Zandvoort session by four seconds.
-MIN_LAPS = 2
+MIN_LAPS = 3
+
+#: A tighter consistency window was tried here -- keep only laps within 1.5%
+#: of the best, on the reasoning that a session driven while the circuit is
+#: still being learned describes a driver who no longer exists. It scored well
+#: and was wrong, and the way it was scored is the lesson.
+#:
+#: It was judged by replaying each session's best lap against a profile fitted
+#: to that same session. That is an in-sample test, and it rewards fitting
+#: fewer laps for the same reason any curve fits its own points better the
+#: fewer of them there are. Pooling exists to stop exactly that: measured
+#: out-of-sample, it took this model from 0.57% to 0.44%.
+#:
+#: On track the tighter rule rewrote 21 of 23 zones at Bahrain and came back
+#: 0.236 s slower, same setup, same conditions, back to back. Any future
+#: change here needs an out-of-sample measure -- fit one session, score
+#: against a different one.
 
 
 def parse(path) -> tuple[str, int, float] | None:
@@ -73,8 +76,8 @@ def group(paths) -> dict[str, list[Path]]:
     return out
 
 
-def select(paths, tolerance: float = TOLERANCE, minimum: int = MIN_LAPS,
-           consistent: float = CONSISTENT) -> list[Path]:
+def select(paths, tolerance: float = TOLERANCE,
+           minimum: int = MIN_LAPS) -> list[Path]:
     """The representative laps of one session, best first.
 
     Returns a single lap when there is not enough consistent running to
@@ -85,13 +88,8 @@ def select(paths, tolerance: float = TOLERANCE, minimum: int = MIN_LAPS,
         return [Path(p) for p in paths][:1]
     timed.sort()
     best = timed[0][0]
-    kept = [(t, p) for t, p in timed if t <= best * tolerance]
-    # Then drop the slow end until what is left describes one way of driving
-    # the circuit rather than an afternoon of learning it.
-    while len(kept) > 1 and kept[-1][0] > best * consistent:
-        kept.pop()
-    paths = [p for _, p in kept]
-    return paths if len(paths) >= minimum else [timed[0][1]]
+    kept = [p for t, p in timed if t <= best * tolerance]
+    return kept if len(kept) >= minimum else [timed[0][1]]
 
 
 def for_lap(path, folder=None, **kwargs) -> list[Path]:
