@@ -50,21 +50,63 @@ def _config_path() -> Path:
     return app_dir() / "install.json"
 
 
-def saved_root() -> Path | None:
-    """An Assetto Corsa folder the user pointed us at by hand."""
+def _config() -> dict:
     try:
         raw = json.loads(_config_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    root = raw.get("assetto_corsa")
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _write_config(**changes) -> None:
+    """Merge, never overwrite: there is more than one setting in here now."""
+    data = _config()
+    data.update(changes)
+    path = _config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True),
+                    encoding="utf-8")
+
+
+def saved_root() -> Path | None:
+    """An Assetto Corsa folder the user pointed us at by hand."""
+    root = _config().get("assetto_corsa")
     return Path(root) if root and is_ac_root(Path(root)) else None
 
 
 def save_root(root: str | Path) -> None:
-    path = _config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"assetto_corsa": str(root)}, indent=2),
-                    encoding="utf-8")
+    _write_config(assetto_corsa=str(root))
+
+
+def saved_documents() -> Path | None:
+    """An Assetto Corsa documents folder the user pointed us at by hand.
+
+    This is the one holding `setups` and, normally, the recorded laps --
+    not the game install.
+    """
+    folder = _config().get("documents")
+    return Path(folder) if folder else None
+
+
+def save_documents(folder: str | Path | None) -> None:
+    _write_config(documents=str(folder) if folder else "")
+
+
+def saved_telemetry() -> Path | None:
+    """A recorded-laps folder the user pointed us at by hand.
+
+    Deliberately not checked for existence: it is set before the first lap
+    is driven as often as after, and second-guessing a path somebody typed
+    on purpose is how they end up back where they started with nothing on
+    screen to explain it.
+    """
+    folder = _config().get("telemetry")
+    return Path(folder) if folder else None
+
+
+def save_telemetry(folder: str | Path | None) -> None:
+    """Set the folder, or pass nothing to go back to finding it."""
+    _write_config(telemetry=str(folder) if folder else "")
 
 
 def is_ac_root(path: Path) -> bool:

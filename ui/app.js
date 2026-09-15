@@ -91,16 +91,20 @@ async function checkReady() {
   $("setup-path").hidden = !blocked && !editing;
   $("setup-logger").hidden = !!r.logger;
   $("setup-change").hidden = blocked || editing;
+  $("setup-documents").hidden = !editing;
+  $("setup-telemetry").hidden = !editing;
   $("setup-close").hidden = !editing;
   $("intro").hidden =
     (blocked || !r.logger || editing) || state.summary.length > 0;
 
   if (!blocked) {
     if (editing) {
-      $("setup-title").textContent = "Assetto Corsa folder";
+      $("setup-title").textContent = "Folders";
       $("setup-problem").textContent = (r.found_automatically
         ? "Found automatically at " : "Currently set to ") + r.root + ".";
       fillPath(r.root);
+      showDocuments(r.documents);
+      showTelemetry(r.telemetry);
     } else if (!r.logger) {
       $("setup-title").textContent = "One more step";
       $("setup-problem").textContent =
@@ -162,6 +166,71 @@ async function saveAcPath() {
   $("ac-save").disabled = false;
   state.showSetup = false;
   if (await checkReady()) load(true);
+}
+
+/* Setups are written here, and the laps normally live under it. Shown with
+ * how many setups are in it, because that is the quickest way to tell a
+ * correct folder from a plausible one. */
+function showDocuments(info) {
+  if (!info) return;
+  const box = $("doc-path");
+  if (document.activeElement !== box) box.value = info.folder || "";
+  $("doc-auto").hidden = !info.chosen_by_hand;
+  $("doc-hint").textContent = !info.exists
+    ? "This folder does not exist yet."
+    : info.setups
+      ? info.setups + (info.setups === 1 ? " setup folder" : " setup folders")
+        + " for this car in here"
+        + (info.chosen_by_hand ? ", chosen by you." : ", found automatically.")
+      : "The folder is there, but no setups for this car in it yet.";
+}
+
+async function saveDocuments(folder) {
+  $("doc-save").disabled = true;
+  $("setup-error").hidden = true;
+  try {
+    await post("/api/setdocuments", { path: folder });
+  } catch (err) {
+    $("setup-error").textContent = String(err.message || err);
+    $("setup-error").hidden = false;
+    $("doc-save").disabled = false;
+    return;
+  }
+  $("doc-save").disabled = false;
+  await checkReady();
+  load(true);
+}
+
+/* The laps are read from here. Shown with what is actually in it, because
+ * "no lap files yet" and "wrong folder" look identical from the outside and
+ * the difference is the whole problem. */
+function showTelemetry(info) {
+  if (!info) return;
+  const box = $("tel-path");
+  if (document.activeElement !== box) box.value = info.folder || "";
+  $("tel-auto").hidden = !info.chosen_by_hand;
+  $("tel-hint").textContent = !info.exists
+    ? "This folder does not exist yet."
+    : info.laps
+      ? info.laps + (info.laps === 1 ? " lap file" : " lap files") + " in here"
+        + (info.chosen_by_hand ? ", chosen by you." : ", found automatically.")
+      : "The folder is there, but no lap files in it yet.";
+}
+
+async function saveTelemetry(folder) {
+  $("tel-save").disabled = true;
+  $("setup-error").hidden = true;
+  try {
+    await post("/api/settelemetry", { path: folder });
+  } catch (err) {
+    $("setup-error").textContent = String(err.message || err);
+    $("setup-error").hidden = false;
+    $("tel-save").disabled = false;
+    return;
+  }
+  $("tel-save").disabled = false;
+  await checkReady();
+  load(true);
 }
 
 /* Readiness is polled, so writing the box on every pass would wipe out
@@ -755,6 +824,20 @@ function diagnostics() {
   const out = [];
   out.push("FA26 ERS Deployment Optimizer v" + (state.version || "unknown"));
   out.push(new Date().toISOString());
+  if (state.ready && state.ready.documents) {
+    const d = state.ready.documents;
+    out.push("documents: " + d.folder + (d.chosen_by_hand ? " (set by hand)" : ""));
+    out.push("  folder exists: " + d.exists + ", setup folders: " + d.setups);
+  }
+  if (state.ready && state.ready.telemetry) {
+    const w = state.ready.telemetry;
+    out.push("watching: " + w.folder
+             + (w.chosen_by_hand ? " (set by hand)" : ""));
+    out.push("  folder exists: " + w.exists + ", lap files: " + w.laps);
+    for (const other of (w.looked_in || [])) {
+      if (other !== w.folder) out.push("  also considered: " + other);
+    }
+  }
   if (state.ready) {
     out.push("Assetto Corsa: " + (state.ready.root || "not found")
              + (state.ready.found_automatically ? " (found automatically)"
@@ -800,8 +883,8 @@ function diagnostics() {
   return out.join("\n");
 }
 
-async function copyDiagnostics() {
-  const button = $("copy-diag");
+async function copyDiagnostics(button) {
+  button = button && button.tagName ? button : $("copy-diag");
   const text = diagnostics();
   let ok = false;
   try {
@@ -954,10 +1037,22 @@ $("ac-save").onclick = saveAcPath;
 $("open-setup").onclick = openSetup;
 $("setup-change").onclick = openSetup;
 $("setup-close").onclick = closeSetup;
+$("find-laps").onclick = openSetup;
+$("doc-save").onclick = () => saveDocuments($("doc-path").value.trim());
+$("doc-auto").onclick = () => saveDocuments("");
+$("doc-path").onkeydown = (e) => {
+  if (e.key === "Enter") saveDocuments($("doc-path").value.trim());
+};
+$("tel-save").onclick = () => saveTelemetry($("tel-path").value.trim());
+$("tel-auto").onclick = () => saveTelemetry("");
+$("tel-path").onkeydown = (e) => {
+  if (e.key === "Enter") saveTelemetry($("tel-path").value.trim());
+};
 $("install-logger").onclick = installLogger;
 $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
 $("apply-open").onclick = openApply;
-$("copy-diag").onclick = copyDiagnostics;
+$("copy-diag").onclick = () => copyDiagnostics($("copy-diag"));
+$("copy-diag-wait").onclick = () => copyDiagnostics($("copy-diag-wait"));
 $("apply-cancel").onclick = () => { $("apply-panel").hidden = true; };
 $("apply-go").onclick = applyGo;
 $("show-detail").onchange = applyDetailFilter;

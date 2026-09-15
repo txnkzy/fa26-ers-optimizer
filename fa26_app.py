@@ -19,6 +19,7 @@ and drives the base item instead.
 from __future__ import annotations
 
 import csv
+import ctypes
 import json
 import os
 import re
@@ -61,7 +62,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.7"
+VERSION = "1.0.8"
 
 
 def car_data() -> Path:
@@ -100,11 +101,94 @@ STRATEGIES = [
 DEFAULT_ACTIVE = 1
 
 
+class _GUID(ctypes.Structure):
+    _fields_ = [("Data1", ctypes.c_ulong), ("Data2", ctypes.c_ushort),
+                ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+
+
+#: FOLDERID_Documents. Asking Windows is the only way to get this right: the
+#: folder shown as "Documents" is frequently not `%USERPROFILE%\Documents`.
+_FOLDERID_DOCUMENTS = _GUID(
+    0xFDD39AD0, 0x238F, 0x46AF,
+    (ctypes.c_ubyte * 8)(0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7))
+
+
+def known_documents() -> Path | None:
+    """The real Documents folder, following any redirection."""
+    try:
+        buffer = ctypes.c_wchar_p()
+        if ctypes.windll.shell32.SHGetKnownFolderPath(
+                ctypes.byref(_FOLDERID_DOCUMENTS), 0, None,
+                ctypes.byref(buffer)) != 0:
+            return None
+        try:
+            return Path(buffer.value) if buffer.value else None
+        finally:
+            ctypes.windll.ole32.CoTaskMemFree(buffer)
+    except Exception:
+        return None
+
+
+def docs_candidates() -> list[Path]:
+    home = Path(os.path.expanduser("~"))
+    found = []
+    known = known_documents()
+    if known is not None:
+        found.append(known / "Assetto Corsa")
+    found.append(home / "Documents" / "Assetto Corsa")
+    # Business OneDrive names the folder after the tenant, so glob rather
+    # than guess: "OneDrive - Contoso" is as ordinary as plain "OneDrive".
+    for drive in sorted(home.glob("OneDrive*")):
+        found.append(drive / "Documents" / "Assetto Corsa")
+    unique = []
+    for path in found:
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
 def docs_dir() -> Path:
-    return Path(os.path.expanduser("~")) / "Documents" / "Assetto Corsa"
+    """Assetto Corsa's Documents folder, wherever Windows really keeps it.
+
+    This used to be `%USERPROFILE%\\Documents\\Assetto Corsa`, which is a
+    guess, and wrong on any machine where Documents is redirected into
+    OneDrive -- a Windows 11 default for plenty of people. The logger asks
+    Custom Shaders Patch where the folder is and writes there quite happily;
+    the app looked somewhere else and sat on "Waiting for laps" forever, with
+    both halves working perfectly and nothing to say what was wrong.
+
+    The recorded laps are the tiebreak, not the tidiest-looking path: a
+    folder that actually holds telemetry beats one that merely exists.
+    """
+    chosen = install.saved_documents()
+    if chosen is not None:
+        # Someone pointing at the folder above is saying the same thing, so
+        # take either -- this is the folder with `setups` in it.
+        nested = chosen / "Assetto Corsa"
+        return nested if nested.is_dir() and not (chosen / "setups").is_dir() \
+            else chosen
+    options = docs_candidates()
+    for path in options:
+        if (path / "fa26_baseline").is_dir():
+            return path
+    for path in options:
+        if path.is_dir():
+            return path
+    return options[0]
 
 
 def baseline_dir() -> Path:
+    """Where the recorded laps are, the user's answer beating ours.
+
+    Someone pointing at the Assetto Corsa documents folder rather than the
+    `fa26_baseline` inside it has said something perfectly clear, so take
+    either -- and re-check each time, because the subfolder appears the
+    moment the first lap is recorded.
+    """
+    chosen = install.saved_telemetry()
+    if chosen is not None:
+        nested = chosen / "fa26_baseline"
+        return nested if nested.is_dir() else chosen
     return docs_dir() / "fa26_baseline"
 
 
@@ -377,10 +461,29 @@ def readiness() -> dict:
     reached first.
     """
     root = install.find_root()
+    folder = baseline_dir()
     out = {"ok": False, "version": VERSION,
            "root": str(root) if root else "",
            "found_automatically": root is not None and not install.saved_root(),
-           "car": False, "logger": False, "problem": "", "kind": ""}
+           "car": False, "logger": False, "problem": "", "kind": "",
+           # Every folder reached for outside this program, each with what
+           # is actually in it. When something is not found, this is the
+           # whole answer, and it used to be invisible.
+           "documents": {
+               "folder": str(docs_dir()),
+               "exists": docs_dir().is_dir(),
+               "setups": len(list((docs_dir() / "setups" / CAR_ID).iterdir()))
+                         if (docs_dir() / "setups" / CAR_ID).is_dir() else 0,
+               "chosen_by_hand": install.saved_documents() is not None,
+           },
+           "telemetry": {
+               "folder": str(folder),
+               "exists": folder.is_dir(),
+               "laps": len(list(folder.glob("*.csv"))) if folder.is_dir() else 0,
+               "chosen_by_hand": install.saved_telemetry() is not None,
+               "looked_in": [str(option / "fa26_baseline")
+                             for option in docs_candidates()],
+           }}
     if root is None:
         out["kind"] = "no_ac"
         out["problem"] = ("Assetto Corsa could not be found. Paste the folder "
@@ -1212,6 +1315,20 @@ class Handler(BaseHTTPRequestHandler):
                         "an Assetto Corsa install.")
                 install.save_root(folder)
                 _CAR_LIMITS_RESET()
+                self._json(readiness())
+            elif route == "/api/setdocuments":
+                folder = (body.get("path") or "").strip().strip('"')
+                if folder and not Path(folder).is_dir():
+                    raise RuntimeError("There is no folder at %s." % folder)
+                install.save_documents(folder or None)
+                _DETAIL_CACHE.clear()
+                self._json(readiness())
+            elif route == "/api/settelemetry":
+                folder = (body.get("path") or "").strip().strip('"')
+                if folder and not Path(folder).is_dir():
+                    raise RuntimeError("There is no folder at %s." % folder)
+                install.save_telemetry(folder or None)
+                _DETAIL_CACHE.clear()
                 self._json(readiness())
             elif route == "/api/installlogger":
                 install.install_logger()

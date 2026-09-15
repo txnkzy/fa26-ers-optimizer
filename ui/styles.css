@@ -1015,3 +1015,14 @@ table.split-table {
   border-radius: var(--radius);
   font-family: var(--mono); font-size: 11.5px;
 }
+
+/* Offered in the waiting state too: that is where someone sits when nothing
+ * is happening, and it was the one place the report could not be made. */
+.waiting-links {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 4px 14px; margin-top: 12px;
+}
+.waiting-links .link { font-size: 12px; }
+
+#setup-documents, #setup-telemetry { margin-top: 18px; }
+#tel-auto, #doc-auto { margin-top: 8px; font-size: 12px; }

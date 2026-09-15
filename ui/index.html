@@ -19,7 +19,7 @@
     <span class="brand-version" id="version"></span>
   </div>
   <div class="topbar-right">
-    <button type="button" class="ghost tiny" id="open-setup">Game folder</button>
+    <button type="button" class="ghost tiny" id="open-setup">Folders</button>
     <div class="status" id="status" data-state="wait">
       <span class="status-dot" aria-hidden="true"></span>
       <span class="status-text">Starting up</span>
@@ -53,6 +53,10 @@
           <button type="button" class="ghost small" id="use-last">Use it anyway</button>
         </div>
         <p class="waiting-path"><code id="telemetry-path"></code></p>
+        <div class="waiting-links">
+          <button type="button" class="link" id="find-laps">Laps not showing up?</button>
+          <button type="button" class="link" id="copy-diag-wait">Copy diagnostics</button>
+        </div>
       </div>
 
       <div id="session-card" hidden>
@@ -134,6 +138,26 @@
           <button type="button" class="primary" id="ac-save">Use this</button>
         </div>
         <p class="hint">The folder with <code>content</code> and <code>apps</code> in it.</p>
+      </div>
+      <div id="setup-documents" hidden>
+        <label class="field-label" for="doc-path">Assetto Corsa documents folder</label>
+        <div class="path-row">
+          <input type="text" id="doc-path" class="filter"
+                 spellcheck="false" autocomplete="off">
+          <button type="button" class="primary" id="doc-save">Use this</button>
+        </div>
+        <p class="hint" id="doc-hint"></p>
+        <button type="button" class="link" id="doc-auto" hidden>Go back to finding it automatically</button>
+      </div>
+      <div id="setup-telemetry" hidden>
+        <label class="field-label" for="tel-path">Recorded laps folder</label>
+        <div class="path-row">
+          <input type="text" id="tel-path" class="filter"
+                 spellcheck="false" autocomplete="off">
+          <button type="button" class="primary" id="tel-save">Use this</button>
+        </div>
+        <p class="hint" id="tel-hint"></p>
+        <button type="button" class="link" id="tel-auto" hidden>Go back to finding it automatically</button>
       </div>
       <div id="setup-logger" hidden>
         <p class="panel-note">
