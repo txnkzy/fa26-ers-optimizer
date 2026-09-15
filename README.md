@@ -89,6 +89,7 @@ tagged but never published.
 
 | | |
 |---|---|
+| **1.0.10** | Lap times match the game's timing screen. The logger timed its own laps and came out one frame short, so every lap read a few thousandths quick. |
 | **1.0.9** | A lap whose distances cannot be right is refused instead of producing a map whose zones all collapse onto one point. The logger reads the track length live rather than once at load, and the app notices when the installed logger is older than the build. |
 | **1.0.8** | Found the laps on machines where Documents is redirected into OneDrive, which left the app waiting forever while the logger recorded perfectly. |
 | **1.0.7** | The Assetto Corsa folder can be changed after setup, not only when the game is not found. |

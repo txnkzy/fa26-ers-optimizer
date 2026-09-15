@@ -42,6 +42,8 @@ local lapsSaved = 0
 local lastSavedName = ""
 local lastSavedTime = 0
 local lastSkipReason = ""
+--: A finished lap, held for one frame so the game can publish its time.
+local pendingSave = nil
 
 local sessionStamp = os.date("%Y%m%d_%H%M%S")
 
@@ -156,28 +158,37 @@ local function sample(car, dt)
     rows[#rows + 1] = table.concat(parts, ",")
 end
 
-local function saveLap()
-    if #rows < MIN_SAMPLES then
-        lastSkipReason = "lap too short (" .. #rows .. " samples)"
+local function saveLap(lap, officialTime)
+    if #lap.rows < MIN_SAMPLES then
+        lastSkipReason = "lap too short (" .. #lap.rows .. " samples)"
         return
     end
-    if sawPitlane and skipPitLaps then
+    if lap.sawPitlane and skipPitLaps then
         lastSkipReason = "in/out lap (pitlane) -- turn off 'Skip in/out laps' to keep these"
         return
     end
-    if onlyValidLaps and sawInvalid then
+    if onlyValidLaps and lap.sawInvalid then
         lastSkipReason = "lap invalidated"
         return
     end
 
+    -- The game's own time when there is one and it agrees with ours to within
+    -- a tenth. Ours is one frame short by construction, so a bigger gap than
+    -- that means the value belongs to a different lap and is no use here.
+    local shown = lap.elapsed
+    if officialTime and officialTime > 0
+       and math.abs(officialTime - lap.elapsed) < 0.1 then
+        shown = officialTime
+    end
+
     local name = string.format("%s__%s__%s__lap%02d_%s.csv",
         trackTag(), ac.getCarID(0), sessionStamp, lapsSaved + 1,
-        formatLapTime(elapsed) .. (sawPitlane and "_pit" or ""))
-    io.save(baseDir() .. "/" .. name, header() .. "\n" .. table.concat(rows, "\n") .. "\n")
+        formatLapTime(shown) .. (lap.sawPitlane and "_pit" or ""))
+    io.save(baseDir() .. "/" .. name, header() .. "\n" .. table.concat(lap.rows, "\n") .. "\n")
 
     lapsSaved = lapsSaved + 1
     lastSavedName = name
-    lastSavedTime = elapsed
+    lastSavedTime = shown
     lastSkipReason = ""
 end
 
@@ -205,8 +216,23 @@ function script.update(dt)
         return
     end
 
+    -- Written one frame after the crossing, not on it: reading the finished
+    -- lap's time on the crossing frame itself can still return the lap
+    -- before it.
+    if pendingSave then
+        local official = nil
+        if car.previousLapTimeMs and car.previousLapTimeMs > 0 then
+            official = car.previousLapTimeMs / 1000.0
+        end
+        saveLap(pendingSave, official)
+        pendingSave = nil
+    end
+
     if crossedLine then
-        if started then saveLap() end
+        if started then
+            pendingSave = { rows = rows, elapsed = elapsed,
+                            sawPitlane = sawPitlane, sawInvalid = sawInvalid }
+        end
         started = true
         resetLap()
         return
