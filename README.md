@@ -89,7 +89,7 @@ tagged but never published.
 
 | | |
 |---|---|
-| **1.2.0** | Pools only laps driven at one pace, and stops giving the race car Override power on circuits whose power curve the table does not name. Mean replay error across every recorded session falls 16%. |
+| **1.1.1** | Pools only laps driven at one pace, and stops giving the race car Override power on circuits whose power curve the table does not name. Mean replay error across every recorded session falls 16%. |
 | **1.1.0** | Finds the recorded laps wherever Windows actually keeps Documents, and every folder the program uses can now be set by hand. A lap whose distances cannot be right is refused rather than producing a map whose zones all collapse onto one point. Lap times match the game's timing screen. The app notices when the logger inside Assetto Corsa is older than the build. |
 | **1.0.8** | Found the laps on machines where Documents is redirected into OneDrive, which left the app waiting forever while the logger recorded perfectly. |
 | **1.0.7** | The Assetto Corsa folder can be changed after setup, not only when the game is not found. |
