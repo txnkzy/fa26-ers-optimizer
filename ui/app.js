@@ -27,6 +27,7 @@ const state = {
   watch: null,
   ready: null,
   version: "",
+  showSetup: false,
   game: null,
   useStale: false,
 };
@@ -82,13 +83,25 @@ async function checkReady() {
   // The game and the car are blockers; a missing logger is not, because
   // telemetry already recorded can still be solved.
   const blocked = !r.ok;
-  $("setup").hidden = blocked ? false : r.logger;
-  $("setup-path").hidden = !blocked;
+  // The panel covers anything not yet in place, and one thing that is: the
+  // game folder, which stays changeable because detection can be confident
+  // and wrong on a machine with more than one install.
+  const editing = state.showSetup;
+  $("setup").hidden = blocked ? false : (r.logger && !editing);
+  $("setup-path").hidden = !blocked && !editing;
   $("setup-logger").hidden = !!r.logger;
-  $("intro").hidden = (blocked || !r.logger) || state.summary.length > 0;
+  $("setup-change").hidden = blocked || editing;
+  $("setup-close").hidden = !editing;
+  $("intro").hidden =
+    (blocked || !r.logger || editing) || state.summary.length > 0;
 
   if (!blocked) {
-    if (!r.logger) {
+    if (editing) {
+      $("setup-title").textContent = "Assetto Corsa folder";
+      $("setup-problem").textContent = (r.found_automatically
+        ? "Found automatically at " : "Currently set to ") + r.root + ".";
+      fillPath(r.root);
+    } else if (!r.logger) {
       $("setup-title").textContent = "One more step";
       $("setup-problem").textContent =
         "Assetto Corsa found at " + r.root + ".";
@@ -98,7 +111,7 @@ async function checkReady() {
   $("setup-title").textContent = r.kind === "no_car"
     ? "Car not found" : "Assetto Corsa not found";
   $("setup-problem").textContent = r.problem;
-  $("ac-path").value = r.root || "";
+  fillPath(r.root);
   $("run").disabled = true;
   setStatus("Not set up", "bad");
   return false;
@@ -147,7 +160,30 @@ async function saveAcPath() {
     return;
   }
   $("ac-save").disabled = false;
+  state.showSetup = false;
   if (await checkReady()) load(true);
+}
+
+/* Readiness is polled, so writing the box on every pass would wipe out
+ * whatever is half-typed in it. */
+function fillPath(root) {
+  const box = $("ac-path");
+  if (document.activeElement !== box) box.value = root || "";
+}
+
+function openSetup() {
+  state.showSetup = true;
+  fillPath(state.ready && state.ready.root);
+  checkReady();
+  const box = $("ac-path");
+  box.focus();
+  box.select();
+}
+
+function closeSetup() {
+  state.showSetup = false;
+  $("setup-error").hidden = true;
+  checkReady();
 }
 
 /* ---------------------------------------------------------- this session */
@@ -915,6 +951,9 @@ $("run").onclick = run;
 $("stop").onclick = stop;
 $("use-last").onclick = () => { state.useStale = true; load(true); };
 $("ac-save").onclick = saveAcPath;
+$("open-setup").onclick = openSetup;
+$("setup-change").onclick = openSetup;
+$("setup-close").onclick = closeSetup;
 $("install-logger").onclick = installLogger;
 $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
 $("apply-open").onclick = openApply;

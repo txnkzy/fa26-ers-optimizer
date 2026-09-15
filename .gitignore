@@ -44,6 +44,8 @@ docs/FINDINGS.md
 dev_run.py
 dev_entry.py
 dev_floor.py
+dev_freshstart.py
+.freshstart.json
 Run FA26 Optimizer (dev).bat
 runs/
 

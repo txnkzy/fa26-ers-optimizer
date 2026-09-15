@@ -18,9 +18,12 @@
     <span class="brand-car" id="car-id"></span>
     <span class="brand-version" id="version"></span>
   </div>
-  <div class="status" id="status" data-state="wait">
-    <span class="status-dot" aria-hidden="true"></span>
-    <span class="status-text">Starting up</span>
+  <div class="topbar-right">
+    <button type="button" class="ghost tiny" id="open-setup">Game folder</button>
+    <div class="status" id="status" data-state="wait">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span class="status-text">Starting up</span>
+    </div>
   </div>
 </header>
 
@@ -121,6 +124,7 @@
     <section class="panel firstrun" id="setup" hidden>
       <h2 id="setup-title">Setting up</h2>
       <p class="panel-note" id="setup-problem"></p>
+      <button type="button" class="ghost small" id="setup-change" hidden>Not this folder? Change it</button>
       <div id="setup-path" hidden>
         <label class="field-label" for="ac-path">Assetto Corsa folder</label>
         <div class="path-row">
@@ -139,6 +143,7 @@
         <button type="button" class="primary" id="install-logger">Install the logger</button>
       </div>
       <p class="panel-note" id="setup-error" hidden></p>
+      <button type="button" class="ghost small" id="setup-close" hidden>Close</button>
     </section>
 
     <div class="intro" id="intro" hidden>

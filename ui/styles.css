@@ -178,6 +178,15 @@ code { font-family: var(--mono); font-size: .92em; color: var(--ink-2); }
   white-space: nowrap;
 }
 
+/* The status pill and the one control that has to stay reachable, kept
+ * together so the bar still reads as two ends rather than three things. */
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.ghost.tiny {
+  padding: 6px 13px; font-size: 12px; border-radius: 999px;
+  letter-spacing: .08em;
+}
+
 .status {
   display: flex; align-items: center; gap: 9px;
   padding: 5px 13px 5px 11px;

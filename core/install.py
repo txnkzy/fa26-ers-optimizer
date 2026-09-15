@@ -277,10 +277,42 @@ def install_logger(root: Path | None = None) -> Path:
             "no_logger_source",
             "The logger is missing from this download (expected %s)." % source)
     target = logger_target(root)
-    target.mkdir(parents=True, exist_ok=True)
-    for item in source.iterdir():
-        if item.is_file():
-            shutil.copy2(item, target / item.name)
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        for item in source.iterdir():
+            if item.is_file():
+                shutil.copy2(item, target / item.name)
+    except OSError as exc:
+        # Rare, but this is the one step nobody can skip, and Windows reports
+        # it as "Access is denied" -- true, and no use to anyone. Note that a
+        # normal Steam install is NOT the cause: Steam grants Users full
+        # control over its own folder, which is how it updates itself without
+        # asking. The likely causes are the game holding the file open, or an
+        # install placed somewhere by hand.
+        #
+        # Telling people to run an unsigned executable as administrator is not
+        # an answer -- it is the exact thing a cautious user should refuse. So
+        # the logger is put somewhere reachable instead, and they can move it
+        # across in Explorer, which asks for whatever it needs on its own.
+        spare = None
+        try:
+            spare = app_dir() / "logger" / LOGGER_NAME
+            spare.mkdir(parents=True, exist_ok=True)
+            for item in source.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, spare / item.name)
+        except OSError:
+            spare = None
+        raise MissingCarData(
+            "logger_denied",
+            "The logger could not be copied into %s (%s). If Assetto Corsa "
+            "is open, close it and try again.%s"
+            % (target, exc.strerror or exc,
+               "" if spare is None else
+               " Otherwise there is a copy in %s -- move the %s folder from "
+               "there into the apps\\lua folder above, and Windows will ask "
+               "for anything it needs." % (spare.parent, LOGGER_NAME))
+            ) from exc
     return target
 
 
