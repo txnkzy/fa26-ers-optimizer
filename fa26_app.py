@@ -469,6 +469,7 @@ def readiness() -> dict:
            # Every folder reached for outside this program, each with what
            # is actually in it. When something is not found, this is the
            # whole answer, and it used to be invisible.
+           "app_dir": str(install.app_dir()),
            "documents": {
                "folder": str(docs_dir()),
                "exists": docs_dir().is_dir(),

@@ -18,18 +18,24 @@
     <span class="brand-car" id="car-id"></span>
     <span class="brand-version" id="version"></span>
   </div>
-  <div class="topbar-right">
-    <button type="button" class="ghost tiny" id="open-setup">Folders</button>
-    <div class="status" id="status" data-state="wait">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span class="status-text">Starting up</span>
-    </div>
+
+  <nav class="tabs" aria-label="Sections">
+    <button type="button" class="tab is-on" data-view="home">Optimizer</button>
+    <button type="button" class="tab" data-view="folders" id="open-setup">Folders</button>
+    <button type="button" class="tab" data-view="guide">How it works</button>
+  </nav>
+
+  <div class="status" id="status" data-state="wait">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="status-text">Starting up</span>
   </div>
 </header>
 
 <main class="shell">
 
-  <!-- ------------------------------------------------------------ rail -->
+<!-- ========================================================== optimizer -->
+<div class="view" id="view-home">
+
   <aside class="rail" id="rail">
 
     <section class="block" id="session-block">
@@ -121,14 +127,21 @@
     </div>
   </aside>
 
-  <!-- ---------------------------------------------------------- results -->
   <section class="content" id="content">
 
-    <!-- shown until the game, the car and the data are all reachable -->
+    <!-- Only what is actually missing, and only while it is missing. -->
     <section class="panel firstrun" id="setup" hidden>
       <h2 id="setup-title">Setting up</h2>
       <p class="panel-note" id="setup-problem"></p>
-      <button type="button" class="ghost small" id="setup-change" hidden>Not this folder? Change it</button>
+
+      <div id="setup-logger" hidden>
+        <p class="panel-note" id="logger-note">
+          The logger records your laps. It goes into Assetto Corsa's
+          <code>apps/lua</code> folder.
+        </p>
+        <button type="button" class="primary" id="install-logger">Install the logger</button>
+      </div>
+
       <div id="setup-path" hidden>
         <label class="field-label" for="ac-path">Assetto Corsa folder</label>
         <div class="path-row">
@@ -139,35 +152,12 @@
         </div>
         <p class="hint">The folder with <code>content</code> and <code>apps</code> in it.</p>
       </div>
-      <div id="setup-documents" hidden>
-        <label class="field-label" for="doc-path">Assetto Corsa documents folder</label>
-        <div class="path-row">
-          <input type="text" id="doc-path" class="filter"
-                 spellcheck="false" autocomplete="off">
-          <button type="button" class="primary" id="doc-save">Use this</button>
-        </div>
-        <p class="hint" id="doc-hint"></p>
-        <button type="button" class="link" id="doc-auto" hidden>Go back to finding it automatically</button>
-      </div>
-      <div id="setup-telemetry" hidden>
-        <label class="field-label" for="tel-path">Recorded laps folder</label>
-        <div class="path-row">
-          <input type="text" id="tel-path" class="filter"
-                 spellcheck="false" autocomplete="off">
-          <button type="button" class="primary" id="tel-save">Use this</button>
-        </div>
-        <p class="hint" id="tel-hint"></p>
-        <button type="button" class="link" id="tel-auto" hidden>Go back to finding it automatically</button>
-      </div>
-      <div id="setup-logger" hidden>
-        <p class="panel-note" id="logger-note">
-          The logger records your laps. It goes into Assetto Corsa's
-          <code>apps/lua</code> folder.
-        </p>
-        <button type="button" class="primary" id="install-logger">Install the logger</button>
-      </div>
+
       <p class="panel-note" id="setup-error" hidden></p>
-      <button type="button" class="ghost small" id="setup-close" hidden>Close</button>
+      <div class="panel-actions">
+        <button type="button" class="ghost small" id="setup-change">Open folder settings</button>
+        <button type="button" class="ghost small" id="setup-close" hidden>Close</button>
+      </div>
     </section>
 
     <div class="intro" id="intro" hidden>
@@ -228,16 +218,6 @@
       <div class="cards" id="cards"></div>
     </div>
 
-    <section class="panel" id="apply-panel" hidden>
-      <h2>Save into a setup</h2>
-      <p class="panel-note" id="apply-note"></p>
-      <div class="setup-list" id="setup-list"></div>
-      <div class="panel-actions">
-        <button type="button" class="primary" id="apply-go" disabled>Save maps</button>
-        <button type="button" class="ghost" id="apply-cancel">Cancel</button>
-      </div>
-    </section>
-
     <section class="panel done" id="applied" hidden></section>
 
     <section class="activity-wrap" id="activity-wrap" hidden>
@@ -254,7 +234,186 @@
       <div class="activity" id="activity" aria-live="polite"></div>
     </section>
   </section>
+</div>
+
+<!-- ============================================================ folders -->
+<div class="view page" id="view-folders" hidden>
+  <header class="page-head">
+    <h1>Folders</h1>
+    <p class="lede">
+      Three places on this machine. Each is found automatically; each can be
+      set by hand if it was found wrong.
+    </p>
+  </header>
+
+  <section class="folder">
+    <div class="folder-head">
+      <h2>Assetto Corsa</h2>
+      <span class="folder-role">the game itself</span>
+    </div>
+    <p class="folder-why">
+      The car's physics are read from <code>content\cars</code> here, and the
+      logger is installed into <code>apps\lua</code>.
+    </p>
+    <div class="folder-now"><code id="ac-now">&mdash;</code></div>
+    <p class="hint" id="ac-hint"></p>
+    <button type="button" class="ghost small" data-edit="ac">Change</button>
+    <div class="folder-edit" id="ac-edit" hidden>
+      <label class="field-label" for="ac-path-2">The folder with <code>content</code> and <code>apps</code> in it</label>
+      <div class="path-row">
+        <input type="text" id="ac-path-2" class="filter"
+               placeholder="C:\Program Files (x86)\Steam\steamapps\common\assettocorsa"
+               spellcheck="false" autocomplete="off">
+        <button type="button" class="primary" id="ac-save-2">Use this</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="folder" id="setup-documents">
+    <div class="folder-head">
+      <h2>Assetto Corsa documents</h2>
+      <span class="folder-role">where your setups live</span>
+    </div>
+    <p class="folder-why">
+      Deployment maps are written into setups under <code>setups</code> here.
+      Your recorded laps normally sit under this folder too.
+    </p>
+    <div class="folder-now"><code id="doc-now">&mdash;</code></div>
+    <p class="hint" id="doc-hint"></p>
+    <button type="button" class="ghost small" data-edit="doc">Change</button>
+    <div class="folder-edit" id="doc-edit" hidden>
+      <label class="field-label" for="doc-path">The folder with <code>setups</code> in it</label>
+      <div class="path-row">
+        <input type="text" id="doc-path" class="filter"
+               spellcheck="false" autocomplete="off">
+        <button type="button" class="primary" id="doc-save">Use this</button>
+      </div>
+      <button type="button" class="link" id="doc-auto" hidden>Go back to finding it automatically</button>
+    </div>
+  </section>
+
+  <section class="folder" id="setup-telemetry">
+    <div class="folder-head">
+      <h2>Recorded laps</h2>
+      <span class="folder-role">what the optimizer reads</span>
+    </div>
+    <p class="folder-why">
+      The in-game logger writes one file per lap here. If the optimizer says
+      it is waiting for laps while you are driving, this is the folder to
+      check.
+    </p>
+    <div class="folder-now"><code id="tel-now">&mdash;</code></div>
+    <p class="hint" id="tel-hint"></p>
+    <button type="button" class="ghost small" data-edit="tel">Change</button>
+    <div class="folder-edit" id="tel-edit" hidden>
+      <label class="field-label" for="tel-path">The folder the logger writes lap files into</label>
+      <div class="path-row">
+        <input type="text" id="tel-path" class="filter"
+               spellcheck="false" autocomplete="off">
+        <button type="button" class="primary" id="tel-save">Use this</button>
+      </div>
+      <button type="button" class="link" id="tel-auto" hidden>Go back to finding it automatically</button>
+    </div>
+  </section>
+
+  <section class="folder quiet">
+    <div class="folder-head">
+      <h2>The optimizer's own folder</h2>
+      <span class="folder-role">nothing to set</span>
+    </div>
+    <p class="folder-why">
+      Settings, and a copy of the car's physics unpacked from your own install.
+      Delete it and it is rebuilt on the next run.
+    </p>
+    <div class="folder-now"><code id="app-now">&mdash;</code></div>
+  </section>
+
+  <p class="page-foot" id="folders-error" hidden></p>
+</div>
+
+<!-- ======================================================== how it works -->
+<div class="view page" id="view-guide" hidden>
+  <header class="page-head">
+    <h1>How it works</h1>
+    <p class="lede">Four steps, and the one everybody gets wrong is the last.</p>
+  </header>
+
+  <ol class="guide">
+    <li>
+      <h2>Drive</h2>
+      <p>
+        A few clean laps in one session, at a pace you can repeat. The logger
+        writes each lap as you cross the line; invalidated laps and in/out
+        laps are thrown away.
+      </p>
+    </li>
+    <li>
+      <h2>Run the optimizer</h2>
+      <p>
+        It fits how your car accelerates, brakes and grips from those laps,
+        then searches for where to spend the battery. A couple of minutes,
+        and you can go back to the game while it works.
+      </p>
+    </li>
+    <li>
+      <h2>Save into a setup</h2>
+      <p>
+        Pick one of your setups for this circuit. The old file is copied to
+        <code>.bak</code> first, and only deployment maps 1 to 3 are touched.
+      </p>
+    </li>
+    <li>
+      <h2>Restart the session</h2>
+      <p>
+        Assetto Corsa only reads a setup when the car loads. A map saved
+        while you are sitting on track never reaches the car, and reloading
+        the setup in the pit menu is not enough.
+      </p>
+    </li>
+  </ol>
+
+  <section class="guide-strats">
+    <h2>The three maps</h2>
+    <div class="strat-grid">
+      <article class="strat-ghost" data-strat="1">
+        <span class="chip">STRAT 1</span>
+        <h3>Qualifying</h3>
+        <p>Spends the whole battery over one lap. Arrive with it full.</p>
+      </article>
+      <article class="strat-ghost" data-strat="2">
+        <span class="chip">STRAT 2</span>
+        <h3>Race</h3>
+        <p>Ends the lap on the charge it started, so it can repeat.</p>
+      </article>
+      <article class="strat-ghost" data-strat="3">
+        <span class="chip">STRAT 3</span>
+        <h3>Recharge</h3>
+        <p>Puts charge back in. Meant to feel slow.</p>
+      </article>
+    </div>
+    <p class="hint">
+      Switch between them with <b>STRAT Map</b> on the pit setup screen. The
+      PU mode switch on the wheel does not change it.
+    </p>
+  </section>
+</div>
+
 </main>
+
+<!-- The save dialog sits over the page rather than below it: it used to open
+     as a panel under the results, so the button at the top scrolled its own
+     form out of sight. -->
+<div class="scrim" id="apply-back" hidden></div>
+<section class="panel modal" id="apply-panel" hidden role="dialog"
+         aria-modal="true" aria-labelledby="apply-title">
+  <h2 id="apply-title">Save into a setup</h2>
+  <p class="panel-note" id="apply-note"></p>
+  <div class="setup-list" id="setup-list"></div>
+  <div class="panel-actions">
+    <button type="button" class="primary" id="apply-go" disabled>Save maps</button>
+    <button type="button" class="ghost" id="apply-cancel">Cancel</button>
+  </div>
+</section>
 
 <script src="/ui/app.js"></script>
 </body>

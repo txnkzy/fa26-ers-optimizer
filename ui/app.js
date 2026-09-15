@@ -27,7 +27,7 @@ const state = {
   watch: null,
   ready: null,
   version: "",
-  showSetup: false,
+  view: "home",
   game: null,
   useStale: false,
 };
@@ -86,29 +86,20 @@ async function checkReady() {
   // The panel covers anything not yet in place, and one thing that is: the
   // game folder, which stays changeable because detection can be confident
   // and wrong on a machine with more than one install.
-  const editing = state.showSetup;
-  // An old logger is as much of a blocker as a missing one: it is the thing
-  // recording the laps, and a fix to it reaches nobody who is never told.
+  // The setup panel now carries only what is missing. Changing a folder that
+  // was found correctly is not a setup step, so it lives on its own page.
   const needsLogger = !r.logger || r.logger_outdated;
-  $("setup").hidden = blocked ? false : (!needsLogger && !editing);
-  $("setup-path").hidden = !blocked && !editing;
+  $("setup").hidden = !blocked && !needsLogger;
+  $("setup-path").hidden = !blocked;
   $("setup-logger").hidden = !needsLogger;
-  $("setup-change").hidden = blocked || editing;
-  $("setup-documents").hidden = !editing;
-  $("setup-telemetry").hidden = !editing;
-  $("setup-close").hidden = !editing;
-  $("intro").hidden =
-    (blocked || needsLogger || editing) || state.summary.length > 0;
+  $("setup-change").hidden = false;
+  $("setup-close").hidden = true;
+  $("intro").hidden = (blocked || needsLogger) || state.summary.length > 0;
+  if (state.view === "folders") paintFolders();
 
   if (!blocked) {
-    if (editing) {
-      $("setup-title").textContent = "Folders";
-      $("setup-problem").textContent = (r.found_automatically
-        ? "Found automatically at " : "Currently set to ") + r.root + ".";
-      fillPath(r.root);
-      showDocuments(r.documents);
-      showTelemetry(r.telemetry);
-    } else if (needsLogger) {
+    {
+      if (needsLogger) {
       const old_ = r.logger && r.logger_outdated;
       $("setup-title").textContent = old_ ? "Update the logger"
                                           : "One more step";
@@ -122,6 +113,7 @@ async function checkReady() {
         + "apps/lua folder.";
       $("install-logger").textContent = old_ ? "Update the logger"
                                              : "Install the logger";
+      }
     }
     return true;
   }
@@ -163,21 +155,20 @@ function showNotice(title, text) {
   $("warnings").append(box);
 }
 
-async function saveAcPath() {
-  const value = $("ac-path").value.trim();
+async function saveAcPath(box) {
+  box = (box && box.value !== undefined) ? box : $("ac-path");
+  const value = box.value.trim();
   if (!value) return;
   $("ac-save").disabled = true;
   $("setup-error").hidden = true;
   try {
     await post("/api/setpath", { path: value });
   } catch (err) {
-    $("setup-error").textContent = String(err.message || err);
-    $("setup-error").hidden = false;
+    showFolderError(err);
     $("ac-save").disabled = false;
     return;
   }
   $("ac-save").disabled = false;
-  state.showSetup = false;
   if (await checkReady()) load(true);
 }
 
@@ -187,7 +178,7 @@ async function saveAcPath() {
 function showDocuments(info) {
   if (!info) return;
   const box = $("doc-path");
-  if (document.activeElement !== box) box.value = info.folder || "";
+  if (box && document.activeElement !== box) box.value = info.folder || "";
   $("doc-auto").hidden = !info.chosen_by_hand;
   $("doc-hint").textContent = !info.exists
     ? "This folder does not exist yet."
@@ -204,8 +195,7 @@ async function saveDocuments(folder) {
   try {
     await post("/api/setdocuments", { path: folder });
   } catch (err) {
-    $("setup-error").textContent = String(err.message || err);
-    $("setup-error").hidden = false;
+    showFolderError(err);
     $("doc-save").disabled = false;
     return;
   }
@@ -220,7 +210,7 @@ async function saveDocuments(folder) {
 function showTelemetry(info) {
   if (!info) return;
   const box = $("tel-path");
-  if (document.activeElement !== box) box.value = info.folder || "";
+  if (box && document.activeElement !== box) box.value = info.folder || "";
   $("tel-auto").hidden = !info.chosen_by_hand;
   $("tel-hint").textContent = !info.exists
     ? "This folder does not exist yet."
@@ -236,8 +226,7 @@ async function saveTelemetry(folder) {
   try {
     await post("/api/settelemetry", { path: folder });
   } catch (err) {
-    $("setup-error").textContent = String(err.message || err);
-    $("setup-error").hidden = false;
+    showFolderError(err);
     $("tel-save").disabled = false;
     return;
   }
@@ -246,26 +235,52 @@ async function saveTelemetry(folder) {
   load(true);
 }
 
+/* --------------------------------------------------------------- views */
+/* One screen at a time. Everything used to be stacked down a single page --
+ * the first-run panel, the introduction, the run, the results, the save form
+ * and the log -- so the page was long, and which parts were live depended on
+ * state you could not see from the top of it. */
+function showView(name) {
+  state.view = name;
+  for (const view of document.querySelectorAll(".view")) {
+    view.hidden = view.id !== "view-" + name;
+  }
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.classList.toggle("is-on", tab.dataset.view === name);
+  }
+  if (name === "folders") paintFolders();
+}
+
+/* The folders page answers "where is it now" before it offers to change it,
+ * which is the question the old panel never answered. */
+function paintFolders() {
+  const r = state.ready;
+  if (!r) return;
+  const set = (id, text) => { const n = $(id); if (n) n.textContent = text; };
+  set("ac-now", r.root || "not found");
+  const box = $("ac-path-2");
+  if (box && document.activeElement !== box) box.value = r.root || "";
+  set("ac-hint", r.root
+    ? (r.found_automatically ? "Found automatically." : "Set by you.")
+    : "Not found. Paste the folder with content and apps in it.");
+  showDocuments(r.documents);
+  showTelemetry(r.telemetry);
+  if (r.documents) set("doc-now", r.documents.folder);
+  if (r.telemetry) set("tel-now", r.telemetry.folder);
+  set("app-now", (r.app_dir || ""));
+}
+
 /* Readiness is polled, so writing the box on every pass would wipe out
  * whatever is half-typed in it. */
-function fillPath(root) {
-  const box = $("ac-path");
-  if (document.activeElement !== box) box.value = root || "";
-}
-
-function openSetup() {
-  state.showSetup = true;
-  fillPath(state.ready && state.ready.root);
-  checkReady();
-  const box = $("ac-path");
-  box.focus();
-  box.select();
-}
-
-function closeSetup() {
-  state.showSetup = false;
-  $("setup-error").hidden = true;
-  checkReady();
+/* An error from any of the three folder forms, put where the form is. */
+function showFolderError(err) {
+  const text = String(err.message || err);
+  for (const id of ("setup-error folders-error").split(" ")) {
+    const node = $(id);
+    if (!node) continue;
+    node.textContent = text;
+    node.hidden = false;
+  }
 }
 
 /* ---------------------------------------------------------- this session */
@@ -937,8 +952,20 @@ async function copyDiagnostics(button) {
 }
 
 /* ------------------------------------------------------------------ apply */
+function closeApply() {
+  $("apply-panel").hidden = true;
+  $("apply-back").hidden = true;
+  document.removeEventListener("keydown", applyKeys, true);
+}
+
+function applyKeys(e) {
+  if (e.key === "Escape") closeApply();
+}
+
 async function openApply() {
   $("apply-panel").hidden = false;
+  $("apply-back").hidden = false;
+  document.addEventListener("keydown", applyKeys, true);
   $("applied").hidden = true;
   state.setup = null;
   $("apply-go").disabled = true;
@@ -1052,10 +1079,27 @@ $("run").onclick = run;
 $("stop").onclick = stop;
 $("use-last").onclick = () => { state.useStale = true; load(true); };
 $("ac-save").onclick = saveAcPath;
-$("open-setup").onclick = openSetup;
-$("setup-change").onclick = openSetup;
-$("setup-close").onclick = closeSetup;
-$("find-laps").onclick = openSetup;
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.onclick = () => showView(tab.dataset.view);
+}
+$("setup-change").onclick = () => showView("folders");
+$("find-laps").onclick = () => showView("folders");
+for (const button of document.querySelectorAll("[data-edit]")) {
+  button.onclick = () => {
+    const box = $(button.dataset.edit + "-edit");
+    box.hidden = !box.hidden;
+    button.textContent = box.hidden ? "Change" : "Cancel";
+    if (!box.hidden) {
+      const field = box.querySelector("input");
+      field.focus();
+      field.select();
+    }
+  };
+}
+$("ac-save-2").onclick = () => saveAcPath($("ac-path-2"));
+$("ac-path-2").onkeydown = (e) => {
+  if (e.key === "Enter") saveAcPath($("ac-path-2"));
+};
 $("doc-save").onclick = () => saveDocuments($("doc-path").value.trim());
 $("doc-auto").onclick = () => saveDocuments("");
 $("doc-path").onkeydown = (e) => {
@@ -1071,8 +1115,9 @@ $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
 $("apply-open").onclick = openApply;
 $("copy-diag").onclick = () => copyDiagnostics($("copy-diag"));
 $("copy-diag-wait").onclick = () => copyDiagnostics($("copy-diag-wait"));
-$("apply-cancel").onclick = () => { $("apply-panel").hidden = true; };
-$("apply-go").onclick = applyGo;
+$("apply-cancel").onclick = closeApply;
+$("apply-back").onclick = closeApply;
+$("apply-go").onclick = async () => { await applyGo(); closeApply(); };
 $("show-detail").onchange = applyDetailFilter;
 $("activity-toggle").onclick = () => {
   const box = $("activity");

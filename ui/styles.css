@@ -238,10 +238,14 @@ code { font-family: var(--mono); font-size: .92em; color: var(--ink-2); }
 }
 
 /* ------------------------------------------------------------------ shell */
-.shell {
+/* The shell holds one view at a time; the working view is the two-column
+   one, and the reading pages are a single column. */
+.shell { height: calc(100% - var(--bar)); }
+
+#view-home {
   display: grid;
   grid-template-columns: var(--rail) minmax(0, 1fr);
-  height: calc(100% - var(--bar));
+  height: 100%;
 }
 
 .rail {
@@ -1026,3 +1030,136 @@ table.split-table {
 
 #setup-documents, #setup-telemetry { margin-top: 18px; }
 #tel-auto, #doc-auto { margin-top: 8px; font-size: 12px; }
+
+/* ============================================================== sections */
+/* One screen at a time, chosen from the bar. The whole program used to be a
+ * single column with everything in it, live or not. */
+.tabs { display: flex; gap: 2px; margin-left: 28px; }
+
+.tab {
+  padding: 7px 15px;
+  border: 0; border-radius: 7px;
+  background: none; color: var(--faint);
+  font-family: var(--cond); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .07em; text-transform: uppercase;
+  cursor: pointer;
+  transition: color .14s ease, background .14s ease;
+}
+.tab:hover { color: var(--ink-2); background: rgba(255, 255, 255, .04); }
+.tab.is-on { color: var(--ink); background: rgba(255, 255, 255, .07); }
+
+.view { height: 100%; min-height: 0; }
+
+/* A reading page rather than a workbench: one column, generous measure. */
+.view.page {
+  display: block;
+  overflow-y: auto;
+  padding: 40px 48px 64px;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.page-head { margin-bottom: 30px; }
+.page-head h1 {
+  font-family: var(--cond); font-size: 30px; font-weight: 700;
+  letter-spacing: .01em; margin: 0 0 8px;
+}
+.page-head .lede { max-width: 62ch; margin: 0; color: var(--ink-2); }
+
+.page-foot {
+  margin-top: 22px; padding: 12px 14px;
+  border: 1px solid var(--bad); border-radius: var(--radius);
+  color: var(--ink-2); font-size: 13.5px;
+}
+
+/* ------------------------------------------------------------- a folder */
+.folder {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raise);
+  padding: 20px 22px; margin-bottom: 18px;
+}
+.folder.quiet { background: none; }
+
+.folder-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.folder-head h2 {
+  font-family: var(--cond); font-size: 17px; font-weight: 700; margin: 0;
+}
+.folder-role {
+  font-family: var(--cond); font-size: 12px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--faint);
+}
+.folder-why {
+  margin: 0 0 14px; color: var(--ink-2); font-size: 13.5px;
+  max-width: 68ch;
+}
+
+/* Where it is now, before anything offers to change it. */
+.folder-now {
+  padding: 10px 12px; margin-bottom: 14px;
+  background: var(--sunken); border-radius: 8px;
+  border-left: 2px solid var(--accent);
+  overflow-x: auto;
+}
+.folder-now code {
+  font-family: var(--mono); font-size: 12px; color: var(--ink);
+  white-space: nowrap;
+}
+.folder .hint { margin-top: 8px; }
+.folder .link { margin-top: 6px; font-size: 12px; }
+
+/* ------------------------------------------------------------ the guide */
+.guide { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+.guide li {
+  counter-increment: step;
+  display: grid; grid-template-columns: 42px 1fr; gap: 4px 16px;
+  padding-bottom: 24px;
+}
+.guide li::before {
+  content: counter(step);
+  font-family: var(--cond); font-size: 24px; font-weight: 700;
+  color: var(--accent); line-height: 1;
+  grid-row: span 2;
+}
+.guide h2 {
+  font-family: var(--cond); font-size: 17px; font-weight: 700;
+  margin: 0 0 4px;
+}
+.guide p { margin: 0; color: var(--ink-2); font-size: 13.5px; max-width: 64ch; }
+
+.guide-strats { margin-top: 14px; }
+.guide-strats h2 {
+  font-family: var(--cond); font-size: 17px; font-weight: 700;
+  margin: 0 0 14px;
+}
+.guide-strats .hint { margin-top: 14px; }
+
+/* ------------------------------------------------------------ the dialog */
+/* The save form used to be a panel below the results, so the button that
+ * opened it pushed its own form off the bottom of the window. */
+.scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(4, 6, 10, .66);
+}
+
+.panel.modal {
+  position: fixed; z-index: 41;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(76vh, 720px);
+  overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+}
+
+@media (max-width: 760px) {
+  .tabs { margin-left: 10px; }
+  .view.page { padding: 26px 18px 48px; }
+}
+
+/* The form each folder card keeps folded away until it is asked for. */
+.folder-edit { margin-top: 14px; }
+.folder-edit .field-label { display: block; margin-bottom: 7px; }
+.folder-edit .link { margin-top: 10px; }
