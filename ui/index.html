@@ -257,7 +257,15 @@
     </p>
     <div class="folder-now"><code id="ac-now">&mdash;</code></div>
     <p class="hint" id="ac-hint"></p>
-    <button type="button" class="ghost small" data-edit="ac">Change</button>
+    <div class="folder-actions">
+      <button type="button" class="ghost small" data-pick="ac">Change…</button>
+      <button type="button" class="link" data-edit="ac">or type the path</button>
+    </div>
+
+    <div class="folder-logger" id="folder-logger" hidden>
+      <p class="hint" id="folder-logger-note"></p>
+      <button type="button" class="primary" id="install-logger-2">Install the logger</button>
+    </div>
     <div class="folder-edit" id="ac-edit" hidden>
       <label class="field-label" for="ac-path-2">The folder with <code>content</code> and <code>apps</code> in it</label>
       <div class="path-row">
@@ -280,7 +288,10 @@
     </p>
     <div class="folder-now"><code id="doc-now">&mdash;</code></div>
     <p class="hint" id="doc-hint"></p>
-    <button type="button" class="ghost small" data-edit="doc">Change</button>
+    <div class="folder-actions">
+      <button type="button" class="ghost small" data-pick="doc">Change…</button>
+      <button type="button" class="link" data-edit="doc">or type the path</button>
+    </div>
     <div class="folder-edit" id="doc-edit" hidden>
       <label class="field-label" for="doc-path">The folder with <code>setups</code> in it</label>
       <div class="path-row">
@@ -304,7 +315,10 @@
     </p>
     <div class="folder-now"><code id="tel-now">&mdash;</code></div>
     <p class="hint" id="tel-hint"></p>
-    <button type="button" class="ghost small" data-edit="tel">Change</button>
+    <div class="folder-actions">
+      <button type="button" class="ghost small" data-pick="tel">Change…</button>
+      <button type="button" class="link" data-edit="tel">or type the path</button>
+    </div>
     <div class="folder-edit" id="tel-edit" hidden>
       <label class="field-label" for="tel-path">The folder the logger writes lap files into</label>
       <div class="path-row">

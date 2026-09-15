@@ -88,7 +88,7 @@ async function checkReady() {
   // and wrong on a machine with more than one install.
   // The setup panel now carries only what is missing. Changing a folder that
   // was found correctly is not a setup step, so it lives on its own page.
-  const needsLogger = !r.logger || r.logger_outdated;
+  const needsLogger = !r.logger;
   $("setup").hidden = !blocked && !needsLogger;
   $("setup-path").hidden = !blocked;
   $("setup-logger").hidden = !needsLogger;
@@ -100,19 +100,12 @@ async function checkReady() {
   if (!blocked) {
     {
       if (needsLogger) {
-      const old_ = r.logger && r.logger_outdated;
-      $("setup-title").textContent = old_ ? "Update the logger"
-                                          : "One more step";
-      $("setup-problem").textContent = old_
-        ? "The logger in your game is older than this version."
-        : "Assetto Corsa found at " + r.root + ".";
-      $("logger-note").textContent = old_
-        ? "This version records your laps differently. Update it, then "
-        + "restart the session so the game loads the new one."
-        : "The logger records your laps. It goes into Assetto Corsa's "
-        + "apps/lua folder.";
-      $("install-logger").textContent = old_ ? "Update the logger"
-                                             : "Install the logger";
+        $("setup-title").textContent = "One more step";
+        $("setup-problem").textContent = "Assetto Corsa found at " + r.root + ".";
+        $("logger-note").textContent =
+          "The logger records your laps. It goes into Assetto Corsa's "
+          + "apps/lua folder.";
+        $("install-logger").textContent = "Install the logger";
       }
     }
     return true;
@@ -126,16 +119,17 @@ async function checkReady() {
   return false;
 }
 
-async function installLogger() {
-  const button = $("install-logger");
+async function installLogger(button) {
+  button = (button && button.tagName) ? button : $("install-logger");
   button.disabled = true;
   button.textContent = "Installing\u2026";
-  $("setup-error").hidden = true;
+  for (const id of ("setup-error folders-error").split(" ")) {
+    if ($(id)) $(id).hidden = true;
+  }
   try {
     await post("/api/installlogger", {});
   } catch (err) {
-    $("setup-error").textContent = String(err.message || err);
-    $("setup-error").hidden = false;
+    showFolderError(err);
     button.disabled = false;
     button.textContent = "Install the logger";
     return;
@@ -268,6 +262,17 @@ function paintFolders() {
   if (r.documents) set("doc-now", r.documents.folder);
   if (r.telemetry) set("tel-now", r.telemetry.folder);
   set("app-now", (r.app_dir || ""));
+
+  const row = $("folder-logger");
+  if (row) {
+    row.hidden = !!r.logger && !r.logger_outdated;
+    $("folder-logger-note").textContent = !r.logger
+      ? "The logger is not installed. Without it there are no laps to read."
+      : "The logger in your game is older than this version. It records your "
+        + "laps differently now \u2014 update it, then restart the session.";
+    $("install-logger-2").textContent = r.logger ? "Update the logger"
+                                                 : "Install the logger";
+  }
 }
 
 /* Readiness is polled, so writing the box on every pass would wipe out
@@ -425,7 +430,7 @@ function renderSession(grew) {
   if (state.ready && state.ready.logger && state.ready.logger_outdated) {
     showNotice("The logger needs updating",
                "It records your laps, and this version changed how. "
-               + "Update it from the panel, then restart the session.");
+               + "Update it on the Folders page, then restart the session.");
   }
   if (state.ready && !state.ready.logger) {
     showNotice("The logger is not installed",
@@ -1084,6 +1089,40 @@ for (const tab of document.querySelectorAll(".tab")) {
 }
 $("setup-change").onclick = () => showView("folders");
 $("find-laps").onclick = () => showView("folders");
+/* The path is chosen in Explorer rather than typed: it is long, easy to get
+ * subtly wrong, and the program could only say so afterwards. */
+const PICKS = {
+  ac: ["ac", (path) => saveAcPath({ value: path })],
+  doc: ["documents", saveDocuments],
+  tel: ["telemetry", saveTelemetry],
+};
+
+for (const button of document.querySelectorAll("[data-pick]")) {
+  button.onclick = async () => {
+    const [which, save] = PICKS[button.dataset.pick];
+    const was = button.textContent;
+    button.disabled = true;
+    button.textContent = "Choose a folder\u2026";
+    let chosen = "";
+    try {
+      chosen = (await post("/api/pickfolder", { which: which,
+                                                start: startFor(which) })).path;
+    } catch (err) {
+      showFolderError(err);
+    }
+    button.disabled = false;
+    button.textContent = was;
+    if (chosen) await save(chosen);
+  };
+}
+
+function startFor(which) {
+  const r = state.ready || {};
+  if (which === "documents") return (r.documents || {}).folder || "";
+  if (which === "telemetry") return (r.telemetry || {}).folder || "";
+  return r.root || "";
+}
+
 for (const button of document.querySelectorAll("[data-edit]")) {
   button.onclick = () => {
     const box = $(button.dataset.edit + "-edit");
@@ -1111,6 +1150,7 @@ $("tel-path").onkeydown = (e) => {
   if (e.key === "Enter") saveTelemetry($("tel-path").value.trim());
 };
 $("install-logger").onclick = installLogger;
+$("install-logger-2").onclick = () => installLogger($("install-logger-2"));
 $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
 $("apply-open").onclick = openApply;
 $("copy-diag").onclick = () => copyDiagnostics($("copy-diag"));

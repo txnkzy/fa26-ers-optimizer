@@ -1038,6 +1038,7 @@ table.split-table {
 
 .tab {
   padding: 7px 15px;
+  white-space: nowrap;
   border: 0; border-radius: 7px;
   background: none; color: var(--faint);
   font-family: var(--cond); font-size: 13.5px; font-weight: 600;
@@ -1163,3 +1164,22 @@ table.split-table {
 .folder-edit { margin-top: 14px; }
 .folder-edit .field-label { display: block; margin-bottom: 7px; }
 .folder-edit .link { margin-top: 10px; }
+
+.folder-actions { display: flex; align-items: center; gap: 14px; }
+
+.folder-logger {
+  margin-top: 16px; padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.folder-logger .hint { margin: 0 0 10px; }
+
+/* The logger is a footnote to the game folder, not the point of the page. */
+.folder-logger .primary { width: auto; }
+
+/* The bar is three things in a row; at a narrow window the name is the part
+   that can afford to be clipped, not the tabs or the status. */
+.brand-name { white-space: nowrap; }
+.brand { min-width: 0; overflow: hidden; }
+@media (max-width: 900px) {
+  .brand-car, .brand-version { display: none; }
+}

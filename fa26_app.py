@@ -1354,6 +1354,16 @@ class Handler(BaseHTTPRequestHandler):
                 install.save_root(folder)
                 _CAR_LIMITS_RESET()
                 self._json(readiness())
+            elif route == "/api/pickfolder":
+                titles = {
+                    "ac": "Where is Assetto Corsa?",
+                    "documents": "Where is the Assetto Corsa documents folder?",
+                    "telemetry": "Where does the logger write your laps?",
+                }
+                which = body.get("which") or "ac"
+                chosen = pick_folder(titles.get(which, "Choose a folder"),
+                                     body.get("start") or "")
+                self._json({"path": chosen})
             elif route == "/api/setdocuments":
                 folder = (body.get("path") or "").strip().strip('"')
                 if folder and not Path(folder).is_dir():
@@ -1400,6 +1410,94 @@ class Server(ThreadingHTTPServer):
     """
 
     allow_reuse_address = False
+
+
+#: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE -- real folders only, and the
+#: resizable dialog with a text box rather than the 1995 one.
+_BIF_FLAGS = 0x00000001 | 0x00000040
+
+
+def app_window() -> int:
+    """The application's own window, so a dialog opens in front of it.
+
+    Without an owner the picker is a top-level window of its own and Windows
+    is free to leave it behind the page that asked for it -- which looks
+    exactly like the button having done nothing.
+    """
+    found = []
+
+    def visit(hwnd, _):
+        length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+        if length:
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
+            if "FA26 ERS Deployment Optimizer" in buffer.value:
+                if ctypes.windll.user32.IsWindowVisible(hwnd):
+                    found.append(hwnd)
+                    return False
+        return True
+
+    try:
+        proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p,
+                                  ctypes.c_void_p)(visit)
+        ctypes.windll.user32.EnumWindows(proc, 0)
+    except Exception:
+        return 0
+    return found[0] if found else 0
+
+
+def pick_folder(title: str, start: str = "") -> str:
+    """Show the folder picker and return what was chosen, or an empty string.
+
+    Runs on whichever thread serves the request, which is one of the server's
+    own -- the dialog is modal to itself, not to the application, so the page
+    carries on and a cancelled dialog simply returns nothing.
+    """
+    try:
+        shell = ctypes.windll.shell32
+        ole = ctypes.windll.ole32
+
+        class BROWSEINFO(ctypes.Structure):
+            _fields_ = [("hwndOwner", ctypes.c_void_p),
+                        ("pidlRoot", ctypes.c_void_p),
+                        ("pszDisplayName", ctypes.c_wchar_p),
+                        ("lpszTitle", ctypes.c_wchar_p),
+                        ("ulFlags", ctypes.c_uint),
+                        ("lpfn", ctypes.c_void_p),
+                        ("lParam", ctypes.c_void_p),
+                        ("iImage", ctypes.c_int)]
+
+        # BFFM_INITIALIZED = 1, BFFM_SETSELECTIONW = 1127: open where the
+        # folder already is, so "change this" starts from the current answer
+        # rather than from the desktop.
+        proc_type = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p,
+                                       ctypes.c_uint, ctypes.c_void_p,
+                                       ctypes.c_void_p)
+
+        def on_message(hwnd, message, lparam, data):
+            if message == 1 and start:
+                ctypes.windll.user32.SendMessageW(
+                    hwnd, 1127, 1, ctypes.c_wchar_p(start))
+            return 0
+
+        callback = proc_type(on_message)
+        ole.CoInitialize(None)
+        buffer = ctypes.create_unicode_buffer(1024)
+        info = BROWSEINFO()
+        info.hwndOwner = ctypes.c_void_p(app_window() or 0)
+        info.pszDisplayName = ctypes.cast(buffer, ctypes.c_wchar_p)
+        info.lpszTitle = title
+        info.ulFlags = _BIF_FLAGS
+        info.lpfn = ctypes.cast(callback, ctypes.c_void_p)
+        pidl = shell.SHBrowseForFolderW(ctypes.byref(info))
+        if not pidl:
+            return ""
+        path = ctypes.create_unicode_buffer(1024)
+        ok = shell.SHGetPathFromIDListW(ctypes.c_void_p(pidl), path)
+        ole.CoTaskMemFree(ctypes.c_void_p(pidl))
+        return path.value if ok else ""
+    except Exception:
+        return ""
 
 
 def free_port(preferred: int = 8731) -> int:
