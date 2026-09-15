@@ -902,13 +902,23 @@ class Engine:
         # Standard curve starts tapering at 290 kph against the Overtake
         # curve's 337 -- so applying one to both overstates race deployment
         # everywhere above 290.
-        # Unnamed curves fall back differently by strategy: qualifying runs
-        # Override so Overtake is the right guess, the race does not so
-        # Standard is.
-        taper_for = lambda strat: (
-            fa26.taper_for(alloc.curve_override, fa26.TAPER_OVERTAKE)
-            if strat == 1 else
-            fa26.taper_for(alloc.curve_standard, fa26.TAPER_BASE))
+        # An unnamed curve falls back to Overtake for both. Standard was tried
+        # for the race and reverted: it is far too severe for this car. Across
+        # every full-throttle sample recorded here, split by the strat actually
+        # selected, the race holds 299 kW at 325 km/h where Standard permits
+        # 127, and 188 at 335 where it permits 79.
+        #
+        # The reasoning that put Standard here was circular. Bahrain telemetry
+        # showed at most 202 kW above 300 km/h -- but that was the most the map
+        # of the day ever asked for, not the most the car would give. Asking
+        # the same question of a circuit whose map does demand full power up
+        # there answers it properly.
+        #
+        # The race is not flat to 337 either: it is somewhere near flat to 310
+        # and gone by 365. Refining that needs evidence better than a 99th
+        # percentile of a differentiated channel, so Overtake stands.
+        taper_for = lambda strat: fa26.taper_for(
+            alloc.curve_override if strat == 1 else alloc.curve_standard)
 
         deployed, harvested = lap.totals()
         self.detail("As driven      deploy %.2f MJ, harvest %.2f MJ"
