@@ -989,7 +989,7 @@ class Engine:
             self.check()
 
             notes = self._describe(label, strat_no, result, splits, lap, cal,
-                                   profile, zones_for(strat_no))
+                                   profile, zones_for(strat_no), cap)
             spread = optimise26.sensitivity(
                 splits, car, cal, profile, powertrain, objective)
             self.check()
@@ -1040,7 +1040,7 @@ class Engine:
                  "the session.")
 
     def _describe(self, label, strat_no, result, splits, lap, cal, profile,
-                  reset_zones) -> list[str]:
+                  reset_zones, cap: float = 99.0) -> list[str]:
         """Say what a finished map is, in words, and return the card's notes.
 
         The card shows the same sentences as the activity list, so a user who
@@ -1075,13 +1075,28 @@ class Engine:
             self.detail("               fitted to %.0f kph, map runs to %.0f"
                         % (cal.observed_speed_p95 * 3.6,
                            max(result.speed) * 3.6))
-        # A recharge lap refuses harvest once it is full, which is the point of
-        # it, not a fault to report.
-        if result.refused_mj > 0.1 and strat_no != 3:
+        # A recharge lap refuses harvest once it is full, which is the point
+        # of it, not a fault to report.
+        #
+        # And refused is not the same as wasted. Once the lap has recovered
+        # everything the per-lap allowance permits, the rest could not have
+        # been used however early it was spent -- a Monaco race map harvesting
+        # 8.50 against a cap of 8.50 refused 0.6 MJ it had no room for and no
+        # right to, and telling the user to make room for it was advice that
+        # could not be taken. What is worth reporting is only the part the
+        # allowance would still have allowed.
+        headroom = max(0.0, cap - result.harvested_mj)
+        recoverable = min(result.refused_mj, headroom)
+        if recoverable > 0.1 and strat_no != 3:
             notes.append(
                 "%.1f MJ of recovery was lost to a full battery. Using more "
-                "earlier in the lap would make room." % result.refused_mj)
+                "earlier in the lap would make room." % recoverable)
             self.note("   " + notes[-1])
+        elif result.refused_mj > 0.1 and strat_no != 3:
+            self.detail("               %.1f MJ refused by a full store, but "
+                        "the lap is already at its %.1f MJ allowance, so there "
+                        "was nothing to be gained by making room."
+                        % (result.refused_mj, cap))
         # A map the car will not execute is worse than no map: it looks like a
         # plan and quietly does something else. The search is held to this, so
         # a survivor here is a bug, not a preference.
