@@ -741,6 +741,44 @@ class Evaluator:
         return result
 
 
+#: Below this there is nothing to win by spending earlier, and the extra
+#: climb is pure cost. Set to match the figure the app reports as wasted:
+#: anything worth telling the user about is worth one more climb. At 0.3 a
+#: Madrid map refusing 0.30 MJ fell just outside and kept a map 0.403 s
+#: slower than the one this finds.
+REFUSAL_WORTH_CHASING_MJ = 0.1
+
+#: How much of the lap the front-loaded start spends flat out. Enough to
+#: empty a full store before the first heavy braking of the second half, so
+#: the harvesting that follows has somewhere to go.
+FRONT_LOAD_FRACTION = 0.45
+
+
+def _front_loaded(splits, profile) -> "list[fa26.Split]":
+    """The same zones, spending hard early so there is room to recover.
+
+    A store that is already full cannot accept anything, and at a circuit
+    like Monaco -- short lap, heavy braking, generous allowance -- it is full
+    long before the lap is over. Every kilojoule of braking after that is
+    thrown away. Spending it early is what buys it back, and the cost of
+    doing so is paid where the car is slowest, which is where deployment is
+    worth most anyway.
+    """
+    if not splits:
+        return []
+    cutoff = profile.length_m * FRONT_LOAD_FRACTION
+    out = []
+    for split in splits:
+        if split.start_m <= cutoff:
+            out.append(fa26.Split(split.start_m, split.end_m, split.end_m,
+                                  split.end_m, fa26.POWER_MAX, 0))
+        else:
+            out.append(fa26.Split(split.start_m, split.deploy_end_m,
+                                  split.clip_start_m, split.end_m,
+                                  split.deploy_kw, split.clip_kw))
+    return out
+
+
 def optimise(splits, car, longitudinal, profile, powertrain, objective: Objective,
              start_store_kj: float, max_sweeps: int = 8, ds: float = 2.5,
              extra_seeds=(), reset_zones=(), speed_zones=(), on_progress=None):
@@ -782,7 +820,8 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
     starts = [splits] + [list(extra) for extra in extra_seeds]
     # One climb per starting point, plus the refining climb over the
     # subdivided answer.
-    climbs = len(starts) + 1
+    # Plus the refining climb, and the front-loaded one when it is needed.
+    climbs = len(starts) + 2
     finished = [0]
 
     def report(sweep: int, sweeps: int) -> None:
@@ -799,6 +838,19 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         candidate, candidate_result = _climb(
             start, evaluator, profile, objective, start_store_kj, max_sweeps,
             on_sweep=report)
+        done()
+        score = objective.score(candidate_result, start_store_kj)
+        if score is not None and (best_score is None or score < best_score):
+            coarse, result, best_score = candidate, candidate_result, score
+
+    # Only if the answer is throwing recovery away. The front-loaded start
+    # costs a whole extra climb, and at a circuit where the store never fills
+    # it buys nothing: of seven circuits recorded here it helped two, and the
+    # other five refused nothing to begin with.
+    if result is not None and result.refused_mj > REFUSAL_WORTH_CHASING_MJ:
+        candidate, candidate_result = _climb(
+            _front_loaded(splits, profile), evaluator, profile, objective,
+            start_store_kj, max_sweeps, on_sweep=report)
         done()
         score = objective.score(candidate_result, start_store_kj)
         if score is not None and (best_score is None or score < best_score):
