@@ -62,7 +62,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.0.10"
+VERSION = "1.0.11"
 
 
 def car_data() -> Path:
@@ -1001,6 +1001,8 @@ class Engine:
             else:
                 self.say("   Starting with less charge costs at most %.1fs."
                          % worst)
+            if strat_no == 1:
+                notes.extend(self._approach(spread, result))
             self.detail("               charge sensitivity: "
                         + ", ".join("%.0f%% -> %s" % (f * 100, clock(r.lap_time_s))
                                     for f, r in spread))
@@ -1038,6 +1040,45 @@ class Engine:
         self.lap = lap
         self.say("Three maps ready. Save them into a setup, then restart "
                  "the session.")
+
+    #: A lap is "as good as" the best it can manage within this. Below it the
+    #: difference is not something a driver would feel or a stopwatch would
+    #: separate from an ordinary lap-to-lap wobble.
+    APPROACH_TOLERANCE_S = 0.05
+
+    def _approach(self, spread, result) -> list[str]:
+        """What the run down to the line is worth, in seconds.
+
+        Coming off STRAT 3 early buys speed over the line and spends charge
+        getting it. The simulator takes entry speed and entry charge as two
+        independent inputs, so it cannot weigh the two against each other --
+        a study over flip points was tried and mispredicted twice, once by a
+        factor of eighteen and once in the wrong direction entirely.
+
+        It does price one side cleanly: what the lap loses when it starts
+        with less, at the same speed. Said plainly, that is the bar the extra
+        speed has to clear, and the driver is the one who can see whether it
+        does. Reporting the half that is known beats inventing the half that
+        is not.
+        """
+        usable = sorted((f, r.lap_time_s) for f, r in spread)
+        if len(usable) < 2:
+            return []
+        quickest = min(time for _, time in usable)
+        lowest, slowest = usable[0]
+        if slowest - quickest < self.APPROACH_TOLERANCE_S:
+            note = ("Charge at the line is worth nothing here -- this map is "
+                    "no slower from %.0f%% than from full. Deploy out of the "
+                    "last corner and take the speed."
+                    % (lowest * 100))
+        else:
+            note = ("Charge at the line is worth %.2fs: from %.0f%% this lap "
+                    "is that much slower than from full. Coming off STRAT 3 "
+                    "early buys speed over the line, and it has to buy back "
+                    "more than that."
+                    % (slowest - quickest, lowest * 100))
+        self.note("   " + note)
+        return [note]
 
     def _describe(self, label, strat_no, result, splits, lap, cal, profile,
                   reset_zones, cap: float = 99.0) -> list[str]:
