@@ -89,8 +89,7 @@ tagged but never published.
 
 | | |
 |---|---|
-| **1.0.11** | The qualifying map says what charge at the line is worth in seconds, so the run down to it can be judged rather than guessed. |
-| **1.0.10** | When recovery is being thrown away into a full battery, the search now tries spending earlier to make room for it. Madrid 0.40 s quicker, Monaco 0.10 s; no circuit worse. |
+| **1.1.0** | When recovery is being thrown away into a full battery, the search tries spending earlier to make room for it: Madrid 0.40 s quicker, Monaco 0.10 s, no circuit worse. Wasted recovery is only reported when the allowance would still have allowed it. The qualifying map says what charge at the line is worth in seconds, so the run down to it can be judged rather than guessed. |
 | **1.0.9** | Finds the recorded laps wherever Windows actually keeps Documents, and every folder the program uses can be set by hand. A lap whose distances cannot be right is refused rather than producing a map whose zones all collapse onto one point. Lap times match the game's timing screen, and the app notices when the logger inside Assetto Corsa is older than the build. No change to how the maps are calculated. |
 | **1.0.8** | Found the laps on machines where Documents is redirected into OneDrive, which left the app waiting forever while the logger recorded perfectly. |
 | **1.0.7** | The Assetto Corsa folder can be changed after setup, not only when the game is not found. |
