@@ -18,6 +18,7 @@ and drives the base item instead.
 
 from __future__ import annotations
 
+import copy
 import csv
 import ctypes
 import json
@@ -54,6 +55,7 @@ import profile as prof
 import recharge
 import session as lapsession
 import setupfile
+import sim26
 
 UI_DIR = ROOT / "ui"
 CAR_ID = fa26.CAR_ID
@@ -1002,7 +1004,8 @@ class Engine:
                 self.say("   Starting with less charge costs at most %.1fs."
                          % worst)
             if strat_no == 1:
-                notes.extend(self._approach(spread, result))
+                notes.extend(self._when_to_switch(
+                    splits, car, cal, profile, powertrain, objective))
             self.detail("               charge sensitivity: "
                         + ", ".join("%.0f%% -> %s" % (f * 100, clock(r.lap_time_s))
                                     for f, r in spread))
@@ -1046,38 +1049,72 @@ class Engine:
     #: separate from an ordinary lap-to-lap wobble.
     APPROACH_TOLERANCE_S = 0.05
 
-    def _approach(self, spread, result) -> list[str]:
-        """What the run down to the line is worth, in seconds.
+    #: Charge levels to price the run to the line at. Finer near the top
+    #: than the general sensitivity sweep, because that is where the answer
+    #: lives: a lap almost never starts full.
+    LINE_LEVELS = (0.6, 0.7, 0.8, 0.9, 1.0)
 
-        Coming off STRAT 3 early buys speed over the line and spends charge
-        getting it. The simulator takes entry speed and entry charge as two
-        independent inputs, so it cannot weigh the two against each other --
-        a study over flip points was tried and mispredicted twice, once by a
-        factor of eighteen and once in the wrong direction entirely.
+    def _when_to_switch(self, splits, car, cal, profile, powertrain,
+                        objective) -> list[str]:
+        """When to put STRAT 1 on, on the run down to the line.
 
-        It does price one side cleanly: what the lap loses when it starts
-        with less, at the same speed. Said plainly, that is the bar the extra
-        speed has to clear, and the driver is the one who can see whether it
-        does. Reporting the half that is known beats inventing the half that
-        is not.
+        Deploy out of the last corner and the lap starts fast and light;
+        wait and it starts slow and full. The simulator takes entry speed
+        and entry charge as independent inputs, so it cannot weigh them
+        against each other directly -- a study over flip points was built
+        to work around that and mispredicted twice, once by a factor of
+        eighteen and once in the wrong direction.
+
+        Each half on its own it does resolve. What a slice of charge costs
+        is one simulation; what a few kph at the line buys is another.
+        Their ratio is the break-even, in kph, and the driver can see kph.
         """
-        usable = sorted((f, r.lap_time_s) for f, r in spread)
-        if len(usable) < 2:
+        def lap_time(store_kj, speed_ms=None):
+            used = profile
+            if speed_ms is not None:
+                used = copy.copy(profile)
+                used.cap = list(profile.cap)
+                used.speed = list(profile.speed)
+                used.cap[0] = max(used.cap[0], speed_ms * 1.02)
+                used.speed[0] = max(used.speed[0], speed_ms)
+            return sim26.simulate(
+                splits, car, cal, used, powertrain, start_store_kj=store_kj,
+                harvest_cap_kj=objective.harvest_cap_mj * 1000,
+                settle=not objective.one_shot).lap_time_s
+
+        try:
+            full = lap_time(laplib.STORE_CAPACITY_KJ)
+            # The lowest charge that still gets within a hundredth of a full
+            # battery. Everything above it is free to spend on the approach.
+            free_at = 1.0
+            for level in self.LINE_LEVELS:
+                if lap_time(laplib.STORE_CAPACITY_KJ * level) <= full + 0.01:
+                    free_at = level
+                    break
+            tenth = lap_time(laplib.STORE_CAPACITY_KJ * 0.9) - full
+            faster = full - lap_time(laplib.STORE_CAPACITY_KJ,
+                                     profile.speed[0] + 10 / 3.6)
+        except Exception:
             return []
-        quickest = min(time for _, time in usable)
-        lowest, slowest = usable[0]
-        if slowest - quickest < self.APPROACH_TOLERANCE_S:
-            note = ("Charge at the line is worth nothing here -- this map is "
-                    "no slower from %.0f%% than from full. Deploy out of the "
-                    "last corner and take the speed."
-                    % (lowest * 100))
+
+        if free_at <= 0.95:
+            note = ("Put STRAT 1 on out of the final corner. Down to %.0f%% "
+                    "this map is no slower than from a full battery, so the "
+                    "charge you spend getting speed over the line is free."
+                    % (free_at * 100))
+        elif faster <= 1e-4:
+            note = ("Put STRAT 1 on at the line. Charge is worth %.2fs per "
+                    "10%% here and arriving faster buys nothing back."
+                    % tenth)
         else:
-            note = ("Charge at the line is worth %.2fs: from %.0f%% this lap "
-                    "is that much slower than from full. Coming off STRAT 3 "
-                    "early buys speed over the line, and it has to buy back "
-                    "more than that."
-                    % (slowest - quickest, lowest * 100))
+            need = 10.0 * tenth / faster
+            note = ("Put STRAT 1 on close to the line. Charge is worth %.2fs "
+                    "per 10%% here, so deploying early only pays if it buys "
+                    "more than %.0f kph over the line."
+                    % (tenth, need))
         self.note("   " + note)
+        self.detail("               line: free to %.0f%%, 10%% costs %.3fs, "
+                    "10 kph buys %.3fs" % (free_at * 100, tenth, faster))
         return [note]
 
     def _describe(self, label, strat_no, result, splits, lap, cal, profile,
