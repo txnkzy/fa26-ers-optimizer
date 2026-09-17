@@ -1107,10 +1107,17 @@ class Engine:
                     "10%% here and arriving faster buys nothing back."
                     % tenth)
         else:
+            # A threshold, not a verdict. At Monza -- the one circuit where
+            # this has been driven both ways -- the break-even came out at
+            # 21 kph and the lap gained 22, which is a coin flip, and the
+            # early flip won it. Naming the number and letting the driver
+            # read their own speed at the line beats picking a side on a
+            # margin this thin.
             need = 10.0 * tenth / faster
-            note = ("Put STRAT 1 on close to the line. Charge is worth %.2fs "
-                    "per 10%% here, so deploying early only pays if it buys "
-                    "more than %.0f kph over the line."
+            note = ("Charge is worth %.2fs per 10%% here, so putting STRAT 1 "
+                    "on out of the final corner pays only if it buys more "
+                    "than %.0f kph over the line. Worth trying both ways and "
+                    "reading the speed as you cross."
                     % (tenth, need))
         self.note("   " + note)
         self.detail("               line: free to %.0f%%, 10%% costs %.3fs, "
