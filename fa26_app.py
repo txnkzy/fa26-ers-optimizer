@@ -795,6 +795,15 @@ class Engine:
         # report came back with every zone reading start 0, end 610, which is
         # a real map clamped to a 610 m lap. Nothing checked, so it reached
         # the setup and the only symptom was a map that did nothing.
+        # What the session looked like when this solve read it. A solve takes
+        # minutes and the driver is often still on track for them: an Austin
+        # run modelled a 1:41.650 while 1:40.204s were landing, and said
+        # nothing. Compared again at the end, see `_check_fresh`.
+        self.read_revision = session_revision(key)
+        self.read_count = len(session_files(key))
+        self.read_best = min((lapsession.parse(f)[2] for f in session_files(key)
+                              if lapsession.parse(f)), default=0.0)
+
         usable, rejected = [], []
         for candidate in laps:
             why = laplib.problem(candidate)
@@ -1007,9 +1016,6 @@ class Engine:
             else:
                 self.say("   Starting with less charge costs at most %.1fs."
                          % worst)
-            if strat_no == 1:
-                notes.extend(self._when_to_switch(
-                    splits, car, cal, profile, powertrain, objective))
             self.detail("               charge sensitivity: "
                         + ", ".join("%.0f%% -> %s" % (f * 100, clock(r.lap_time_s))
                                     for f, r in spread))
@@ -1044,9 +1050,54 @@ class Engine:
                     "peak_kph": max(result.speed) * 3.6 if result.speed else 0,
                 })
 
+        # Needs both maps, so it waits until all three are solved: the run
+        # down to the line is driven on the race map and finished on the
+        # qualifying one, and the whole question is where between them to
+        # change.
+        by_strat = {no: sp for _, no, sp, _ in self.results}
+        if 1 in by_strat and 2 in by_strat:
+            switch = self._when_to_switch(
+                by_strat[1], by_strat[2], car, cal, profile,
+                fa26.Powertrain(taper=taper_for(1)), alloc, lap.length_m)
+            if switch:
+                with self.lock:
+                    for entry in self.summary:
+                        if entry["strat"] == 1:
+                            entry["notes"] = list(entry["notes"]) + switch
+
         self.lap = lap
+        self._check_fresh(key)
         self.say("Three maps ready. Save them into a setup, then restart "
                  "the session.")
+
+    def _check_fresh(self, key: str) -> None:
+        """Say so if the session moved on while this was being worked out.
+
+        The laps are read once, at the start, and a solve runs for minutes.
+        Anything driven in the meantime is not in these maps -- and it is
+        usually the best of the session, because the driver is still improving.
+        An Austin run planned around a 1:41.650 while two 1:40.204s were being
+        saved, and reported the 1:41.650 as the lap to beat.
+        """
+        try:
+            now = session_revision(key)
+            files = session_files(key)
+            best = min((lapsession.parse(f)[2] for f in files
+                        if lapsession.parse(f)), default=0.0)
+        except OSError:
+            return
+        if now == getattr(self, "read_revision", None):
+            return
+        landed = len(files) - getattr(self, "read_count", len(files))
+        if best and self.read_best and best < self.read_best - 0.01:
+            self.note("You drove a %s while this was working, %.2fs quicker "
+                      "than anything it used. These maps do not know about it "
+                      "— run it again to plan around your real pace."
+                      % (clock(best), self.read_best - best))
+        elif landed > 0:
+            self.note("%d more %s landed while this was working, and are not "
+                      "in these maps. Run it again to include them."
+                      % (landed, plural(landed, "lap")))
 
     #: A lap is "as good as" the best it can manage within this. Below it the
     #: difference is not something a driver would feel or a stopwatch would
@@ -1058,74 +1109,88 @@ class Engine:
     #: lives: a lap almost never starts full.
     LINE_LEVELS = (0.6, 0.7, 0.8, 0.9, 1.0)
 
-    def _when_to_switch(self, splits, car, cal, profile, powertrain,
-                        objective) -> list[str]:
+    #: How far before the line to consider putting STRAT 1 on, and how finely.
+    #: Six hundred metres is the whole run out of any final corner; beyond it
+    #: the driver is on the previous lap's business.
+    SWITCH_STEP_M = 25.0
+    SWITCH_MAX_M = 600.0
+
+    def _when_to_switch(self, quali, race, car, cal, profile, powertrain,
+                        alloc, length_m) -> list[str]:
         """When to put STRAT 1 on, on the run down to the line.
 
-        Deploy out of the last corner and the lap starts fast and light;
-        wait and it starts slow and full. The simulator takes entry speed
-        and entry charge as independent inputs, so it cannot weigh them
-        against each other directly -- a study over flip points was built
-        to work around that and mispredicted twice, once by a factor of
-        eighteen and once in the wrong direction.
+        Deploy out of the last corner and the lap starts fast and light; wait
+        and it starts slow and full. Those are not two effects to be weighed
+        against each other, they are one decision, and the simulator used to
+        take entry speed and entry charge as independent inputs -- which is
+        why the study built to work around that mispredicted by a factor of
+        eighteen at Albert Park and in the wrong direction at Monza.
 
-        Each half on its own it does resolve. What a slice of charge costs
-        is one simulation; what a few kph at the line buys is another.
-        Their ratio is the break-even, in kph, and the driver can see kph.
+        `sim26.run_to_line` integrates the approach under whichever map is live
+        on it, so the speed and the charge that come out are both consequences
+        of where the switch happened. Every switch point is then priced by the
+        lap it actually produces, and the best one wins. The answer is not the
+        same everywhere: Monza wants it 100 m out and pays 0.56 s for it,
+        Suzuka 400 m and 0.85 s, while Madrid and the Red Bull Ring want it at
+        the line and lose a tenth for every early flip.
         """
-        def lap_time(store_kj, speed_ms=None):
-            used = profile
-            if speed_ms is not None:
-                used = copy.copy(profile)
-                used.cap = list(profile.cap)
-                used.speed = list(profile.speed)
-                used.cap[0] = max(used.cap[0], speed_ms * 1.02)
-                used.speed[0] = max(used.speed[0], speed_ms)
-            return sim26.simulate(
-                splits, car, cal, used, powertrain, start_store_kj=store_kj,
-                harvest_cap_kj=objective.harvest_cap_mj * 1000,
-                settle=not objective.one_shot).lap_time_s
+        cap_kj = alloc.mj("qualify") * 1000.0
+        zones = dict(reset_zones=alloc.reset_zones_for("qualify", length_m),
+                     speed_zones=alloc.speed_zones_for(length_m))
+
+        def lap_from(switch_m):
+            state = sim26.run_to_line(
+                race, quali, switch_m, car, cal, profile, powertrain,
+                start_store_kj=laplib.STORE_CAPACITY_KJ,
+                harvest_cap_kj=cap_kj, **zones)
+            result = sim26.simulate(
+                quali, car, cal, profile, powertrain,
+                start_store_kj=state.store_kj, harvest_cap_kj=cap_kj,
+                settle=False, entry=state, **zones)
+            return state, result.lap_time_s
 
         try:
-            full = lap_time(laplib.STORE_CAPACITY_KJ)
-            # The lowest charge that still gets within a hundredth of a full
-            # battery. Everything above it is free to spend on the approach.
-            free_at = 1.0
-            for level in self.LINE_LEVELS:
-                if lap_time(laplib.STORE_CAPACITY_KJ * level) <= full + 0.01:
-                    free_at = level
-                    break
-            tenth = lap_time(laplib.STORE_CAPACITY_KJ * 0.9) - full
-            faster = full - lap_time(laplib.STORE_CAPACITY_KJ,
-                                     profile.speed[0] + 10 / 3.6)
+            points = []
+            metres = 0.0
+            while metres <= self.SWITCH_MAX_M:
+                state, lap_s = lap_from(metres)
+                points.append((metres, state, lap_s))
+                metres += self.SWITCH_STEP_M
         except Exception:
             return []
+        if not points:
+            return []
 
-        if free_at <= 0.95:
-            note = ("Put STRAT 1 on out of the final corner. Down to %.0f%% "
-                    "this map is no slower than from a full battery, so the "
-                    "charge you spend getting speed over the line is free."
-                    % (free_at * 100))
-        elif faster <= 1e-4:
-            note = ("Put STRAT 1 on at the line. Charge is worth %.2fs per "
-                    "10%% here and arriving faster buys nothing back."
-                    % tenth)
+        at_line = points[0][2]
+        best_m, best_state, best_s = min(points, key=lambda p: p[2])
+        gained = at_line - best_s
+
+        if gained <= self.APPROACH_TOLERANCE_S:
+            note = ("Put STRAT 1 on at the line. Deploying on the way to it "
+                    "costs more charge than the speed is worth here — half a "
+                    "straight early is %.2fs slower."
+                    % (lap_from(self.SWITCH_MAX_M / 2)[1] - at_line))
         else:
-            # A threshold, not a verdict. At Monza -- the one circuit where
-            # this has been driven both ways -- the break-even came out at
-            # 21 kph and the lap gained 22, which is a coin flip, and the
-            # early flip won it. Naming the number and letting the driver
-            # read their own speed at the line beats picking a side on a
-            # margin this thin.
-            need = 10.0 * tenth / faster
-            note = ("Charge is worth %.2fs per 10%% here, so putting STRAT 1 "
-                    "on out of the final corner pays only if it buys more "
-                    "than %.0f kph over the line. Worth trying both ways and "
-                    "reading the speed as you cross."
-                    % (tenth, need))
+            # Metres before a line are hard to judge at 280 kph; seconds are
+            # not, and the driver already has a clock in their head from the
+            # corner. Both are given, and the window rather than a point,
+            # because anything inside it is worth the same.
+            window = [m for m, _s, t_ in points
+                      if t_ <= best_s + self.APPROACH_TOLERANCE_S]
+            seconds = best_m / max(best_state.speed_ms, 1.0)
+            note = ("Put STRAT 1 on about %.0f m before the line — roughly "
+                    "%.1fs out, on the run to it. Worth %.2fs, and anything "
+                    "from %.0f to %.0f m does the same. You will cross at "
+                    "%.0f kph on %.0f%% instead of %.0f kph on %.0f%%."
+                    % (best_m, seconds, gained, min(window), max(window),
+                       best_state.speed_ms * 3.6,
+                       100 * best_state.store_kj / laplib.STORE_CAPACITY_KJ,
+                       points[0][1].speed_ms * 3.6,
+                       100 * points[0][1].store_kj / laplib.STORE_CAPACITY_KJ))
+
         self.note("   " + note)
-        self.detail("               line: free to %.0f%%, 10%% costs %.3fs, "
-                    "10 kph buys %.3fs" % (free_at * 100, tenth, faster))
+        self.detail("               flip: " + ", ".join(
+            "%.0fm %.3fs" % (m, t_) for m, _s, t_ in points[::4]))
         return [note]
 
     def _describe(self, label, strat_no, result, splits, lap, cal, profile,

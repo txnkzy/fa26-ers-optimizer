@@ -28,7 +28,12 @@ NAME_RE = re.compile(r"^(?P<prefix>.+)__lap(?P<num>\d+)_(?P<time>[\dm.]+)s(?P<ta
 #: Keep laps no slower than this multiple of the session best.
 TOLERANCE = 1.03
 #: Below this many kept laps, use the single best lap instead of averaging.
-MIN_LAPS = 3
+#: Two is enough. Three was throwing away a lap rather than pooling it: of 46
+#: recorded sessions, 13 -- Monza, Monaco, Daytona, Suzuka, Madrid, Bahrain,
+#: Spa and the Hungaroring among them -- had two consistent laps and were
+#: modelled on one of them. Measured out of sample, keeping both is better:
+#: 0.95% mean against 1.01%, and 2.62% worst against 2.86%.
+MIN_LAPS = 2
 
 #: A tighter consistency window was tried here -- keep only laps within 1.5%
 #: of the best, on the reasoning that a session driven while the circuit is
@@ -45,6 +50,13 @@ MIN_LAPS = 3
 #: 0.236 s slower, same setup, same conditions, back to back. Any future
 #: change here needs an out-of-sample measure -- fit one session, score
 #: against a different one.
+#:
+#: That measure now exists, in `validate_model.py`, and the tolerance has been
+#: put through it: fitting only the laps this rule selects and replaying a lap
+#: it did not select, 1%, 2% and 3% all score within 0.04 points of each other
+#: (0.97%, 0.97%, 1.01%) while 5% and looser clearly lose (1.21%). So the
+#: tighter window is not measurably better here, and it is 0.236 s worse on
+#: track, which is the stronger evidence. The tolerance stays at 3%.
 
 
 def parse(path) -> tuple[str, int, float] | None:

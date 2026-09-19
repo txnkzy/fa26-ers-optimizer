@@ -233,3 +233,74 @@ scales with, and it is why Suzuka and Monza sit at the top of the table and
 Monaco and Madrid at the bottom.
 
 It is also why a single global accuracy number should never have been quoted.
+
+---
+
+## Entry speed and entry charge were never two things
+
+The simulator took the speed at the line and the charge at the line as separate
+inputs. They are not separate: deploying out of the final corner buys the one
+and spends the other, in a fixed exchange the map itself sets. Asked which is
+worth more, the old code could only price each half against a frozen version of
+the other, and the answer it built from that ratio was wrong twice — by a
+factor of eighteen at Albert Park (0.56 s predicted, 0.030 s measured) and in
+the wrong direction at Monza.
+
+`simulate` can now run part of a lap from a known state and return the state it
+leaves in. Three things travel: speed, charge, and the demand latch — without
+the latch the second half of a run asks for power the first half has already
+forfeited under the no-increase rule, which would quietly make every early
+switch look better than it is.
+
+`sim26.run_to_line` integrates the last 600 m under whichever map is live
+there, so both halves of the state that crosses the line follow from where the
+switch happened. Every switch point is then priced by the lap it produces:
+
+| circuit | best switch | worth |
+|---|---|---|
+| Suzuka | 400 m out | 0.85 s |
+| Monza | 50–100 m out | 0.37–0.56 s |
+| Bahrain | 600 m out | 0.15 s |
+| Monaco | 300 m out | 0.09 s |
+| Albert Park | at the line | early costs 0.48 s |
+| Red Bull Ring | at the line | early costs 0.29 s |
+| Madrid | at the line | early costs 0.18 s |
+
+**It is circuit by circuit**, which answers the question that prompted this.
+Monza is the only circuit where both have been driven, and the early flip won
+by about half a second there; the coupled model agrees, where the old one had
+called it a coin flip and declined to pick a side.
+
+---
+
+## Pooling, settled with a measure rather than an argument
+
+`core/session.py` carried a comment saying any future change to the pooling
+tolerance needed an out-of-sample measure — fit one session, score against a
+different one — after a tighter window scored well in-sample and cost 0.236 s
+on track. That measure now exists. Fitting only the laps the rule selects and
+replaying a lap it did not:
+
+| tolerance | mean | laps fitted |
+|---|---|---|
+| 1% | 0.97% | 2.1 |
+| 2% | 0.97% | 2.2 |
+| **3% (kept)** | **1.01%** | 2.4 |
+| 5% | 1.21% | 3.9 |
+| none | 1.18% | 4.8 |
+
+1–3% are within 0.04 points of each other and 5% and looser clearly lose. The
+tighter window is not measurably better here, and it is 0.236 s worse on track,
+which is the stronger evidence. **The tolerance stays at 3%.**
+
+`MIN_LAPS` is a different question and moves the other way — it was discarding
+data rather than keeping less of it:
+
+| minimum | mean | worst |
+|---|---|---|
+| 2 | **0.95%** | **2.62%** |
+| 3 (was) | 1.01% | 2.86% |
+
+Of 46 recorded sessions, **13** had two consistent laps and were being modelled
+on one of them: Monza, Monaco, Daytona, Suzuka, Madrid, Bahrain, Spa and the
+Hungaroring. `MIN_LAPS` is now 2.

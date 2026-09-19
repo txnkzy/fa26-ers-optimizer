@@ -99,6 +99,30 @@ def _geometry(profile, longitudinal, ds, reset_zones, speed_zones):
 
 
 @dataclass
+class Carry:
+    """The state the car passes a point in, so a run can be continued from it.
+
+    Entry speed and entry charge are not independent: deploying out of the last
+    corner buys speed at the line and spends the charge that would have gone
+    down the straight. Modelling them as two separate inputs is what made the
+    old flip study mispredict by a factor of eighteen at Albert Park and in the
+    wrong direction at Monza. Carrying this across the line instead makes them
+    one decision, because they are one.
+
+    The three power fields are the demand latch. The regulation caps the level
+    the map may *ask* for, and that cap only lifts when the driver comes off
+    the throttle, so a run continued without them would let the second half ask
+    for power the first half had already forfeited.
+    """
+
+    speed_ms: float
+    store_kj: float
+    demand_kw: float = 0.0
+    prev_level_kw: float = 0.0
+    throttle_time_s: float = 0.0
+
+
+@dataclass
 class Result:
     lap_time_s: float
     deployed_mj: float
@@ -113,13 +137,46 @@ class Result:
     refused_mj: float = 0.0        # harvest the full store had no room for
     speed: list[float] = field(default_factory=list)
     dist: list[float] = field(default_factory=list)
+    #: The state the car finishes in, for a run that continues into another.
+    exit: "Carry | None" = None
+
+
+def run_to_line(before, after, switch_m: float, car, longitudinal, profile,
+                powertrain, start_store_kj: float, harvest_cap_kj: float,
+                approach_m: float = PRIME_M, **kw) -> "Carry":
+    """The state the car crosses the line in, having switched maps on the way.
+
+    `switch_m` metres before the line the driver moves from `before` to
+    `after`, and the run is integrated through the change rather than assumed.
+    What comes back is one state, not two independent ones: deploying early
+    raises the speed at the line and lowers the charge, and the caller sees
+    both together because they are the same decision.
+
+    The approach belongs to the previous lap, whose own allowance is not
+    knowable from here, so harvesting over it is priced at the cap given.
+    """
+    length = profile.length_m
+    approach_m = min(approach_m, length)
+    begin = length - approach_m
+    change = length - min(switch_m, approach_m)
+    state = Carry(speed_ms=profile.measured_speed_at(begin),
+                  store_kj=start_store_kj)
+    for splits, window in ((before, (begin, change)), (after, (change, length))):
+        if window[1] - window[0] < 1.0:
+            continue
+        state = simulate(splits, car, longitudinal, profile, powertrain,
+                         start_store_kj=state.store_kj,
+                         harvest_cap_kj=harvest_cap_kj, entry=state,
+                         window=window, **kw).exit
+    return state
 
 
 def simulate(splits, car, longitudinal, profile, powertrain,
              start_store_kj: float, harvest_cap_kj: float,
              store_capacity_kj: float = 4000.0, ds: float = 2.5,
              settle: bool = True, reset_zones: "tuple" = (),
-             speed_zones: "tuple" = ()) -> Result:
+             speed_zones: "tuple" = (), entry: "Carry | None" = None,
+             window: "tuple[float, float] | None" = None) -> Result:
     """Integrate one lap.
 
     `settle` runs a throwaway lap first and measures the second, which is right
@@ -130,6 +187,13 @@ def simulate(splits, car, longitudinal, profile, powertrain,
     6.76 harvested, ending on the same charge it started, with 1.69 MJ of
     harvest refused by a full battery. A push lap should arrive full and leave
     empty, so it is simulated from the given charge in a single pass.
+   
+    `entry` and `window` run part of a lap from a known state rather than the
+    whole of it from the driver's. Together they are how the run down to the
+    line is priced: the last few hundred metres are integrated under whichever
+    map is live there, and the speed and charge that come out are what the
+    measured lap starts from. `start_store_kj` is ignored when `entry` is
+    given, and settling is meaningless for a partial run, so it is not done.
     """
     length = profile.length_m
     (n, step, ceiling, gas_at, deploy_frac, harvest_frac, full_throttle_at,
@@ -181,7 +245,11 @@ def simulate(splits, car, longitudinal, profile, powertrain,
     # 350 in. Walking the tail of the lap first establishes the state the car
     # really arrives in. Nothing here touches the store or any total; it only
     # decides what the car is already committed to.
-    for i in range(max(0, n - int(PRIME_M / step)), n):
+    lo, hi = 0, n
+    if window is not None:
+        lo = int(window[0] / step)
+        hi = max(lo + 1, int(window[1] / step))
+    for i in (() if entry is not None else range(max(0, n - int(PRIME_M / step)), n)):
         d = i * step
         if not on_throttle_at[i]:
             throttle_time = 0.0
@@ -198,6 +266,13 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             demand_kw, profile.measured_speed_at(d),
             full_throttle=(throttle_time <= powertrain.floor_hold_s
                            and clip <= 0.0))
+    if entry is not None:
+        v = min(entry.speed_ms, ceiling[lo % n])
+        demand_kw = entry.demand_kw
+        prev_level_kw = entry.prev_level_kw
+        throttle_time = entry.throttle_time_s
+        start_store_kj = entry.store_kj
+        settle = False
     store = start_store_kj
     store_start = store
     deployed = harvested = 0.0
@@ -224,12 +299,12 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             store_start = store
             refused = 0.0
             capped = False
-        for i in range(n):
-            d = i * step
-            cmd_deploy, cmd_clip = commands[i]
-            full_throttle = full_throttle_at[i]
-            gas = gas_at[i]
-            on_throttle = on_throttle_at[i]
+        for i in range(lo, hi):
+            d = (i % n) * step
+            cmd_deploy, cmd_clip = commands[i % n]
+            full_throttle = full_throttle_at[i % n]
+            gas = gas_at[i % n]
+            on_throttle = on_throttle_at[i % n]
 
             # Estimate the step duration first: the store cannot supply more
             # than it holds, and that limit is an energy over a time, so it
@@ -288,7 +363,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # the floor is held, which is also why the manual advises
                 # starting a split before the point you get back on the power.
                 just_applied = throttle_time <= floor_hold_s
-                in_reset = in_reset_at[i]
+                in_reset = in_reset_at[i % n]
                 if just_applied or in_reset or gas < reset_gas:
                     demand_kw = cmd_deploy
                 else:
@@ -314,7 +389,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # Article C5.12.7: a track may declare sectors with a
                 # higher threshold than the usual 210 kph, inside which power
                 # may still be cut instantly at speed.
-                if level < prev_level_kw and v * 3.6 >= cut_kph_at[i]:
+                if level < prev_level_kw and v * 3.6 >= cut_kph_at[i % n]:
                     # Nor can the level cut instantly. The manual works the
                     # example on p.9: at 300 km/h, over 300 kW down to zero
                     # takes about 250 m -- 3.0 s, the whole reduction at
@@ -328,7 +403,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # fa26.DEPLOY_THROTTLE_CURVE. `gas` is the slot maximum, which
                 # answers "was the driver ever flat here", not "how much power
                 # did the car deliver across these 2.5 m".
-                target = level * deploy_frac[i]
+                target = level * deploy_frac[i % n]
                 deploy_kw = min(target, store / max(dt_guess, 1e-6))
             prev_deploy_kw = deploy_kw
 
@@ -351,9 +426,9 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             drive -= clip_kw * 1000.0 / max(v, 1.0) / motor_eff
             # One friction budget: what the tyre is using sideways is not
             # available for driving.
-            drive = min(drive, traction_force * grip_at[i])
+            drive = min(drive, traction_force * grip_at[i % n])
 
-            accel = (drive - drag_k_at[i] * v * v) / mass
+            accel = (drive - drag_k_at[i % n] * v * v) / mass
             v_free = max(v * v + 2.0 * accel * step, 1.0) ** 0.5
             v_next = max(1.0, min(v_free, ceiling[(i + 1) % n]))
             dt = step / max((v + v_next) * 0.5, 1.0)
@@ -368,7 +443,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # flat here" and the wrong one for "how much did the car regenerate
                 # across these five metres": over a Monza lap the maximum runs 1.35x
                 # the mean in partial-throttle slots, and using it lost 0.5 MJ a lap.
-                harvest_kw = harvest_ceiling(v) * harvest_frac[i]
+                harvest_kw = harvest_ceiling(v) * harvest_frac[i % n]
 
             gained = harvest_kw * dt
             if harvested + gained > harvest_cap_kj:
@@ -391,7 +466,9 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 speeds.append(v)
                 dists.append(d)
 
-    return Result(lap_time_s=time_s, deployed_mj=deployed / 1000.0,
+    leaving = Carry(speed_ms=v, store_kj=store, demand_kw=demand_kw,
+                    prev_level_kw=prev_level_kw, throttle_time_s=throttle_time)
+    return Result(exit=leaving, lap_time_s=time_s, deployed_mj=deployed / 1000.0,
                   harvested_mj=harvested / 1000.0, store_end_kj=store,
                   store_min_kj=store_min, store_start_kj=store_start,
                   harvest_capped=capped,

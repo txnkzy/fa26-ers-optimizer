@@ -4,8 +4,33 @@ Works out where to spend battery around a circuit for the **VRC Formula Alpha
 2026** in Assetto Corsa, from laps you have actually driven, and writes the
 result into your setup. No deployment zones to work out by hand.
 
-The simulation reproduces real laps to **0.30% mean, 0.95% worst** across nine
-laps whose map provenance is proven, at Barcelona, Madrid and Suzuka.
+## How accurate it is
+
+Replaying every recorded lap whose deployment map can be proven — 36 of them,
+at 8 circuits — against a car fitted from the *other* laps of the same session:
+
+| | mean | worst |
+|---|---|---|
+| **all 36 laps** | **1.13%** | 2.70% |
+| Madrid, Monaco, Bahrain, Austin | 0.22 – 0.83% | 1.62% |
+| Albert Park, Red Bull Ring, Monza, Suzuka | 1.31 – 1.71% | 2.70% |
+
+The error scales with how fast the circuit is — it correlates with top speed at
+r = +0.85 — so a single number across all of them would flatter the fast ones
+and slander the slow ones. Run `python validate_model.py` for the current table
+on your own laps.
+
+Almost all of what is left is the model declining to invent speed. Given a
+lap's own line it reproduces that lap to **0.69%, unbiased to +0.16%**; the
+extra shows up only when it is asked to predict a lap *faster* than the session
+it was fitted on. Laps slower than their session siblings come back unbiased at
+−0.13%, laps faster at +1.16%. That is the behaviour you want from something
+recommending deployment maps: it will not promise speed you have not shown it.
+
+Earlier releases claimed 0.30% mean. That figure was measured against the wrong
+maps — it assumed every lap was driven on STRAT 1 and picked the setup snapshot
+by clock — and it does not survive checking which map the car was actually
+running. `docs/MODEL_WORK_LOG.md` has the whole account.
 
 ---
 
@@ -54,6 +79,7 @@ Needs Python 3.10 or newer and nothing else — the server is `http.server`, the
 page has no framework and no build step.
 
     python check_app.py        # 58 checks: endpoints, a real solve, a real write
+    python validate_model.py   # per-circuit accuracy, against laps you drove
     python build_exe.py        # the single-file build
     python make_release.py     # a source zip, audited for anything private
 
@@ -68,6 +94,7 @@ page has no framework and no build step.
 | `core/profile.py` | pools a session into one speed and throttle profile |
 | `core/recharge.py` | per-circuit recharge allowances, from FIA notices |
 | `cars/fa26.py` | the car: power curves, limits, map encoding |
+| `core/provenance.py` | which map a recorded lap was actually driven on |
 | `logger/` | the in-game app that records laps |
 
 `docs/FA26_FINDINGS.md` is the engineering record — what was measured, what was
