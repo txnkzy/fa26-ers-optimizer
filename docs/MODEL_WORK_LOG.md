@@ -153,3 +153,83 @@ Taking the slot maximum instead:
 Every circuit in the corpus improved. None was made worse. Raw speed against
 smoothed made no difference (1.15% against 1.14%), which rules out the
 smoothing window and leaves the operator as the whole of it.
+
+---
+
+## A lap is a loop, and the loop was not closed
+
+With the ceiling fixed, the two worst replays in the corpus were both Bahrain
+laps, in-sample, at +5.78% and +4.83% — on a map the model otherwise fits to
+0.5%, and while deploying *more* energy than the car did. A simulation cannot
+be slower with more energy unless something else is wrong.
+
+It was starting them from a standstill. `Profile` fills an empty slot from the
+slot before it, guarded by `elif i:` so index 0 is skipped — leaving
+`self.speed[0]` holding the zero it was initialised with whenever the logger's
+first sample lands past the line. Those two laps begin 2.7 m past it. The
+simulation read a start speed of zero, set off at walking pace where the car
+had crossed at 280 kph, and spent the lap recovering.
+
+Slot 0's predecessor is the last slot. Two of 38 verified laps were affected,
+and they were exactly the two worst.
+
+| | in-sample | | holdout | |
+|---|---|---|---|---|
+| | mean | bias | mean | bias |
+| at the start | 1.47% | +1.22% | — | — |
+| ceiling fixed | 1.14% | +1.01% | 1.14% | +0.66% |
+| loop closed | **0.69%** | **+0.16%** | **1.13%** | **+0.43%** |
+
+---
+
+## What the remaining error is, and why it should stay
+
+In-sample bias is now +0.16%. Given a lap's own line and calibration, the model
+reproduces that lap. The model form is sound.
+
+The holdout residual of +0.43% is **not a defect**. Replaying a lap against a
+profile built from the *other* laps of its session asks the model to reproduce
+a lap it was not shown, and the laps in this corpus are 1.01% faster than their
+siblings on average — they are the ones with proven map provenance, which
+skews towards the laps someone was pushing on.
+
+Splitting on that:
+
+| | bias | n |
+|---|---|---|
+| laps **slower** than their session siblings | −0.13% | 14 |
+| laps **faster** than their session siblings | +1.16% | 22 |
+
+with r = −0.64 and a slope of 0.41. The 1.01% head start times 0.41 is 0.41% —
+essentially the whole residual.
+
+The speed ceiling is the driver's own line. A lap faster than the session it
+was fitted on is a lap the model declines to invent, and that is the behaviour
+wanted from a tool that recommends deployment maps: a model willing to promise
+speed the driver has never shown would overstate every gain it reports.
+
+Confirmed by trying to tune it away. Taking a higher percentile of the speed
+ceiling across the session's laps does remove the bias, and makes the model
+worse doing it:
+
+| cross-lap ceiling | mean | bias |
+|---|---|---|
+| median (kept) | 1.13% | +0.43% |
+| p75 | 1.09% | −0.58% |
+| p90 | 1.11% | −0.91% |
+| maximum | 1.33% | −1.13% |
+
+The mean barely moves while the model turns optimistic. Median stays.
+
+---
+
+## Which circuits, and what the claim should be
+
+Per-circuit bias correlates with top speed at r = +0.85 and inversely with the
+fraction of the lap spent braking at r = −0.81: the faster the circuit, the
+more of it is run free of the ceiling under the model's own force balance, and
+the more room there is to differ. That is the structural variable the error
+scales with, and it is why Suzuka and Monza sit at the top of the table and
+Monaco and Madrid at the bottom.
+
+It is also why a single global accuracy number should never have been quoted.

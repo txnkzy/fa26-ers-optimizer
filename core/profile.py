@@ -130,11 +130,22 @@ class Profile:
                 self.speed[i] /= counts[i]
                 self.gas_mean[i] /= counts[i]
                 self.brake_mean[i] /= counts[i]
-            elif i:
-                self.speed[i] = self.speed[i - 1]
-                self.lat[i] = self.lat[i - 1]
-                self.gas_mean[i] = self.gas_mean[i - 1]
-                self.brake_mean[i] = self.brake_mean[i - 1]
+        # An empty slot borrows from the one before it, and the slot before the
+        # first is the last: a lap is a loop, and the logger's first sample is
+        # not always at zero. Two Bahrain laps begin 2.7 m past the line, which
+        # left slot 0 holding the zero it was initialised with -- so the
+        # simulation started them from a standstill and drove the whole lap
+        # recovering from it, 5.8% and 4.8% slow, the two worst replays in the
+        # corpus. Walking twice covers a run of empty slots at either end.
+        for _ in range(2):
+            for i in range(n):
+                if counts[i]:
+                    continue
+                j = i - 1                       # wraps to the last slot at i = 0
+                self.speed[i] = self.speed[j]
+                self.lat[i] = self.lat[j]
+                self.gas_mean[i] = self.gas_mean[j]
+                self.brake_mean[i] = self.brake_mean[j]
         if any(lap.lat_g):
             ordered = sorted(lap.lat_g)
             self.lat_max = max(ordered[int(len(ordered) * 0.99)], 1e-6)
