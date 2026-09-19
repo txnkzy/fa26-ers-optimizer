@@ -136,3 +136,39 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
 def for_lap(lap, path, telemetry_dir, item_map, circuit: str) -> Attribution:
     """Attribution for one lap file, from the snapshots beside it."""
     return attribute(lap, lapsession.snapshots(telemetry_dir, circuit), item_map)
+
+
+def describe(laps, paths, telemetry_dir, item_map, circuit: str) -> list[str]:
+    """What is known about the maps a set of laps was driven on, in words.
+
+    The old check for this compared timestamps: it asked whether the setup had
+    been written after the laps were saved, and warned if so. That answers a
+    question about files, not about the car -- Assetto Corsa reads a setup when
+    the session loads, so a write can land before a lap and still not have
+    reached it, and a lap can predate a write and have been driven on exactly
+    the map it produced.
+
+    What the deployment actually did settles it, so that is what is asked here.
+    """
+    snaps = lapsession.snapshots(telemetry_dir, circuit)
+    if not snaps:
+        return []
+    found = [attribute(lap, snaps, item_map) for lap in laps]
+    known = [f for f in found if f]
+    strats = {f.strat for f in found if f.strat}
+
+    out = []
+    if not known:
+        out.append("None of these laps match any deployment map this tool has "
+                   "recorded, so a lap time from them is not a comparison "
+                   "with anything it can plan. Save a map, restart the "
+                   "session, then drive.")
+    elif len(known) < len(found):
+        out.append("%d of these %d laps match a map this tool recorded; the "
+                   "rest were driven on something else."
+                   % (len(known), len(found)))
+    if len(strats) > 1:
+        out.append("These laps were not all driven on the same strategy — %s. "
+                   "The lap time to beat is whichever of them you mean."
+                   % ", ".join("STRAT %d" % s for s in sorted(strats)))
+    return out

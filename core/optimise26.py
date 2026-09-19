@@ -741,55 +741,45 @@ class Evaluator:
         return result
 
 
-#: A one-shot lap ending above this much charge has left the store unspent,
-#: and is worth a second look from a map that spends all of it. Generous on
-#: purpose: a lap that arrives at the line with a quarter of the battery
-#: still in it has not been robbed of much.
-SPENT_ENOUGH = 0.25
+#: The blanket family, as (how much of the lap from the line, what power).
+#: This replaces two hand-named starting maps. `_all_out` was (1.00, 350) and
+#: `_front_loaded` was (0.45, 350); both were added one at a time, each after a
+#: circuit was found where the climb could not reach the shape, and each with a
+#: guard deciding when it was worth the extra climb. Naming shapes as they are
+#: discovered does not converge -- there is no reason to think 1.00 and 0.45
+#: are the only two that matter, and nothing said which others to try.
+#:
+#: A grid does converge, because it is cheap to widen. Every member is screened
+#: with a single simulation and only the best few are climbed, so going from
+#: two shapes to twelve costs less than the two guarded climbs it replaces.
+BLANKET_COVERAGE = (0.25, 0.45, 0.70, 1.00)
+BLANKET_LEVELS = (fa26.FLOOR_KW, 250.0, fa26.POWER_MAX)
 
-#: Below this there is nothing to win by spending earlier, and the extra
-#: climb is pure cost. Set to match the figure the app reports as wasted:
-#: anything worth telling the user about is worth one more climb. At 0.3 a
-#: Madrid map refusing 0.30 MJ fell just outside and kept a map 0.403 s
-#: slower than the one this finds.
-REFUSAL_WORTH_CHASING_MJ = 0.1
-
-#: How much of the lap the front-loaded start spends flat out. Enough to
-#: empty a full store before the first heavy braking of the second half, so
-#: the harvesting that follows has somewhere to go.
-FRONT_LOAD_FRACTION = 0.45
-
-
-def _all_out(splits) -> "list[fa26.Split]":
-    """The same zones, every one of them deploying flat out.
-
-    The shape a qualifying lap wants: arrive full, spend the store and
-    everything the lap recovers, cross the line empty. Wrong for a lap that
-    has to repeat, which is why this is only ever a starting point for a
-    one-shot search, and only ever kept if it finishes better.
-    """
-    return [fa26.Split(s.start_m, s.end_m, s.end_m, s.end_m,
-                       fa26.POWER_MAX, 0) for s in splits]
+#: How many screened starting points to actually climb, over and above the
+#: throttle-trace seed and any authored maps found for the track. Three is
+#: where the gain flattens: the screen ranks the family well enough that the
+#: fourth has never been the one that wins.
+SCREEN_KEEP = 3
 
 
-def _front_loaded(splits, profile) -> "list[fa26.Split]":
-    """The same zones, spending hard early so there is room to recover.
+def _blanket(splits, profile, coverage: float, power: float) -> "list[fa26.Split]":
+    """The same zones, deploying at `power` over the first `coverage` of the lap.
 
-    A store that is already full cannot accept anything, and at a circuit
-    like Monaco -- short lap, heavy braking, generous allowance -- it is full
-    long before the lap is over. Every kilojoule of braking after that is
-    thrown away. Spending it early is what buys it back, and the cost of
-    doing so is paid where the car is slowest, which is where deployment is
-    worth most anyway.
+    The two shapes a climb cannot reach on its own, generalised. Raising one
+    zone while the store is full and recovery is being refused buys almost
+    nothing, so each single step looks like noise and the climb stays put --
+    spending the store only pays when it is done across a stretch at once.
+    Where that stretch should end, and how hard to spend over it, is what the
+    coverage and the level say.
     """
     if not splits:
         return []
-    cutoff = profile.length_m * FRONT_LOAD_FRACTION
+    cutoff = profile.length_m * coverage
     out = []
     for split in splits:
         if split.start_m <= cutoff:
             out.append(fa26.Split(split.start_m, split.end_m, split.end_m,
-                                  split.end_m, fa26.POWER_MAX, 0))
+                                  split.end_m, power, 0))
         else:
             out.append(fa26.Split(split.start_m, split.deploy_end_m,
                                   split.clip_start_m, split.end_m,
@@ -797,9 +787,84 @@ def _front_loaded(splits, profile) -> "list[fa26.Split]":
     return out
 
 
+def _clip_blanket(splits, profile, coverage: float) -> "list[fa26.Split]":
+    """Deploy hard early, then super-clip through everything after.
+
+    Super-clipping is harvesting at full throttle: giving up speed on a
+    straight to refill the store for somewhere it is worth more. The climb can
+    reach it one zone at a time in principle -- `_level_clip` is among the
+    single-split moves -- but not in practice on an energy-neutral map, where
+    one zone of harvest with nothing to spend it on is pure loss and is
+    rejected before the deployment that would pay for it is ever tried. The
+    paired move exists for exactly that and only pairs one zone with one
+    other, so a map wanting several zones of clip to fund one long deployment
+    is out of its reach.
+    """
+    if not splits:
+        return []
+    cutoff = profile.length_m * coverage
+    out = []
+    for split in splits:
+        if split.start_m <= cutoff:
+            out.append(fa26.Split(split.start_m, split.end_m, split.end_m,
+                                  split.end_m, fa26.POWER_MAX, 0))
+        else:
+            out.append(fa26.Split(split.start_m, split.start_m,
+                                  split.start_m, split.end_m, 0, fa26.POWER_MAX))
+    return out
+
+
+def _family(splits, profile) -> "list[list[fa26.Split]]":
+    """Every systematic starting map, before screening."""
+    out = []
+    for coverage in BLANKET_COVERAGE:
+        for power in BLANKET_LEVELS:
+            out.append(_blanket(splits, profile, coverage, power))
+    for coverage in BLANKET_COVERAGE[:-1]:
+        out.append(_clip_blanket(splits, profile, coverage))
+    return out
+
+
+#: Step size for the coarse climbs, in metres. The final refinement runs at
+#: `ds`, which is what the reported lap time is measured at; the climbs before
+#: it are only ranking candidate maps against each other, and they do not need
+#: to do that to the nearest 2.5 m. Doubling the step halves every simulation,
+#: and the search is nothing but simulations.
+COARSE_DS = 5.0
+
+
+def screen(splits, car, longitudinal, profile, powertrain, objective: Objective,
+           start_store_kj: float, ds: float = COARSE_DS, reset_zones=(),
+           speed_zones=()):
+    """The best of the starting maps, with no climbing at all.
+
+    The screening step of `optimise`, exposed on its own. It is one simulation
+    per candidate and no search, which makes it cheap enough to run between
+    laps while somebody is still driving -- and because the real search climbs
+    from these same maps and keeps the best finish, what this returns is a
+    floor on what a full run would find rather than a different answer.
+    """
+    evaluator = Evaluator(
+        car, longitudinal, profile, powertrain, ds, start_store_kj,
+        objective.harvest_cap_mj * 1000, not objective.one_shot,
+        reset_zones, speed_zones,
+        tuple(f * STORE_CAPACITY_KJ for f in objective.charge_fractions))
+    candidates = [splits] + _family(splits, profile)
+    prepared = [make_executable(
+        [ensure_live_exit(sanitise(s, profile), profile) for s in candidate],
+        profile, evaluator.reset_zones) for candidate in candidates]
+    best = best_score = None
+    for candidate_result in evaluator.many(prepared):
+        score = objective.score(candidate_result, start_store_kj)
+        if score is not None and (best_score is None or score < best_score):
+            best, best_score = candidate_result, score
+    return best
+
+
 def optimise(splits, car, longitudinal, profile, powertrain, objective: Objective,
              start_store_kj: float, max_sweeps: int = 8, ds: float = 2.5,
-             extra_seeds=(), reset_zones=(), speed_zones=(), on_progress=None):
+             extra_seeds=(), reset_zones=(), speed_zones=(), on_progress=None,
+             coarse_ds: float = COARSE_DS):
     """Solve coarse, subdivide the answer, then refine. Returns (splits, result, evals).
 
     A hill climb only ever reaches what its starting point can deform into.
@@ -832,14 +897,37 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
     cap_kj = objective.harvest_cap_mj * 1000
     settle = not objective.one_shot
     charges = tuple(f * STORE_CAPACITY_KJ for f in objective.charge_fractions)
-    evaluator = Evaluator(car, longitudinal, profile, powertrain, ds,
-                          start_store_kj, cap_kj, settle, reset_zones,
-                          speed_zones, charges)
-    starts = [splits] + [list(extra) for extra in extra_seeds]
+    fine = Evaluator(car, longitudinal, profile, powertrain, ds,
+                     start_store_kj, cap_kj, settle, reset_zones,
+                     speed_zones, charges)
+    evaluator = (fine if coarse_ds <= ds else
+                 Evaluator(car, longitudinal, profile, powertrain, coarse_ds,
+                           start_store_kj, cap_kj, settle, reset_zones,
+                           speed_zones, charges))
+    authored = [list(extra) for extra in extra_seeds]
+
+    # Screen the systematic family with one simulation each and climb only the
+    # best of it. A climb is tens to hundreds of simulations, so twelve screens
+    # cost less than a tenth of one climb -- which is what makes it affordable
+    # to enumerate shapes rather than name them as they are found.
+    screened = []
+    family = _family(splits, profile)
+    if family:
+        prepared = [make_executable(
+            [ensure_live_exit(sanitise(s, profile), profile) for s in candidate],
+            profile, evaluator.reset_zones) for candidate in family]
+        scored = []
+        for candidate, candidate_result in zip(prepared, evaluator.many(prepared)):
+            score = objective.score(candidate_result, start_store_kj)
+            if score is not None:
+                scored.append((score, candidate))
+        scored.sort(key=lambda pair: pair[0])
+        screened = [candidate for _score, candidate in scored[:SCREEN_KEEP]]
+
+    starts = [splits] + authored + screened
     # One climb per starting point, plus the refining climb over the
     # subdivided answer.
-    # Plus the refining climb, and the front-loaded one when it is needed.
-    climbs = len(starts) + 3
+    climbs = len(starts) + 1
     finished = [0]
 
     def report(sweep: int, sweeps: int) -> None:
@@ -861,47 +949,25 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         if score is not None and (best_score is None or score < best_score):
             coarse, result, best_score = candidate, candidate_result, score
 
-    # A one-shot lap that finishes with charge left has not done its job,
-    # whatever its lap time says. Austin came back full at both ends,
-    # 2.47 s off a map that simply spends everything.
-    if objective.one_shot and (result is None or best_score is None
-                               or result.store_end_kj
-                               > STORE_CAPACITY_KJ * SPENT_ENOUGH):
-        candidate, candidate_result = _climb(
-            _all_out(splits), evaluator, profile, objective, start_store_kj,
-            max_sweeps, on_sweep=report)
-        done()
-        score = objective.score(candidate_result, start_store_kj)
-        if score is not None and (best_score is None or score < best_score):
-            coarse, result, best_score = candidate, candidate_result, score
-
-    # Only if the answer is throwing recovery away. The front-loaded start
-    # costs a whole extra climb, and at a circuit where the store never fills
-    # it buys nothing: of seven circuits recorded here it helped two, and the
-    # other five refused nothing to begin with.
-    if result is not None and result.refused_mj > REFUSAL_WORTH_CHASING_MJ:
-        candidate, candidate_result = _climb(
-            _front_loaded(splits, profile), evaluator, profile, objective,
-            start_store_kj, max_sweeps, on_sweep=report)
-        done()
-        score = objective.score(candidate_result, start_store_kj)
-        if score is not None and (best_score is None or score < best_score):
-            coarse, result, best_score = candidate, candidate_result, score
     if coarse is None:
         coarse, result = _climb(
             splits, evaluator, profile, objective, start_store_kj, max_sweeps)
 
-    fine = subdivide(coarse, profile)
-    if len(fine) > len(coarse):
+    # Everything above ranked maps against each other at the coarse step. The
+    # refinement, and the lap time that gets reported, are measured at `ds`:
+    # a map chosen on a 5 m grid is still a map, but a lap time read off one
+    # is not the number to put on a card.
+    result = fine.one(coarse)
+    subdivided = subdivide(coarse, profile)
+    if len(subdivided) > len(coarse):
         refined, refined_result = _climb(
-            fine, evaluator, profile, objective, start_store_kj, max_sweeps,
+            subdivided, fine, profile, objective, start_store_kj, max_sweeps,
             on_sweep=report)
         score = objective.score(result, start_store_kj)
         refined_score = objective.score(refined_result, start_store_kj)
         if refined_score is not None and (score is None or refined_score < score):
             coarse, result = refined, refined_result
-    evaluations = evaluator.evaluations
-    return coarse, result, evaluations
+    return coarse, result, evaluator.evaluations + fine.evaluations
 
 
 def _climb(splits, evaluator, profile, objective: Objective,

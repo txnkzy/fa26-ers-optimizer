@@ -22,6 +22,7 @@
   <nav class="tabs" aria-label="Sections">
     <button type="button" class="tab is-on" data-view="home">Optimizer</button>
     <button type="button" class="tab" data-view="folders" id="open-setup">Folders</button>
+    <button type="button" class="tab" data-view="runs">Past runs</button>
     <button type="button" class="tab" data-view="guide">How it works</button>
   </nav>
 
@@ -68,6 +69,14 @@
       <div id="session-card" hidden>
         <p class="circuit" id="circuit-name"></p>
         <dl class="facts" id="facts"></dl>
+        <div class="live-estimate" id="live-estimate" hidden>
+          <div class="le-head">
+            <span class="le-label">Qualifying, as it stands</span>
+            <span class="le-tag" id="le-tag"></span>
+          </div>
+          <div class="le-time" id="le-time"></div>
+          <p class="le-note" id="le-note"></p>
+        </div>
         <details class="laps" id="lap-detail">
           <summary><span id="lap-summary"></span></summary>
           <ul class="lap-list" id="lap-list"></ul>
@@ -75,7 +84,10 @@
       </div>
     </section>
 
-    <div id="warnings"></div>
+    <section class="block" id="warnings-block" hidden>
+      <h2 class="block-title">Worth knowing</h2>
+      <div id="warnings"></div>
+    </section>
 
     <section class="block" id="limits-block" hidden>
       <h2 class="block-title">
@@ -115,6 +127,7 @@
     </section>
 
     <section class="block" id="options-block" hidden>
+      <h2 class="block-title">When you save</h2>
       <label class="check">
         <input type="checkbox" id="write-alloc" checked>
         <span>Save the recharge limit too</span>
@@ -346,6 +359,39 @@
 </div>
 
 <!-- ======================================================== how it works -->
+<!-- ========================================================== past runs -->
+<div class="view page" id="view-runs" hidden>
+  <h1 class="page-title">Past runs</h1>
+  <p class="page-lede">
+    Every run this tool has finished, newest first. Tick two to see what
+    changed between them &mdash; which is the only way to tell whether
+    something you changed helped.
+  </p>
+
+  <div class="runs-empty" id="runs-empty" hidden>
+    <p>No runs kept yet. Run the optimizer and it will start a record here.</p>
+  </div>
+
+  <div class="compare-bar" id="compare-bar" hidden>
+    <span id="compare-what"></span>
+    <button type="button" class="primary small" id="compare-go">Compare</button>
+    <button type="button" class="ghost small" id="compare-clear">Clear</button>
+  </div>
+
+  <div id="compare-out"></div>
+
+  <table class="runs" id="runs-table" hidden>
+    <thead>
+      <tr>
+        <th class="pick"></th>
+        <th>When</th><th>Circuit</th><th>Laps</th>
+        <th>Qualifying</th><th>Race</th><th>Recharge</th><th>Your best</th>
+      </tr>
+    </thead>
+    <tbody id="runs-body"></tbody>
+  </table>
+</div>
+
 <div class="view page" id="view-guide" hidden>
   <header class="page-head">
     <h1>How it works</h1>

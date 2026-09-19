@@ -112,6 +112,11 @@ def load(path: str | Path) -> Lap:
 MIN_SPAN = 0.90
 MAX_DISTANCE_ERROR = 0.20
 
+#: A lap whose energy store moves less than this over its whole length was not
+#: recorded properly. The smallest real movement in the corpus is 47 kJ, on an
+#: out-lap; the files this rejects move exactly zero.
+STUCK_STORE_KJ = 5.0
+
 
 def problem(lap: "Lap") -> str:
     """Why this lap cannot be used, or an empty string if it can.
@@ -131,6 +136,17 @@ def problem(lap: "Lap") -> str:
             return ("the lap is recorded as %.0f m long, but the car drove "
                     "%.0f m -- the logger has the wrong track length"
                     % (lap.length_m, lap.driven_m))
+    if len(lap) > 1 and max(lap.store_kj) - min(lap.store_kj) < STUCK_STORE_KJ:
+        # A lap always moves charge. The car harvests under braking whatever
+        # map it is on, and a recharge map moves more than any other, so a
+        # store that does not change at all is not a measurement -- it is the
+        # logger having stopped reading. One Austin file carries 15,001
+        # samples and a store frozen to the kilojoule, duplicates the lap time
+        # of the file before it to the millisecond, and reads zero deployment
+        # over a lap the car plainly drove. Its gear channel is stuck too,
+        # which is what makes the drag fit fail rather than merely mislead.
+        return ("the logger stopped recording the car's energy part way "
+                "through, so nothing about this lap can be trusted")
     return ""
 
 

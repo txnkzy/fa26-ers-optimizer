@@ -147,6 +147,10 @@ function showNotice(title, text) {
   const box = el("div", "notice info");
   box.append(el("h3", null, title), el("p", null, text));
   $("warnings").append(box);
+  // The section has a heading of its own, so it only appears when there is
+  // something under it -- an empty "Worth knowing" is worse than no heading.
+  const block = $("warnings-block");
+  if (block) block.hidden = false;
 }
 
 async function saveAcPath(box) {
@@ -243,6 +247,158 @@ function showView(name) {
     tab.classList.toggle("is-on", tab.dataset.view === name);
   }
   if (name === "folders") paintFolders();
+  if (name === "runs") loadRuns();
+}
+
+/* A qualifying time while you are still driving, from the screening step of
+ * the search on its own -- one simulation per starting map and no climb, so
+ * it costs under half a second and does not take the processor the game is
+ * using. It is labelled as provisional until enough laps are pooled, because
+ * an early number with the confidence of a finished one is worse than none. */
+async function paintLive(key) {
+  const box = $("live-estimate");
+  if (!box || !key) return;
+  let d;
+  try {
+    d = await get("/api/live?key=" + encodeURIComponent(key));
+  } catch (e) { box.hidden = true; return; }
+  if (!d || !d.ready) { box.hidden = true; return; }
+  box.hidden = false;
+  $("le-time").textContent = d.predicted;
+  const tag = $("le-tag");
+  tag.textContent = d.converged ? "settled" : "provisional";
+  tag.dataset.state = d.converged ? "converged" : "provisional";
+  $("le-note").textContent = d.note + " Your best so far is " + d.best_real
+    + ". A full run searches from here and can only do better.";
+}
+
+/* ------------------------------------------------------------- past runs
+ * A run used to replace the last one on screen and then be gone, so every
+ * question worth asking -- did that change help, why is this circuit a second
+ * slower than last week -- meant keeping notes by hand and trusting them. */
+const compare = { picked: [] };
+
+async function loadRuns() {
+  let runs = [];
+  try {
+    runs = (await get("/api/history")).runs || [];
+  } catch (e) { runs = []; }
+  state.runs = runs;
+  $("runs-empty").hidden = runs.length > 0;
+  $("runs-table").hidden = runs.length === 0;
+  const body = $("runs-body");
+  body.textContent = "";
+  for (const run of runs) {
+    const tr = el("tr");
+    const pick = el("td", "pick");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = compare.picked.includes(run.id);
+    box.onchange = () => pickRun(run.id, box.checked);
+    pick.append(box);
+    tr.append(pick, el("td", null, when(run.at)),
+              el("td", null, titleCase(run.circuit)),
+              el("td", "num", String(run.laps_used || 0)));
+    for (const n of [1, 2, 3]) {
+      const s = (run.strats || []).find((x) => x.strat === n);
+      tr.append(el("td", "num", s && s.lap_s ? clock(s.lap_s) : "—"));
+    }
+    tr.append(el("td", "num", run.best_real_s ? clock(run.best_real_s) : "—"));
+    body.append(tr);
+  }
+  paintCompareBar();
+}
+
+function pickRun(id, on) {
+  compare.picked = compare.picked.filter((x) => x !== id);
+  if (on) compare.picked.push(id);
+  // Two is the question being asked; a third replaces the older pick rather
+  // than refusing the click, which is what people expect from two checkboxes.
+  if (compare.picked.length > 2) compare.picked.shift();
+  loadRuns();
+}
+
+function paintCompareBar() {
+  const bar = $("compare-bar");
+  bar.hidden = compare.picked.length === 0;
+  $("compare-what").textContent =
+    compare.picked.length === 2 ? "Two runs picked."
+                                : "Pick one more to compare.";
+  $("compare-go").disabled = compare.picked.length !== 2;
+}
+
+async function runCompare() {
+  if (compare.picked.length !== 2) return;
+  const out = $("compare-out");
+  out.textContent = "";
+  let data;
+  try {
+    data = await get("/api/compare?a=" + encodeURIComponent(compare.picked[0])
+                         + "&b=" + encodeURIComponent(compare.picked[1]));
+  } catch (e) {
+    out.append(el("p", "warn-line", "Those runs could not be compared."));
+    return;
+  }
+  const box = el("div", "compare");
+  box.append(el("h2", null, titleCase(data.b.circuit) + ": "
+                + when(data.a.at) + " against " + when(data.b.at)));
+  if (!data.same_circuit) {
+    box.append(el("p", "warn-line",
+      "These are different circuits, so only the shape of the change means "
+      + "anything — not the lap times."));
+  } else if (!data.same_session) {
+    box.append(el("p", "note-line",
+      "Different sessions, so your own pace changed too: your best lap moved "
+      + signed(data.best_real_delta_s) + "."));
+  }
+  const table = el("table", "compare-table");
+  const head = el("tr");
+  for (const h of ["", "Before", "After", "Change", "Battery before",
+                   "Battery after", "Zones"]) head.append(el("th", null, h));
+  table.append(head);
+  for (const row of data.rows) {
+    const tr = el("tr");
+    tr.append(el("td", null, row.label || ("STRAT " + row.strat)),
+              el("td", "num", clock(row.before_s)),
+              el("td", "num", clock(row.after_s)),
+              el("td", "num " + (row.delta_s < -0.005 ? "gain"
+                                 : row.delta_s > 0.005 ? "loss" : ""),
+                 signed(row.delta_s)),
+              el("td", "num", (row.before_mj || 0).toFixed(2) + " MJ"),
+              el("td", "num", (row.after_mj || 0).toFixed(2) + " MJ"),
+              el("td", "num", row.before_zones + " → " + row.after_zones));
+    table.append(tr);
+  }
+  box.append(table);
+  out.append(box);
+}
+
+/* Circuit keys are normalised lower case with no spaces -- the only name the
+ * record keeps, since it has to survive the session folder being gone. */
+function titleCase(key) {
+  if (!key) return "—";
+  return key.replace(/[_-]+/g, " ").replace(/\w/g, (c) => c.toUpperCase());
+}
+
+/* Lap times, as a stopwatch reads them. */
+function clock(seconds) {
+  if (!seconds) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds - m * 60;
+  return m + ":" + (s < 10 ? "0" : "") + s.toFixed(3);
+}
+
+function signed(s) {
+  if (s === undefined || s === null) return "—";
+  if (Math.abs(s) < 0.005) return "level";
+  return (s < 0 ? "−" : "+") + Math.abs(s).toFixed(3) + "s";
+}
+
+function when(at) {
+  if (!at) return "—";
+  const d = new Date(at * 1000);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+    + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 /* The folders page answers "where is it now" before it offers to change it,
@@ -333,6 +489,7 @@ async function load(force) {
     state.unlimited = data.session.unlimited;
   }
   renderSession(grew);
+  paintLive(data.session.key);
   if (!state.running) {
     $("run").disabled = false;
     setStatus("Ready", "ready");
@@ -347,6 +504,7 @@ function showWaiting(game, session) {
   $("limits-block").hidden = true;
   $("options-block").hidden = true;
   $("warnings").innerHTML = "";
+  $("warnings-block").hidden = true;
   $("run").disabled = true;
 
   if (game && game.running) {
@@ -417,6 +575,8 @@ function renderSession(grew) {
 
   const warn = $("warnings");
   warn.innerHTML = "";
+  $("warnings-block").hidden = true;
+  if (d.warnings.length) $("warnings-block").hidden = false;
   for (const w of d.warnings) {
     const box = el("div", "notice" + (w.level === "info" ? " info" : ""));
     box.append(el("h3", null, w.title), el("p", null, w.text));
@@ -728,6 +888,9 @@ function card(s) {
   if (s.map.some((m) => m.clip_kw > 0)) {
     legend.append(el("span", "har", "charging while on power"));
   }
+  if (s.braking && s.braking.length) {
+    legend.append(el("span", "brk", "where you brake"));
+  }
   node.append(legend);
 
   if (s.notes.length) {
@@ -777,6 +940,11 @@ function strip(s) {
     svg.append(r);
   };
 
+  /* Braking zones first, behind everything: they are the landmarks that make
+   * the rest readable. Without them the strip is bars over a bare distance
+   * axis, and "it deploys nothing after the chicane" is not something you can
+   * see. With them the corners are where the shading is. */
+  for (const z of (s.braking || [])) rect(x(z[0]), x(z[1]), 0, H, "var(--brake)");
   for (let i = 1; i < 4; i++) rect(W * i / 4, W * i / 4 + 1, 0, H, "var(--line-soft)");
 
   if (s.speed && s.speed.length > 1) {
@@ -1087,6 +1255,8 @@ $("ac-save").onclick = saveAcPath;
 for (const tab of document.querySelectorAll(".tab")) {
   tab.onclick = () => showView(tab.dataset.view);
 }
+$("compare-go").onclick = runCompare;
+$("compare-clear").onclick = () => { compare.picked = []; $("compare-out").textContent = ""; loadRuns(); };
 $("setup-change").onclick = () => showView("folders");
 $("find-laps").onclick = () => showView("folders");
 /* The path is chosen in Explorer rather than typed: it is long, easy to get

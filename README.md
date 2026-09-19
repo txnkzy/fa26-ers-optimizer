@@ -36,9 +36,17 @@ running. `docs/MODEL_WORK_LOG.md` has the whole account.
 
 ## Running an unsigned executable
 
-Windows will warn that the publisher is unknown, because the file is not
-code-signed — that costs a yearly fee and this is free. So the source is
-here in full, and everything below can be checked rather than taken on trust:
+Windows SmartScreen will warn that the publisher is unknown, and will keep
+warning: the file is not code-signed. **This is a known limitation and it is
+not going away.** An Organisation Validation certificate is roughly $200–400 a
+year and an Extended Validation one more, both require a registered business
+identity, and since 2023 both require the key to live on hardware or in a
+cloud HSM — there is no free or cheap tier, and nothing that works for a
+person rather than a company. Azure Trusted Signing is the closest thing at
+about $10 a month, and it too is restricted to verified organisations.
+
+So instead the source is here in full, and everything below can be checked
+rather than taken on trust:
 
 - **It makes no network connections.** The whole program is `fa26_app.py` and
   `core/`; the only network code in it serves the window to itself on
@@ -130,8 +138,9 @@ tagged but never published.
 Free to download and use; **not** free to redistribute, fork publicly, or
 modify and publish. The source is here so you can see what an unsigned
 executable does before running it, not as an invitation to take it. See
-[LICENSE](LICENSE) for what that allows in full, and open an issue if you
-want to do something it does not.
+[LICENSE](LICENSE) for what that allows in full, and ask on
+[Discord](https://discord.gg/E7kKCrwJ8a) if you want to do something it does
+not. Questions and bug reports go there too; GitHub issues are not watched.
 
 ## The car
 

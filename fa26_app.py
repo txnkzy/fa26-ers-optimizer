@@ -53,6 +53,8 @@ import lap as laplib
 import optimise26
 import profile as prof
 import recharge
+import history
+import provenance
 import session as lapsession
 import setupfile
 import sim26
@@ -517,6 +519,89 @@ def readiness() -> dict:
 LIVE_SLACK_S = 10.0
 
 
+_LIVE_CACHE: dict = {}
+
+#: A provisional estimate is worth having; a provisional estimate presented
+#: as an answer is not. Below this many pooled laps the fit is still moving
+#: enough that the number should be read as an indication.
+LIVE_SETTLED_LAPS = 3
+
+
+def live_estimate(key: str) -> dict:
+    """A provisional qualifying lap time, cheap enough to run between laps.
+
+    A full search is minutes, and running one while the driver is still on
+    track would take the processor the game is using -- so this is not one.
+    It is the screening step of the search on its own: the blanket family of
+    starting maps is simulated once each and the best is reported. That is
+    about a second of work, it needs no climb, and it is the same family the
+    real search climbs from, so it is a floor on what a full run would find
+    rather than a different answer.
+
+    Which is why it is labelled. `provisional` says the fit is still moving;
+    `converged` says enough consistent laps are pooled that another one is
+    unlikely to change it much. Presenting an early number with the confidence
+    of a finished one is the failure this is written to avoid.
+    """
+    revision = session_revision(key)
+    cached = _LIVE_CACHE.get(key)
+    if cached and cached[0] == revision:
+        return cached[1]
+
+    paths = session_paths(key)
+    laps = []
+    for path in paths:
+        try:
+            candidate = laplib.load(path)
+        except Exception:
+            continue
+        if not laplib.problem(candidate):
+            laps.append(candidate)
+    if not laps:
+        return {"ready": False, "reason": "no usable laps yet"}
+
+    data = install.ensure_unpacked(fa26.CAR_ID)
+    car = carphysics.load(data)
+    measured = [s["fuel_l"] for s in (scan_lap(p) for p in paths) if s["fuel_l"]]
+    if measured:
+        car.fuel_liters = sum(measured) / len(measured)
+    cal = calibrate.fit_longitudinal(laps, car)
+    shape = prof.Profile(laps)
+    laps.sort(key=lambda l: l.lap_time_s)
+
+    alloc = recharge.lookup(str(paths[0]))
+    saved = load_user_limits().get(recharge.normalise(
+        "__".join(key.split("__")[:-1])))
+    cap = (saved["qualify"] / 10.0) if saved else alloc.mj("qualify")
+    powertrain = fa26.Powertrain(taper=fa26.taper_for(alloc.curve_override))
+    objective = optimise26.Objective(
+        name="Qualifying", harvest_cap_mj=cap, energy_neutral=False,
+        one_shot=True, min_store_fraction=0.0)
+    seed = optimise26.seed_splits(laps[0], shape)
+    best = optimise26.screen(
+        seed, car, cal, shape, powertrain, objective,
+        optimise26.starting_store_kj(laps[0], "quali"),
+        reset_zones=alloc.reset_zones_for("qualify", shape.length_m),
+        speed_zones=alloc.speed_zones_for(shape.length_m))
+
+    settled = len(laps) >= LIVE_SETTLED_LAPS
+    out = {
+        "ready": best is not None,
+        "laps": len(laps),
+        "best_real_s": laps[0].lap_time_s,
+        "best_real": clock(laps[0].lap_time_s),
+        "predicted_s": best.lap_time_s if best else 0.0,
+        "predicted": clock(best.lap_time_s) if best else "",
+        "delta_s": (best.lap_time_s - laps[0].lap_time_s) if best else 0.0,
+        "converged": bool(settled),
+        "note": ("From %d pooled laps." % len(laps) if settled
+                 else "From %d lap%s — drive a couple more before trusting it."
+                      % (len(laps), "" if len(laps) == 1 else "s")),
+    }
+    _LIVE_CACHE[key] = (revision, out)
+    return out
+
+
 def current() -> dict:
     """What the page shows on the left: this session, or nothing yet.
 
@@ -587,6 +672,29 @@ def pretty(circuit: str) -> str:
 
 class Cancelled(Exception):
     """Raised out of the progress callback to abandon a running solve."""
+
+
+def braking_zones(profile, min_m: float = 25.0) -> list[list[float]]:
+    """Contiguous stretches where the driver is on the brakes, in metres.
+
+    Read off the pooled profile rather than any one lap, so a zone is where
+    the driver brakes rather than where they braked once. Short ones are
+    dropped: a stab of brake mid-corner is not a landmark.
+    """
+    zones: list[list[float]] = []
+    start = None
+    for slot, value in enumerate(getattr(profile, "brake_mean", [])):
+        here = slot * profile.ds
+        if value >= 0.05:
+            if start is None:
+                start = here
+        elif start is not None:
+            if here - start >= min_m:
+                zones.append([round(start), round(here)])
+            start = None
+    if start is not None and profile.length_m - start >= min_m:
+        zones.append([round(start), round(profile.length_m)])
+    return zones
 
 
 def plural(n: int, one: str, many: str | None = None) -> str:
@@ -855,6 +963,15 @@ class Engine:
                       "restart the session, then drive.")
             self.detail("Order          %s" % lapsession.map_order_warning(
                 paths, baseline_dir()))
+        # And the same question asked of the car rather than of the clock:
+        # which map the deployment in these laps is actually explained by.
+        try:
+            for line in provenance.describe(
+                    laps, paths, baseline_dir(),
+                    setupfile.item_index_map(self.car_setup_ini), circuit):
+                self.note(line)
+        except Exception:
+            pass
 
         # A qualifying map is planned for a full store because it is meant to
         # follow a recharge lap. Arrive short and it is the wrong map -- 0.48 s
@@ -1048,6 +1165,11 @@ class Engine:
                     # the deploy blocks sit on the straights.
                     "speed": thin([v * 3.6 for v in result.speed], 240),
                     "peak_kph": max(result.speed) * 3.6 if result.speed else 0,
+                    # Where the driver is on the brakes, so the strip has
+                    # landmarks. Distance alone is an axis that means nothing:
+                    # "it deploys nothing after the chicane" is not a thing
+                    # you can see until you can see where the chicane is.
+                    "braking": braking_zones(profile),
                 })
 
         # Needs both maps, so it waits until all three are solved: the run
@@ -1066,6 +1188,14 @@ class Engine:
                             entry["notes"] = list(entry["notes"]) + switch
 
         self.lap = lap
+        try:
+            with self.lock:
+                kept = list(self.summary)
+            history.record(circuit, key, kept, lap.lap_time_s, len(laps),
+                           {"qualify": qualify, "race": race,
+                            "unlimited": bool(unlimited)})
+        except Exception:
+            pass                       # a run is worth more than its record
         self._check_fresh(key)
         self.say("Three maps ready. Save them into a setup, then restart "
                  "the session.")
@@ -1108,6 +1238,12 @@ class Engine:
     #: than the general sensitivity sweep, because that is where the answer
     #: lives: a lap almost never starts full.
     LINE_LEVELS = (0.6, 0.7, 0.8, 0.9, 1.0)
+
+    #: Allowance a finished map may leave unrecovered before it is worth
+    #: saying so. Chosen from what the corpus does: most circuits land within
+    #: 0.6 MJ of their cap, and the two that do not -- Austin at 2.36 and Spa
+    #: at 2.25 -- are the ones worth a second look.
+    UNUSED_ALLOWANCE_MJ = 1.5
 
     #: How far before the line to consider putting STRAT 1 on, and how finely.
     #: Six hundred metres is the whole run out of any final corner; beyond it
@@ -1251,6 +1387,23 @@ class Engine:
                         "the lap is already at its %.1f MJ allowance, so there "
                         "was nothing to be gained by making room."
                         % (result.refused_mj, cap))
+        # Allowance left on the table, which is a different failure from
+        # recovery being refused: here the store had room and the lap simply
+        # never went and got it. A Spa race map came back deploying 6.25 MJ
+        # against an 8.5 MJ allowance while refusing 1.26 -- 2.25 MJ of
+        # permitted energy that was neither used nor recovered. It is a search
+        # result worth doubting rather than a fault in the car, so it is said
+        # plainly and not dressed up as advice.
+        unused = cap - result.harvested_mj
+        if (strat_no != 3 and cap < 90.0
+                and unused > self.UNUSED_ALLOWANCE_MJ and recoverable <= 0.1):
+            notes.append(
+                "This map recovers %.1f MJ of the %.1f MJ you are allowed, "
+                "so %.1f MJ goes unused. That may be all this circuit offers, "
+                "or the search may have settled early — worth re-running."
+                % (result.harvested_mj, cap, unused))
+            self.note("   " + notes[-1])
+
         # A map the car will not execute is worse than no map: it looks like a
         # plan and quietly does something else. The search is held to this, so
         # a survivor here is a bug, not a preference.
@@ -1479,6 +1632,19 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/revision":
                 key = newest_key()
                 self._json({"revision": session_revision(key) if key else ""})
+            elif route == "/api/live":
+                key = query.get("key", [""])[0] or newest_key()
+                self._json(live_estimate(key) if key
+                           else {"ready": False, "reason": "no session yet"})
+            elif route == "/api/history":
+                self._json({"runs": history.load()})
+            elif route == "/api/compare":
+                found = history.compare(query.get("a", [""])[0],
+                                        query.get("b", [""])[0])
+                if found is None:
+                    self._json({"error": "one of those runs is gone"}, code=404)
+                else:
+                    self._json(found)
             elif route == "/api/setups":
                 self._json({"setups": setups_for(query.get("circuit", [""])[0])})
             elif route == "/api/poll":
