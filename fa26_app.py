@@ -878,8 +878,12 @@ class Engine:
         if unlimited:
             self.say("No recharge limit set for this circuit.")
         else:
+            # "published:2026" is an official figure as much as "fia:06" is;
+            # only the notice it came from differs. Austin was being told no
+            # official figure existed for it while the table was quoting one.
             where = ("official"
-                     if published and alloc.source.startswith("fia")
+                     if published and (alloc.source.startswith("fia")
+                                       or alloc.source.startswith("published"))
                      else "your setting, no official figure exists")
             self.say("Recharge limit %.1f MJ qualifying, %.1f race (%s)."
                      % (alloc.mj("qualify"), alloc.mj("race"), where))

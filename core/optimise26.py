@@ -741,6 +741,12 @@ class Evaluator:
         return result
 
 
+#: A one-shot lap ending above this much charge has left the store unspent,
+#: and is worth a second look from a map that spends all of it. Generous on
+#: purpose: a lap that arrives at the line with a quarter of the battery
+#: still in it has not been robbed of much.
+SPENT_ENOUGH = 0.25
+
 #: Below this there is nothing to win by spending earlier, and the extra
 #: climb is pure cost. Set to match the figure the app reports as wasted:
 #: anything worth telling the user about is worth one more climb. At 0.3 a
@@ -752,6 +758,18 @@ REFUSAL_WORTH_CHASING_MJ = 0.1
 #: empty a full store before the first heavy braking of the second half, so
 #: the harvesting that follows has somewhere to go.
 FRONT_LOAD_FRACTION = 0.45
+
+
+def _all_out(splits) -> "list[fa26.Split]":
+    """The same zones, every one of them deploying flat out.
+
+    The shape a qualifying lap wants: arrive full, spend the store and
+    everything the lap recovers, cross the line empty. Wrong for a lap that
+    has to repeat, which is why this is only ever a starting point for a
+    one-shot search, and only ever kept if it finishes better.
+    """
+    return [fa26.Split(s.start_m, s.end_m, s.end_m, s.end_m,
+                       fa26.POWER_MAX, 0) for s in splits]
 
 
 def _front_loaded(splits, profile) -> "list[fa26.Split]":
@@ -821,7 +839,7 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
     # One climb per starting point, plus the refining climb over the
     # subdivided answer.
     # Plus the refining climb, and the front-loaded one when it is needed.
-    climbs = len(starts) + 2
+    climbs = len(starts) + 3
     finished = [0]
 
     def report(sweep: int, sweeps: int) -> None:
@@ -838,6 +856,20 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         candidate, candidate_result = _climb(
             start, evaluator, profile, objective, start_store_kj, max_sweeps,
             on_sweep=report)
+        done()
+        score = objective.score(candidate_result, start_store_kj)
+        if score is not None and (best_score is None or score < best_score):
+            coarse, result, best_score = candidate, candidate_result, score
+
+    # A one-shot lap that finishes with charge left has not done its job,
+    # whatever its lap time says. Austin came back full at both ends,
+    # 2.47 s off a map that simply spends everything.
+    if objective.one_shot and (result is None or best_score is None
+                               or result.store_end_kj
+                               > STORE_CAPACITY_KJ * SPENT_ENOUGH):
+        candidate, candidate_result = _climb(
+            _all_out(splits), evaluator, profile, objective, start_store_kj,
+            max_sweeps, on_sweep=report)
         done()
         score = objective.score(candidate_result, start_store_kj)
         if score is not None and (best_score is None or score < best_score):
