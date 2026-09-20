@@ -304,6 +304,60 @@ check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
 
+# --- super-clip stays reachable --------------------------------------------
+# Super-clipping was in the action space and in no starting map, which on an
+# energy-neutral search is the same as not being there: one zone of harvest
+# with nothing to spend it on is rejected before the deployment that would pay
+# for it is ever tried. Measured, it is now chosen in 5 of 14 solved maps and
+# worth 0.02 to 1.08 s where it is chosen. Both halves of what made that
+# possible are checked here, because both were once absent without anything
+# noticing.
+def _superclip_reachable() -> tuple[bool, str]:
+    import optimise26 as _opt
+    import fa26 as _fa26
+
+    # Enough of a profile for the two helpers these moves go through: a lap
+    # that is flat out everywhere, which is the permissive case and so cannot
+    # be what hides a missing move.
+    class _Shape:
+        length_m = 5000.0
+        ds = 2.5
+        gas = [1.0] * 2001
+
+        def _slot(self, distance_m):
+            return min(int((distance_m % self.length_m) / self.ds),
+                       len(self.gas) - 1)
+
+        def full_throttle_at(self, _distance_m):
+            return True
+
+    seed = [_fa26.Split(0, 400, 400, 1000, 200, 0),
+            _fa26.Split(1000, 1400, 1400, 2500, 200, 0),
+            _fa26.Split(2500, 3000, 3000, 5000, 200, 0)]
+    shape = _Shape()
+    family = _opt._family(seed, shape)
+    seeded = sum(1 for m in family if any(s.clip_kw > 0 for s in m))
+    if not seeded:
+        return False, "no starting map in the family carries super-clip"
+    # Turning it on from nothing is `_more_harvest`; `_level_clip` only trades
+    # an existing one's power against its width, and the single-split sweep
+    # reaches it through `_variants`.
+    started = _opt._more_harvest(seed[0])
+    if started is None or started.clip_kw <= 0:
+        return False, "the search cannot turn super-clip on"
+    variants = _opt._variants(seed[0], shape)
+    if not any(v.clip_kw > 0 for v in variants):
+        return False, "no single-split move introduces super-clip"
+    return True, ("%d of %d starting maps carry it, and %d of %d single-split "
+                  "moves introduce it" % (seeded, len(family),
+                                          sum(1 for v in variants if v.clip_kw > 0),
+                                          len(variants)))
+
+
+_ok, _why = _superclip_reachable()
+check("super-clip is seeded and reachable", _ok, _why)
+
+
 # --- the fast path is the same path ----------------------------------------
 # sim26 builds each step's command by walking the splits once, because reading
 # the split list afresh for every step was 12.3 million linear scans in a

@@ -726,3 +726,52 @@ to 1.23 s better and worse at none. There is more available — `best_tractive_f
 and `deploy_kw` are 24 million calls each and could be inlined the same way —
 but the profile's shape has changed enough that it is worth re-measuring before
 guessing again.
+
+---
+
+## Super-clip: is it chosen, or only allowed?
+
+Unblocking it and having the solver pick it are different claims, and only the
+first had been checked. So: where does super-clip appear in the maps the solver
+actually produces, and at those circuits, does a solver *allowed* to clip beat
+the same solver *forbidden* to clip?
+
+Forbidding it means removing every clip-raising move, every clip-carrying
+starting map, and the paired harvest move — so the two runs differ in exactly
+one thing.
+
+**It is chosen.** Five of fourteen solved maps carry it:
+
+| circuit | strategy | clip zones |
+|---|---|---|
+| Albert Park | qualifying | 803–982 m @ 350 kW, 3889–3992 m @ 350 kW |
+| Albert Park | race | 869–982 m @ 350 kW, 3880–3992 m @ 300 kW |
+| Monza | race | 131–166 m @ 50 kW, 757–787 m @ 200 kW |
+| Monaco | race | 2466–2572 m @ 50 kW |
+
+**And it wins.** The same search with super-clip taken away:
+
+| circuit | strategy | allowed | forbidden | clip is worth |
+|---|---|---|---|---|
+| Albert Park | race | 81.203 | 82.285 | **+1.082 s** |
+| Monaco | race | 74.099 | 74.708 | **+0.609 s** |
+| Monza | race | 86.590 | 87.127 | **+0.537 s** |
+| Albert Park | qualifying | 79.366 | 79.382 | +0.016 s |
+
+Three of the four are worth more than half a second. The fourth is not — Albert
+Park's qualifying map chooses two 350 kW clip zones worth sixteen thousandths,
+which is the solver being indifferent rather than being right, and is reported
+as such.
+
+The pattern is the one the mechanism predicts. Every substantial case is a
+**race** map at a circuit with allowance left over — Albert Park harvests 6.05
+of 8.0 MJ, Monza 5.22 of 7.0 — where braking alone cannot reach the cap and
+clipping is the only way to put more energy in. Where the cap is already
+saturated by braking (Austin at 8.00 of 8.0, Spa's qualifying at 7.00 of 7.0),
+it is correctly not used.
+
+So the earlier conclusion was right but under-tested: it was a search blind
+spot, it is now open, and the solver walks through it. Both halves of what made
+that possible — a clip-carrying starting map in the family, and a single-split
+move that turns clipping on from nothing — are now permanent checks, because
+both were once absent with nothing noticing.
