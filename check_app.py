@@ -304,6 +304,41 @@ check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
 
+# --- the fast path is the same path ----------------------------------------
+# sim26 builds each step's command by walking the splits once, because reading
+# the split list afresh for every step was 12.3 million linear scans in a
+# single Spa race search. It has to be the same answer as the per-point lookup
+# it replaced, on maps far stranger than any solver produces.
+def _commands_agree() -> tuple[bool, str]:
+    import random
+    import sim26 as _sim
+    import fa26 as _fa26
+    random.seed(20260919)
+    for _trial in range(120):
+        count = random.randint(2, 9)
+        length = random.choice([3271.0, 5750.0, 6943.0])
+        points = sorted(random.sample(range(0, int(length)), count * 4))
+        splits = []
+        for k in range(count):
+            a, b, c, d = points[4 * k:4 * k + 4]
+            splits.append(_fa26.Split(a, b, c, d,
+                                      random.choice([0, 100, 200, 350]),
+                                      random.choice([0, 0, 150, 350])))
+        step = random.choice([2.5, 5.0])
+        steps = int(length / step)
+        want = [_fa26.map_command_at(splits, i * step, length) for i in range(steps)]
+        got = _sim._commands_along(splits, steps, step, length)
+        if want != got:
+            where = next(i for i, (a, b) in enumerate(zip(want, got)) if a != b)
+            return False, "disagree at %.1f m: %s against %s" % (
+                where * step, want[where], got[where])
+    return True, "120 random maps, every step"
+
+
+_ok, _why = _commands_agree()
+check("the fast command lookup matches the slow one", _ok, _why)
+
+
 # --- the logger's own record ----------------------------------------------
 # The logger now writes the deployment maps a lap was driven on into a file
 # beside it, so attribution is a read rather than a reconstruction. Two things

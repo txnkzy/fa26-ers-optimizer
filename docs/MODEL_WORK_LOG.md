@@ -663,3 +663,66 @@ thirds of its harvest to the alternative. On the clean corpus the alternatives
 are indistinguishable — all four score 1.21% and 100–101% of measured harvest.
 The rule is not wrong, and the brake test is still the physically right
 question; but the number behind it belongs to the old measurement.
+
+---
+
+## What a race search costs, and why it did not have to
+
+The number first. Race searches, wall clock, on this machine:
+
+```
+circuit            length   race lap    deploy     evals      wall
+cota_2022           5429m    102.417     7.37      9920       58s
+fn_spa              6943m    112.355     7.77      8778       67s
+rt_suzuka           5770m     93.209     7.09      8646       58s
+monaco              3271m     74.099     8.45     17606       66s
+fn_monza            5750m     86.590     5.22     10784       69s
+madrid_street       5340m    101.671     8.48     14020       83s
+fn_barcelona        4611m     78.075     7.04      9142       46s
+fn_albertpark       5239m     81.203     6.01     12754       73s
+```
+
+46–83 s, median 66. Against the old solver on the five circuits measured both
+ways, 146 s became 319 s — the extra starting points are what found Austin
+1.23 s and Suzuka 0.25 s, and they cost roughly double.
+
+**It was not a hard trade.** Profiling a Spa race search: 4,389 simulations,
+644 million function calls, 198 s under the profiler.
+
+```
+   ncalls  tottime  cumtime  function
+     4389   83.255  194.532  sim26.simulate
+217271097   28.651   28.651  builtins.max
+211621014   26.820   26.820  builtins.min
+ 22624048   12.559   24.391  fa26.Powertrain.deploy_kw
+ 24376506   10.328   13.006  carphysics._lookup
+ 24376506    9.366   24.953  carphysics.best_tractive_force
+ 12331669    7.555    7.555  fa26.map_command_at
+```
+
+`min` and `max` are **429 million of those calls and 55 of the 198 seconds**.
+They are builtins, so each is a Python-level call; written as a conditional
+expression they are not calls at all, and for two floats with no NaN involved
+the result is identical by definition. And `map_command_at` scanned the split
+list afresh for every one of a simulation's 2,800 steps — 12.3 million linear
+scans over a list already in the order the steps visit it.
+
+Thirteen edits, none of which change a number:
+
+| | before | after |
+|---|---|---|
+| 14 solves, 7 circuits, both strategies | 822 s | **526 s** |
+| race searches, mean | ~64 s | **~41 s** |
+
+**Every one of the fourteen came back bit-identical** — same map hash, same lap
+time to six decimals, same evaluation count. That is the whole claim, and it is
+checked rather than asserted: each solve is fingerprinted before and after and
+the two files are diffed. The one-pass command builder is checked against the
+lookup it replaced on 120 randomly generated maps, every step of every one, as
+a permanent test.
+
+Against the old solver, then: 146 s became 210 s rather than 319 s, for maps up
+to 1.23 s better and worse at none. There is more available — `best_tractive_force`
+and `deploy_kw` are 24 million calls each and could be inlined the same way —
+but the profile's shape has changed enough that it is worth re-measuring before
+guessing again.

@@ -171,6 +171,37 @@ def run_to_line(before, after, switch_m: float, car, longitudinal, profile,
     return state
 
 
+def _commands_along(splits, n, step, length):
+    """Every step's (deploy, clip) command, built in one pass over the splits.
+
+    `fa26.map_command_at` answers the same question for one point and scans the
+    split list to do it. Asked for every step of every simulation that is
+    12.3 million scans in a single Spa race search, for a list that is already
+    in the order the steps visit it.
+
+    The answer is the same one, and the assertion that it is runs in the tests
+    rather than here.
+    """
+    out = [(0.0, 0.0)] * n
+    ordered = sorted(splits, key=lambda s: s.start_m)
+    index = 0
+    for i in range(n):
+        d = (i * step) % length
+        while index < len(ordered) and ordered[index].end_m <= d:
+            index += 1
+        if index >= len(ordered):
+            continue
+        split = ordered[index]
+        if split.start_m > d:
+            continue                        # in a gap between splits
+        if d < split.deploy_end_m:
+            out[i] = (split.deploy_kw, 0.0)
+        elif d < split.clip_start_m:
+            out[i] = (0.0, 0.0)             # the deliberate neutral run
+        else:
+            out[i] = (0.0, split.clip_kw)
+    return out
+
 def simulate(splits, car, longitudinal, profile, powertrain,
              start_store_kj: float, harvest_cap_kj: float,
              store_capacity_kj: float = 4000.0, ds: float = 2.5,
@@ -203,7 +234,10 @@ def simulate(splits, car, longitudinal, profile, powertrain,
 
     # The map is fixed for the whole run, so its commands are read once rather
     # than once per lap of the settle-and-measure pair.
-    commands = [fa26.map_command_at(splits, i * step, length) for i in range(n)]
+    # The steps are visited in order and the splits are in order with them,
+    # so both are walked once together. Reading the split list afresh for
+    # every step was 12.3 million linear scans in a single Spa race search.
+    commands = _commands_along(splits, n, step, length)
 
     # Bind the hot lookups once. The inner loop runs n times per lap and twice
     # per evaluation when settling, so attribute resolution on car, powertrain
@@ -310,7 +344,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             # than it holds, and that limit is an energy over a time, so it
             # needs dt. Using the entry speed is close enough at this step size
             # and is corrected by the exact dt below.
-            dt_guess = step / max(v, 1.0)
+            dt_guess = step / (v if v > 1.0 else 1.0)
 
             # A split's super-clip section is harvesting, not deploying, so the
             # 200 kW floor does not apply there. Applying it anyway had the car
@@ -318,7 +352,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             # across the lap while the totals still looked balanced.
             clip_kw = 0.0
             if full_throttle and cmd_clip > 0.0 and harvested < harvest_cap_kj:
-                clip_kw = min(cmd_clip, max_harvest)
+                clip_kw = cmd_clip if cmd_clip < max_harvest else max_harvest
             # The crossing from deployment into super-clipping is already
             # rate-limited by the deployment ramp below, and the two net out, so
             # clipping needs no separate ramp. Giving it one charged the rate
@@ -367,7 +401,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 if just_applied or in_reset or gas < reset_gas:
                     demand_kw = cmd_deploy
                 else:
-                    demand_kw = min(demand_kw, cmd_deploy)
+                    demand_kw = demand_kw if demand_kw < cmd_deploy else cmd_deploy
 
                 # The regulated quantity is the power *level* the PU may
                 # demand -- floor and speed taper included. The driver's
@@ -396,7 +430,9 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                     # 100 kW/s. Gating the ramp on power above 100 kW as well
                     # as speed let the last 100 kW vanish at once and arrived
                     # 83 m early.
-                    level = max(level, prev_level_kw - ramp_down * dt_guess)
+                    floor_level = prev_level_kw - ramp_down * dt_guess
+                    if floor_level > level:
+                        level = floor_level
                 prev_level_kw = level
 
                 # Slot mean, and the measured concave curve -- see
@@ -404,7 +440,8 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # answers "was the driver ever flat here", not "how much power
                 # did the car deliver across these 2.5 m".
                 target = level * deploy_frac[i % n]
-                deploy_kw = min(target, store / max(dt_guess, 1e-6))
+                drawable = store / (dt_guess if dt_guess > 1e-6 else 1e-6)
+                deploy_kw = target if target < drawable else drawable
             prev_deploy_kw = deploy_kw
 
             # The MGU-K cannot motor and generate at once, so what the car
@@ -423,15 +460,22 @@ def simulate(splits, car, longitudinal, profile, powertrain,
 
             drive = engine_force(v, wastegate)
             drive += thrust_n(deploy_kw, v)
-            drive -= clip_kw * 1000.0 / max(v, 1.0) / motor_eff
+            drive -= clip_kw * 1000.0 / (v if v > 1.0 else 1.0) / motor_eff
             # One friction budget: what the tyre is using sideways is not
             # available for driving.
-            drive = min(drive, traction_force * grip_at[i % n])
+            grip_limit = traction_force * grip_at[i % n]
+            if grip_limit < drive:
+                drive = grip_limit
 
             accel = (drive - drag_k_at[i % n] * v * v) / mass
-            v_free = max(v * v + 2.0 * accel * step, 1.0) ** 0.5
-            v_next = max(1.0, min(v_free, ceiling[(i + 1) % n]))
-            dt = step / max((v + v_next) * 0.5, 1.0)
+            square = v * v + 2.0 * accel * step
+            v_free = (square if square > 1.0 else 1.0) ** 0.5
+            limit = ceiling[(i + 1) % n]
+            v_next = v_free if v_free < limit else limit
+            if v_next < 1.0:
+                v_next = 1.0
+            mean_v = (v + v_next) * 0.5
+            dt = step / (mean_v if mean_v > 1.0 else 1.0)
 
             # Harvest whenever the driver is off the throttle, not only under
             # braking: coasting regen is the largest source on a lap. Between
@@ -447,18 +491,26 @@ def simulate(splits, car, longitudinal, profile, powertrain,
 
             gained = harvest_kw * dt
             if harvested + gained > harvest_cap_kj:
-                gained = max(0.0, harvest_cap_kj - harvested)
+                gained = harvest_cap_kj - harvested
+                if gained < 0.0:
+                    gained = 0.0
                 capped = True
-            room = max(0.0, store_capacity_kj - store)
+            room = store_capacity_kj - store
+            if room < 0.0:
+                room = 0.0
             if gained > room:
                 refused += gained - room
                 gained = room
 
-            used = min(deploy_kw * dt, store)
-            store = min(store_capacity_kj, store - used + gained)
+            drawn = deploy_kw * dt
+            used = drawn if drawn < store else store
+            store = store - used + gained
+            if store > store_capacity_kj:
+                store = store_capacity_kj
             harvested += gained
             deployed += used
-            store_min = min(store_min, store)
+            if store < store_min:
+                store_min = store
 
             v = v_next
             time_s += dt
