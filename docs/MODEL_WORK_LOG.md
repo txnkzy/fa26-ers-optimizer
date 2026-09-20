@@ -994,3 +994,47 @@ the app would have discarded.
 
 Both from the setup the logger named, no snapshot consulted. The mechanism
 works end to end on laps driven with it.
+
+---
+
+## Austin, on track
+
+The logger finally recorded a full qualifying run: recharge lap, push lap,
+recharge, push, with the maps written beside each one.
+
+**Attribution by record, working on laps driven with it.** Both push laps came
+back `STRAT 1 [recorded] from cota.ini` with **no snapshots offered at all**,
+`map_fit` skill 0.58 and 0.61. That is the thing this whole round was for.
+
+**Every push lap driven on the new map, against the model at its own charge:**
+
+| lap | battery | driven | model | model is |
+|---|---|---|---|---|
+| 1:39.053 | 93% | 99.016 | 99.350 | +0.334 |
+| 1:39.159 | 89% | 99.159 | 99.457 | +0.298 |
+| 1:39.092 | 94% | 99.094 | 99.334 | +0.240 |
+| **1:38.722** | 94% | 98.722 | 99.345 | +0.623 |
+
+Four laps, all the same direction: the model is **0.24 to 0.62 s pessimistic**
+here. It under-promises, which is the safe way round for something recommending
+maps, and it is consistent, which is what matters for ranking one map against
+another.
+
+**Old map against new, same car, same laps, matched charge:**
+
+| battery | old | new | new gains | energy |
+|---|---|---|---|---|
+| 100% | 99.729 | 99.210 | **+0.520** | 12.00 MJ both |
+| 94% | 99.831 | 99.336 | +0.496 | 11.76 MJ both |
+| 87% | 100.030 | 99.505 | +0.525 | 11.48 MJ both |
+
+Identical energy, half a second apart — a pure distribution win rather than the
+search finding more to spend.
+
+**What this does not settle.** The only push lap recorded on the old map is a
+1:39.925 at 87%, which charge-corrects to about 1:39.73 at 94% — a measured gap
+near 1.0 s against a predicted 0.50. But the driver's own best on the old map
+was a 1:38.867 that the valid-lap filter threw away, and if that stands the gap
+is nearer 0.15 s. One recorded lap on one side is not an A/B, and the honest
+statement is that **the new map is not slower and the driver's best ever lap is
+on it.** Settling the size needs the old map driven again.
