@@ -181,6 +181,15 @@ def docs_dir() -> Path:
     return options[0]
 
 
+#: Where an apply keeps its dated copy of the written setup. Normally beside
+#: the telemetry, which is what makes a recorded lap attributable to a map
+#: afterwards -- but the checks apply to a scratch setup, and a snapshot of
+#: that is not a record of anything. It is a file named after a test fixture
+#: sitting among the real ones, and fourteen had accumulated before anyone
+#: noticed. `check_app.py` points this somewhere of its own.
+SNAPSHOT_DIR: "Path | None" = None
+
+
 def baseline_dir() -> Path:
     """Where the recorded laps are, the user's answer beating ours.
 
@@ -1494,7 +1503,7 @@ class Engine:
             # recorded lap was driven on, because this overwrites the setup in
             # place -- which is how every Monza lap on disk came to be replayed
             # against a map written after the lap was recorded.
-            telemetry_dir=baseline_dir())
+            telemetry_dir=SNAPSHOT_DIR or baseline_dir())
 
         # The per-lap cap switch is not part of the allocation record, so it
         # is written separately -- and always, in both directions. Left alone

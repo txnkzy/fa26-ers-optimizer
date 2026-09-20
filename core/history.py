@@ -29,8 +29,14 @@ KEEP = 200
 VERSION = 1
 
 
+#: Where the record lives. Overridable for the same reason the map snapshot
+#: directory is: a run made by the checks is not a run the user made, and it
+#: has no business in their history.
+DIR: "Path | None" = None
+
+
 def path() -> Path:
-    return install.app_dir() / "runs.json"
+    return (DIR or install.app_dir()) / "runs.json"
 
 
 def load() -> list[dict]:

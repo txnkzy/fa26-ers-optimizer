@@ -1219,6 +1219,8 @@ table.split-table {
   border-radius: 8px; font-size: 13px; color: var(--ink-2);
 }
 .compare-bar span { margin-right: auto; }
+/* The buttons size to their words; the sentence takes the slack. */
+.compare-bar button { flex: 0 0 auto; }
 
 .compare {
   margin-top: 18px; padding: 16px;

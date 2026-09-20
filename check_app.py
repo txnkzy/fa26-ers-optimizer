@@ -30,6 +30,15 @@ import fa26_app as A
 
 import tempfile
 SCRATCH = Path(tempfile.mkdtemp(prefix="fa26_check_"))
+
+# Every apply keeps a dated copy of the written setup beside the telemetry, so
+# a recorded lap can be attributed to the map it was driven on afterwards.
+# These checks apply to a scratch setup, and a snapshot of that is not a record
+# of anything -- it is a file in the user's telemetry folder named after a test
+# fixture, sitting among the real ones. Fourteen had accumulated there before
+# anyone noticed. The checks keep their own folder.
+A.SNAPSHOT_DIR = SCRATCH / "map-snapshots"
+A.history.DIR = SCRATCH
 PORT = 8739
 BASE = "http://127.0.0.1:%d" % PORT
 
