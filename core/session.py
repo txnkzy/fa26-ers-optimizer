@@ -166,7 +166,10 @@ def snapshots(telemetry_dir, track: str | None = None) -> list:
     out = []
     for path in folder.glob("*.ini"):
         parts = path.name.split("__")
-        if not re.match(r"^\d{8}_\d{6}$", parts[0]):
+        # `-1` and up: both ends of one write land in the same second, and the
+        # outgoing map is the one that matters most. Without this the app
+        # collected only one of the two and it was the wrong one.
+        if not re.match(r"^\d{8}_\d{6}(-\d+)?$", parts[0]):
             continue
         if want is not None:
             here = {recharge.normalise(p) for p in parts[1:]}

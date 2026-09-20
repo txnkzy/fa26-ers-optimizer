@@ -558,18 +558,51 @@ def write_strategies(setup_path, mapping: dict[str, int],
         if session and item in mapping:
             updates[mapping[item]] = getattr(allocation, session)
 
+    # Keep a dated copy beside the telemetry, of the map going out as well as
+    # the one coming in. Without one there is no way to know afterwards which
+    # map a recorded lap was driven on, because this function overwrites the
+    # setup in place: every Monza lap on disk was replayed against a map
+    # written after the lap was recorded, and the resulting "+3.1% race /
+    # +13.7% recharge" figures compared a simulated map against a lap driven
+    # on a different one.
+    #
+    # Only the incoming map used to be kept, which preserves the wrong one.
+    # Every lap driven up to this moment ran the map being overwritten, and
+    # that copy is the only record of it -- an Austin session proved it: the
+    # laps named their setup file, the file was rewritten minutes later, and
+    # the map they had actually run existed nowhere but in a snapshot left by
+    # a different apply the day before. Snapshots are a few kilobytes against
+    # a 2 MB telemetry file, so both ends are kept.
+    _snapshot(setup_path, telemetry_dir)
     result = setupfile.write_values(setup_path, updates, backup=backup)
-
-    # Keep a dated copy beside the telemetry. Without one there is no way to
-    # know afterwards which map a recorded lap was driven on, because this
-    # function overwrites the setup in place: every Monza lap on disk was
-    # replayed against a map written after the lap was recorded, and the
-    # resulting "+3.1% race / +13.7% recharge" figures compared a simulated
-    # map against a lap driven on a different one. Snapshots are small and
-    # cost nothing next to a 2 MB telemetry file.
-    if telemetry_dir is not None:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        target = snapshot_dir_for(telemetry_dir) / f"{stamp}__{Path(setup_path).name}"
-        target.write_bytes(Path(setup_path).read_bytes())
+    _snapshot(setup_path, telemetry_dir)
 
     return result
+
+
+def _snapshot(setup_path, telemetry_dir) -> None:
+    """Keep a dated copy of a setup, unless an identical one is already kept."""
+    if telemetry_dir is None:
+        return
+    source = Path(setup_path)
+    if not source.is_file():
+        return
+    content = source.read_bytes()
+    folder = snapshot_dir_for(telemetry_dir)
+    for kept in folder.glob("*__" + source.name):
+        try:
+            if kept.read_bytes() == content:
+                return
+        except OSError:
+            continue
+    # The stamp is to the second and both ends of a write land inside the same
+    # one, so a plain stamp had the incoming map overwrite the outgoing one at
+    # the same filename -- which is the whole failure this exists to prevent,
+    # reproduced one directory along.
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    target = folder / f"{stamp}__{source.name}"
+    suffix = 0
+    while target.exists():
+        suffix += 1
+        target = folder / f"{stamp}-{suffix}__{source.name}"
+    target.write_bytes(content)

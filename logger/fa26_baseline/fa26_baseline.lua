@@ -38,8 +38,17 @@ end
 --- it returns nothing does not cost another session on track to ask.
 local function setupProbe()
     if not ac.getSetupSpinnerValue then return "absent" end
+    -- `ARB_F` answers "does this work at all", and it does -- it came back
+    -- 80000. `DEPLOYMENT_MAP_1_SPLIT_1_4` came back as the fallback, so the
+    -- car's declared ID is not the key. The section name the value is stored
+    -- under is the obvious next candidate, and `STRAT_MAP` is a third: it is
+    -- a custom item like the deployment ones but an ordinary spinner in the
+    -- setup screen, so it separates "custom items are not exposed" from
+    -- "these particular items are not".
     local parts = {}
-    for _, id in ipairs({ "DEPLOYMENT_MAP_1_SPLIT_1_4", "ARB_F" }) do
+    for _, id in ipairs({ "DEPLOYMENT_MAP_1_SPLIT_1_4",
+                          "CUSTOM_SCRIPT_ITEM_1052183907",
+                          "STRAT_MAP", "ARB_F" }) do
         local ok, value = pcall(ac.getSetupSpinnerValue, id, -1)
         parts[#parts + 1] = id .. ":" .. (ok and tostring(value) or "raised")
     end
