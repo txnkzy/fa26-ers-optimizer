@@ -441,3 +441,62 @@ everything pooled from the session.
 Removing them makes the measured error slightly **worse**, 1.13% → 1.21%,
 because the duplicate was quietly contributing a second copy of a good speed
 trace. **1.21% is the honest number.**
+
+---
+
+## The power curve: the data does not reach where the curves disagree
+
+Article C5.2.8 caps deployment by speed on a curve named per circuit. Two are
+implemented — Standard, full power to 290 kph and nothing by 345, and Overtake,
+full to 337 and nothing by 355 — and ten circuits name neither and fall back to
+Overtake. The brief was to fit a real curve from telemetry and use it
+everywhere.
+
+An earlier attempt at this was abandoned for a stated reason: "the ceiling it
+measures is only ever the most the driver happened to ask for." That objection
+is answerable now `core/provenance.py` knows which map each lap ran — a sample
+counts only where the map commanded the car's **maximum** and the demand latch
+had not already pulled the level down. `measure_power.py` is that measurement.
+
+The answer is that the data does not reach far enough:
+
+> no recorded map asks for full power above **290 kph**, so the curve is
+> unconstrained by measurement from there upwards
+
+290 kph is exactly where Standard's knee sits, and 47 kph below Overtake's.
+**The corpus cannot distinguish the two curves**, because no map in it asks for
+full power anywhere they disagree. Up to 290 kph the car delivers 350 kW and
+both curves permit it.
+
+One direct observation does exist, from a Suzuka qualifying lap whose map
+commands 350 kW down the whole main straight:
+
+| speed | delivered | Overtake permits |
+|---|---|---|
+| 334.7 kph | 350 kW | 350 kW |
+| 338.3 kph | 323 kW | 337 kW |
+| 340.1 kph | 292 kW | **292 kW** |
+
+Overtake predicts 340 kph exactly. That is one lap at one circuit, but it is
+the only measurement that reaches past the knee, and it supports the fallback
+rather than contradicting it.
+
+Confirmed by outcome as well as by physics: swapping the curves changes replay
+accuracy by 0.03 points (1.13% against 1.16% for Standard everywhere), and the
+fallback path is not exercised at all by the verified corpus. **No new curve is
+fitted, because there is nothing to fit it to.** `measure_power.py` is in the
+repo so this can be redone the moment a map asks for full power at 320 kph.
+
+### The 200 kW floor, and where a lap starts
+
+The floor is already modelled explicitly — `deploy_kw(..., full_throttle=...)`
+holds 200 kW for a second after each throttle application, and the store cost
+follows from it rather than being assumed.
+
+The belief it was meant to explain — that a lap can never start above about
+90% charge, because the floor spends 10% on the run to the line — does not hold
+against the data. Of 175 recorded laps, **25 start at 95% or more and several
+at exactly 100%**. What the charge at the line is depends on the strategy the
+in-lap was driven on, which is the same coupling `run_to_line` now models. So
+the qualifying map's assumption that it can start full is sound, and the
+warning when a session starts below 90% is worth keeping.
