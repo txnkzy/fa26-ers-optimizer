@@ -13,6 +13,10 @@
 
 local CAR_MATCH = "vrc_formula_alpha_2026"
 
+--: Written into every map sidecar, so a lap recorded by an older logger can
+--: be told apart from one that carries its own map.
+local LOGGER_VERSION = 2
+
 local MIN_SAMPLES = 200
 
 local sim = ac.getSim()
@@ -203,9 +207,7 @@ local function saveMaps(path, lap)
             for _, line in ipairs(splits) do out[#out + 1] = line end
         end
     end
-    io.save(path, table.concat(out, "
-") .. "
-")
+    io.save(path, table.concat(out, "\n") .. "\n")
     return true
 end
 
@@ -214,7 +216,14 @@ local function sample(car, dt)
     if car.isInPitlane then sawPitlane = true end
     if not car.isLapValid then sawInvalid = true end
     -- setup_ers_strat_maps.lut is zero-based, so delivery 0 is STRAT 1.
-    local slot = math.floor((car.mgukDelivery or 0) + 1.5)
+    --
+    -- Read through pcall like every other channel, and for the same reason
+    -- this file opens by explaining: a field the build does not have raises
+    -- rather than returning nil. This one runs every frame, so an unguarded
+    -- read on a build without it would not lose a channel, it would take the
+    -- whole app down and record nothing at all.
+    local ok, delivery = pcall(function() return car.mgukDelivery end)
+    local slot = math.floor(((ok and delivery or 0)) + 1.5)
     strats[slot] = (strats[slot] or 0) + 1
 
     local parts = {
@@ -312,8 +321,17 @@ function script.update(dt)
 
     if crossedLine then
         if started then
+            -- Which strategy the wheel spent most of this lap on, for the
+            -- sidecar. `strats` counts frames per slot; `resetLap` rebinds it
+            -- rather than clearing it, so the table handed over here stays
+            -- this lap's.
+            local dominant, most = nil, -1
+            for slot, count in pairs(strats) do
+                if count > most then dominant, most = slot, count end
+            end
             pendingSave = { rows = rows, elapsed = elapsed,
-                            sawPitlane = sawPitlane, sawInvalid = sawInvalid }
+                            sawPitlane = sawPitlane, sawInvalid = sawInvalid,
+                            strats = strats, dominant = dominant }
         end
         started = true
         resetLap()

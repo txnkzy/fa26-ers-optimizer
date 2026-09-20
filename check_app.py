@@ -399,17 +399,82 @@ check("the fast command lookup matches the slow one", _ok, _why)
 # have to hold for that to be worth anything: the Lua has to parse, and the
 # file it writes has to be the file Python reads.
 def _lua_parses() -> tuple[bool, str]:
+    """Two checks, because one of them let a broken logger ship.
+
+    `luaparser` accepted a file Assetto Corsa refused outright -- a raw line
+    break inside a double-quoted string, left behind by a shell that turned a
+    \n escape into an actual newline. The game said "unfinished string near
+    '\"'" and would not load the app; the Python parser said nothing. Four
+    laps were driven with nothing recording them.
+    """
     source = Path(A.__file__).resolve().parent / "logger" / "fa26_baseline" / "fa26_baseline.lua"
+    sys.path.insert(0, str(Path(A.__file__).resolve().parent))
+    import lua_lint
+    issues = lua_lint.check(source)
+    if issues:
+        return False, issues[0]
     try:
         from luaparser import ast as _lua_ast
     except ImportError:
-        return True, "luaparser not installed, skipped (pip install luaparser)"
+        return True, "lexed clean; luaparser not installed (pip install luaparser)"
     try:
         _lua_ast.parse(source.read_text(encoding="utf-8"))
     except Exception as exc:
         return False, "%s: %s" % (type(exc).__name__, exc)
-    return True, "parses"
+    return True, "lexed and parsed"
 
+
+def _lua_contract() -> tuple[bool, str]:
+    """The two halves of the logger, and the Python that reads what it writes.
+
+    Three ways this file has gone wrong that a parser cannot see:
+
+      * `saveMaps` reads a field off the finished lap that the table handed to
+        it never carried. nil, then a raise, then a pcall swallowing it, then
+        no sidecar and no explanation.
+      * a name used before it is declared -- `tostring(nil)` is "nil", written
+        into the file, and nobody notices until the value is needed.
+      * the keys the Lua writes drifting from the keys `provenance` reads.
+    """
+    import re
+    source = (Path(A.__file__).resolve().parent / "logger" / "fa26_baseline"
+              / "fa26_baseline.lua").read_text(encoding="utf-8")
+
+    # every `lap.<field>` saveMaps reads, against the table it is handed
+    body = source[source.index("local function saveMaps"):]
+    body = body[:body.index("\nend\n")]
+    wanted = set(re.findall(r"\blap\.([A-Za-z_]\w*)", body))
+    handed = source[source.index("pendingSave = {"):]
+    handed = handed[:handed.index("}")]
+    carried = set(re.findall(r"(\w+)\s*=", handed))
+    missing = sorted(wanted - carried)
+    if missing:
+        return False, "saveMaps reads lap.%s, which the saved lap never carries" % (
+            ", lap.".join(missing))
+
+    # every global-looking name saveMaps uses has to be declared above it.
+    # String contents go first: the keys it writes are shouted too, and
+    # "DOMINANT_STRAT=" is not a reference to anything.
+    code = re.sub(r'"[^"\n]*"', '""', re.sub(r"'[^'\n]*'", "''", body))
+    for name in sorted(set(re.findall(r"\b([A-Z][A-Z0-9_]{2,})\b", code))):
+        declared = re.search(r"local\s+%s\s*=" % name, source)
+        if not declared or declared.start() > source.index("local function saveMaps"):
+            return False, "%s is used in saveMaps but never declared above it" % name
+
+    # the keys it writes, against the keys provenance reads back
+    written = set(re.findall(r'"([A-Z_]+)="', body)) | {
+        m for m in ("MAP_", "SPLIT_") if m in body}
+    sys.path.insert(0, str(Path(A.__file__).resolve().parent / "core"))
+    import provenance as _prov
+    reader = Path(_prov.__file__).read_text(encoding="utf-8")
+    for key in sorted(written):
+        if key not in reader:
+            return False, "the logger writes %s and provenance never reads it" % key
+    return True, "%d fields carried, %d keys matched" % (len(wanted), len(written))
+
+
+_ok, _why = _lua_contract()
+check("the logger's writer and reader agree", _ok, _why)
 
 _ok, _why = _lua_parses()
 check("the in-game logger is valid Lua", _ok, _why)
