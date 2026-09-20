@@ -1880,7 +1880,11 @@ class Handler(BaseHTTPRequestHandler):
                 _DETAIL_CACHE.clear()
                 self._json(readiness())
             elif route == "/api/installlogger":
-                install.install_logger()
+                # `force` is the page saying the user has read the warning.
+                # Without it this refuses while the game is running, because
+                # CSP reloads a Lua app whose file changes and a reload throws
+                # away the lap being recorded.
+                install.install_logger(force=bool(body.get("force")))
                 self._json(readiness())
             elif route == "/api/cancel":
                 self._json({"stopping": ENGINE.cancel()})

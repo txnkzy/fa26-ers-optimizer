@@ -129,10 +129,30 @@ async function installLogger(button) {
   try {
     await post("/api/installlogger", {});
   } catch (err) {
-    showFolderError(err);
-    button.disabled = false;
-    button.textContent = "Install the logger";
-    return;
+    // The one refusal worth offering a way past: the game watches this file
+    // and restarts the logger when it changes, which throws away the lap
+    // being recorded. Worth doing anyway between sessions, never mid-lap.
+    if (String(err.message || err).indexOf("Assetto Corsa is running") === 0) {
+      if (confirm(err.message + "\n\nUpdate it anyway?")) {
+        try {
+          await post("/api/installlogger", { force: true });
+        } catch (second) {
+          showFolderError(second);
+          button.disabled = false;
+          button.textContent = "Install the logger";
+          return;
+        }
+      } else {
+        button.disabled = false;
+        button.textContent = "Install the logger";
+        return;
+      }
+    } else {
+      showFolderError(err);
+      button.disabled = false;
+      button.textContent = "Install the logger";
+      return;
+    }
   }
   button.textContent = "Installed";
   $("setup-title").textContent = "Ready";

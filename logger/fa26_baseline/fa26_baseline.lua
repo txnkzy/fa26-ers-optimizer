@@ -250,6 +250,14 @@ local function saveMaps(path, lap)
     return true
 end
 
+--- Declared once rather than built per frame. The strategy is read through
+--- pcall like every other channel, and a closure written inline there would be
+--- a fresh allocation 120 times a second -- CSP logged a 31 ms hitch in
+--- `update()` on the session that first ran it.
+local function readDelivery(car)
+    return car.mgukDelivery
+end
+
 local function sample(car, dt)
     elapsed = elapsed + dt
     if car.isInPitlane then sawPitlane = true end
@@ -261,7 +269,7 @@ local function sample(car, dt)
     -- rather than returning nil. This one runs every frame, so an unguarded
     -- read on a build without it would not lose a channel, it would take the
     -- whole app down and record nothing at all.
-    local ok, delivery = pcall(function() return car.mgukDelivery end)
+    local ok, delivery = pcall(readDelivery, car)
     local slot = math.floor(((ok and delivery or 0)) + 1.5)
     strats[slot] = (strats[slot] or 0) + 1
 

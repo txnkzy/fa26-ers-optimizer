@@ -838,3 +838,37 @@ deployment. The same signature as an Austin lap on 19 September, and in both
 cases it is **the last lap of the session** — the ERS channels stop updating
 while position and speed keep coming. `lap.problem()` refuses it, which is the
 guard added for exactly this, working on a case it had not seen.
+
+---
+
+## A lap lost to a file being replaced under a running game
+
+A 1:38.867 at Austin was driven and never reached disk. Assetto Corsa's own log
+has the whole story:
+
+```
+11:35:19  Lua: <App: FA26 Baseline Logger> loaded and ready to run
+11:39-42  three laps written
+11:58:18  the logger file was overwritten
+12:00:46  Reloading Lua script [App: FA26 Baseline Logger]
+12:02     session ended, nothing further written
+```
+
+CSP watches these files and hot-reloads a Lua app the moment one changes. A
+reload resets **every local the script holds** — whether it is recording, the
+samples gathered so far, how many laps it has saved, the session stamp it names
+them with. The lap in progress is discarded and the recorder waits for a fresh
+line crossing.
+
+`install_logger` refuses while the game is running now, and says why. The page
+offers to do it anyway, because between sessions that is exactly the right
+moment; mid-lap it is not.
+
+Worth being plain about how this happened: the file was written **by me**,
+reinstalling the logger while the user was on track, because it did not occur
+to me to check. The guard is the fix, and it protects anyone who clicks the
+update button mid-session as well.
+
+The same log caught something else — `Slow script: App: FA26 Baseline Logger,
+31 ms`. The strategy read was allocating a closure per frame at 120 Hz. The
+function is declared once now.

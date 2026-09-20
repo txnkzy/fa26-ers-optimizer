@@ -344,12 +344,27 @@ def logger_current(root: Path | None = None) -> bool:
     return True
 
 
-def install_logger(root: Path | None = None) -> Path:
+def install_logger(root: Path | None = None, force: bool = False) -> Path:
     """Copy the logger into the user's Assetto Corsa.
 
     Two files into a folder of its own; it overwrites nothing else and is the
     one step a new user would otherwise have to be talked through.
+
+    Refused while the game is running, because CSP watches these files and
+    hot-reloads a Lua app the moment one changes. A reload resets every local
+    the script holds -- whether it is recording, the samples gathered so far,
+    how many laps it has saved -- so writing this file mid-session silently
+    throws away the lap in progress. It happened: a 1:38.867 at Austin was
+    driven at 11:58, this file was written at 11:58:18, CSP reloaded the
+    script at 12:00:46, and the lap was never written to disk. `force` is for
+    a caller that has already said so and been told to go ahead anyway.
     """
+    if not force and game_running().get("running"):
+        raise MissingCarData(
+            "game_running",
+            "Assetto Corsa is running. Updating the logger now would restart "
+            "it mid-session and throw away the lap you are on. Close the game "
+            "first, or finish the session and come back.")
     root = root or find_root()
     if root is None:
         raise MissingCarData(

@@ -304,6 +304,34 @@ check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
 
+# --- the logger is never replaced under a running game ----------------------
+# CSP watches these files and hot-reloads a Lua app the moment one changes.
+# A reload resets every local the script holds -- whether it is recording, the
+# samples so far, how many laps it has saved -- so writing this file
+# mid-session throws away the lap in progress. It happened: a 1:38.867 at
+# Austin, the file written at 11:58:18, the script reloaded at 12:00:46, and
+# the lap never reached disk.
+def _logger_install_guarded() -> tuple[bool, str]:
+    import install as _install
+    real = _install.game_running
+    _install.game_running = lambda: {"running": True, "since": 0, "for_s": 0}
+    try:
+        _install.install_logger()
+        return False, "it installed the logger while the game was running"
+    except _install.MissingCarData as exc:
+        if exc.kind != "game_running":
+            return False, "refused for the wrong reason: %s" % exc.kind
+    except Exception as exc:
+        return False, "refused with the wrong error: %r" % exc
+    finally:
+        _install.game_running = real
+    return True, "refused, and `force` is there for a caller that has asked"
+
+
+_ok, _why = _logger_install_guarded()
+check("the logger is not replaced mid-session", _ok, _why)
+
+
 # --- super-clip stays reachable --------------------------------------------
 # Super-clipping was in the action space and in no starting map, which on an
 # energy-neutral search is the same as not being there: one zone of harvest
