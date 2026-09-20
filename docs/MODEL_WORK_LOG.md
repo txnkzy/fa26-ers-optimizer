@@ -500,3 +500,28 @@ at exactly 100%**. What the charge at the line is depends on the strategy the
 in-lap was driven on, which is the same coupling `run_to_line` now models. So
 the qualifying map's assumption that it can start full is sound, and the
 warning when a session starts below 90% is worth keeping.
+
+---
+
+## Left for you
+
+Two things in the brief cannot be done from here, and one was asked to be left
+alone.
+
+**Another machine.** Everything here was tested on one. Two external reports
+have surfaced two real bugs, which says the latent rate is higher than one
+machine can find. This needs somebody else's Windows install, somebody else's
+OneDrive redirection, somebody else's Assetto Corsa folder — and no amount of
+testing here substitutes for it.
+
+**The Austin on-track A/B.** The qualifying fix predicts about 3 s at Austin
+and it is model-verified only. The model is now honest about its own error, and
+this is exactly the kind of claim that error band does not cover: it is a
+prediction about a map nobody has driven. Drive it both ways and the answer is
+settled either way.
+
+**VRC.** Flagged, not acted on, as asked. The repository is public and they
+have never been contacted.
+
+One thing is now verified that was not: the logger's lap-time handling, checked
+against all 179 recorded files rather than against the game. See above.
