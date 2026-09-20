@@ -872,3 +872,38 @@ update button mid-session as well.
 The same log caught something else — `Slow script: App: FA26 Baseline Logger,
 31 ms`. The strategy read was allocating a closure per frame at 120 Hz. The
 function is declared once now.
+
+---
+
+## `Laps saved: 0`, and nothing anywhere said why
+
+A session loaded the logger cleanly, ran for fifteen minutes, and wrote nothing.
+No parse error, no reload, no line in any log. The window said what it always
+says.
+
+`script.update`'s line-crossing branch runs **once per lap** and is the frame
+that decides whether that lap is saved. It had this in it, outside any `pcall`:
+
+```lua
+if ok and config and config.filename then file = config.filename end
+```
+
+`config` is a CSP object, and indexing a field one of those does not have
+**raises** rather than returning nil — which is the first thing this file's own
+header explains, and which was ignored one function further down. The raise
+takes out the branch on the one frame that matters, and the lap is gone with no
+symptom at all.
+
+Everything the sidecar wants is now in `sidecarExtras`, and the branch calls it
+through one `pcall`. A check enforces that the branch touches nothing of the
+game's directly: it strips comments and strings and fails on any bare `ac.`
+reference, naming it. Run against the version that lost the laps, it says *the
+crossing branch reaches for ac.INIConfig directly*.
+
+**The lap is the thing worth having. The sidecar is worth having too, and it is
+never worth the lap.**
+
+That is three faults in the same file in one day — a mangled string that stopped
+it parsing, a half-applied edit that would have stopped it writing, and an
+unguarded field read that stopped it recording. Each one shipped because the
+check that would have caught it did not exist yet. Each one now has it.

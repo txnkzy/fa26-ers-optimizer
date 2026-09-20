@@ -27,12 +27,16 @@ local LOGGER_VERSION = 3
 --- can read a setup file perfectly well, and always could. What it never knew
 --- was *which* file, which is the whole of the ambiguity this is here to
 --- remove.
+--- The index is inside the pcall as well as the call. On this build reaching
+--- for a name `ac` does not have returns nil, but the header of this file says
+--- it can raise, and a raise out here happens at load: no app, no laps, and a
+--- line in a log nobody reads. One closure, once, at startup.
 local setupFile = ""
-if ac.onSetupFile then
-    pcall(ac.onSetupFile, function(_operation, filename)
+pcall(function()
+    ac.onSetupFile(function(_operation, filename)
         setupFile = filename or ""
     end)
-end
+end)
 
 --- What the setup API returns, recorded once per lap so the question of why
 --- it returns nothing does not cost another session on track to ask.
@@ -258,6 +262,23 @@ local function readDelivery(car)
     return car.mgukDelivery
 end
 
+--- Everything the sidecar wants that is not the lap itself, behind one call.
+---
+--- Every line of this touches the game's API, and every one of them can raise
+--- -- CSP objects raise on a field they do not have rather than returning nil,
+--- which this file's own header says and which was then ignored one function
+--- along. It exists as a single function so that the one place it is called
+--- from can wrap it in a single pcall, and so that no future addition ends up
+--- outside that wrapping by being written in line.
+local function sidecarExtras()
+    local file = setupFile
+    if file == "" then
+        local config = ac.INIConfig.currentSetup()
+        if config and config.filename then file = config.filename end
+    end
+    return file, setupProbe()
+end
+
 local function sample(car, dt)
     elapsed = elapsed + dt
     if car.isInPitlane then sawPitlane = true end
@@ -376,20 +397,22 @@ function script.update(dt)
             for slot, count in pairs(strats) do
                 if count > most then dominant, most = slot, count end
             end
-            -- The setup file and the probe are read here rather than in
-            -- `saveMaps`, so both belong to the lap that just ended rather
-            -- than to whatever the next frame finds.
-            local file = setupFile
-            if file == "" and ac.INIConfig and ac.INIConfig.currentSetup then
-                local ok, config = pcall(ac.INIConfig.currentSetup)
-                if ok and config and config.filename then file = config.filename end
-            end
-            local probed, probe = pcall(setupProbe)
+            -- One pcall around everything the sidecar wants, and nothing of
+            -- the game's touched outside it. `config.filename` was read bare
+            -- here, and indexing a field a CSP object does not have raises
+            -- rather than returning nil -- on the one frame per lap that
+            -- decides whether the lap is saved at all. The app went on
+            -- running, the window said what it always says, and a session
+            -- came and went with `Laps saved: 0`.
+            --
+            -- The lap is the thing worth having. The sidecar is worth having
+            -- too, and it is never worth the lap.
+            local ok, file, probe = pcall(sidecarExtras)
             pendingSave = { rows = rows, elapsed = elapsed,
                             sawPitlane = sawPitlane, sawInvalid = sawInvalid,
                             strats = strats, dominant = dominant,
-                            setupFile = file,
-                            setupProbe = probed and probe or "raised" }
+                            setupFile = ok and file or setupFile,
+                            setupProbe = ok and probe or "raised" }
         end
         started = true
         resetLap()

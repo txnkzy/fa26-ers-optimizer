@@ -304,6 +304,31 @@ check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
 
+def _crossing_branch_is_guarded() -> tuple[bool, str]:
+    """Nothing in the branch that saves a lap may touch the game directly."""
+    import re
+    source = (Path(A.__file__).resolve().parent / "logger" / "fa26_baseline"
+              / "fa26_baseline.lua").read_text(encoding="utf-8")
+    start = source.index("if crossedLine then")
+    branch = source[start:source.index("pendingSave = {", start)]
+    # comments and strings first: this checks code, not prose
+    branch = re.sub(r"--\[\[.*?\]\]", "", branch, flags=re.S)
+    branch = re.sub(r"--[^\n]*", "", branch)
+    branch = re.sub(r'"[^"\n]*"', '""', branch)
+    bare = re.findall(r"\bac\.\w+", branch)
+    if bare:
+        return False, ("the crossing branch reaches for %s directly; put it in "
+                       "sidecarExtras and let the pcall cover it"
+                       % ", ".join(sorted(set(bare))))
+    if "pcall(sidecarExtras)" not in branch:
+        return False, "the crossing branch no longer calls sidecarExtras through pcall"
+    return True, "nothing but a single guarded call"
+
+
+_ok, _why = _crossing_branch_is_guarded()
+check("losing the sidecar cannot lose the lap", _ok, _why)
+
+
 # --- the logger is never replaced under a running game ----------------------
 # CSP watches these files and hot-reloads a Lua app the moment one changes.
 # A reload resets every local the script holds -- whether it is recording, the
