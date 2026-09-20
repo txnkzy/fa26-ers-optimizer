@@ -1119,3 +1119,66 @@ given, so in it the alternative to clipping is simply harvesting less, which is
 free. That asymmetry would bias the search against clipping wherever the car
 genuinely needs energy braking cannot supply — and a qualifying lap, which is
 exactly that case, has not been tested this way.
+
+---
+
+## Why the tool does not super-clip the way a real 2026 car does
+
+The driver's objection was direct: real cars super-clip throughout a lap at
+Albert Park, and this tool puts one 283 m zone on the run to the line. The
+regulations are on his side —
+
+> Super clipping is used to supplement traditional regenerative braking,
+> especially at circuits with few heavy-braking zones like Albert Park…
+> Drivers are expected to use their entire battery's capacity during a single
+> lap, but it takes just under 20 seconds of regenerative braking to recharge
+> it. The teams have to make up that deficit every lap, which is where super
+> clipping fills that gap.
+
+**The car in this mod has no such deficit.** Measured from the driver's own
+telemetry, fifteen Albert Park laps:
+
+| | |
+|---|---|
+| time off the throttle | 26–31 s a lap |
+| recovered off the throttle | **5.2–5.8 MJ** |
+| recovered at full throttle (super-clip) | 0.01–0.39 MJ |
+| battery capacity | 4.0 MJ |
+
+Lifting and braking alone return **more than a full battery every lap**. A real
+2026 car gets roughly 4 MJ from just under 20 s of braking and is still short;
+this one is not short at all, so the thing that forces real drivers to clip
+constantly does not apply to it. That is a difference between the mod and
+Formula 1, not between the model and the mod.
+
+And the search is no longer blind to it. Started from a map clipping 75%, 55%
+or 30% of the lap, with every move available, it walks back to **zero clip
+zones** every time and lands on the same lap time. That is its answer, not an
+artefact of where it began.
+
+## What the same investigation did turn up
+
+**A fragment can destroy a whole session.** `select` takes the session's best
+time from the filename and keeps everything within 3% of it. One 35.525 s file
+among seventeen Albert Park laps — a partial lap the logger wrote with the
+wrong track length — set the bar at 36.6 s, and the session collapsed to that
+one broken lap. `lap.problem` catches the file, but long after `select` has
+thrown the session away. Anything a third quicker than the session's own median
+is now treated as a fragment, and the session went from 1 usable lap to 16.
+
+**The race map's battery floor costs more than super-clipping ever could.**
+`min_store_fraction = 0.25` keeps a quarter of the battery in hand all lap, on
+the reasoning that a repeating lap neutral at zero is still neutral and leaves
+nothing for a defensive burst. On this session it is expensive:
+
+| floor | lap | deployed | recovered | clip zones |
+|---|---|---|---|---|
+| 25% (in the code) | 82.274 | 4.96 MJ | 5.55 MJ | 0 |
+| 10% | 81.813 | 5.52 MJ | 5.55 MJ | 0 |
+| 0% | **81.612** | 5.55 MJ | 5.55 MJ | 0 |
+
+**0.66 s**, and 0.6 MJ of recovered energy held back unspent. The car is
+energy-limited at 5.55 MJ and the floor was stopping it reaching that. This is
+a judgement call rather than a bug — a race map that empties the battery has
+nothing to defend with — but it is a second and a half of the driver's own lap
+time, and it is larger than the super-clip effect that prompted the question.

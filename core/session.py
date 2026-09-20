@@ -18,6 +18,7 @@ or too scattered to average.
 from __future__ import annotations
 
 import re
+import statistics
 import time
 from pathlib import Path
 
@@ -27,6 +28,11 @@ NAME_RE = re.compile(r"^(?P<prefix>.+)__lap(?P<num>\d+)_(?P<time>[\dm.]+)s(?P<ta
 
 #: Keep laps no slower than this multiple of the session best.
 TOLERANCE = 1.03
+#: A lap quicker than this share of the session's median is a fragment, not
+#: a lap. Real sessions spread ten or fifteen percent; nothing genuine is a
+#: third quicker than the middle of its own session.
+FRAGMENT_SHARE = 0.70
+
 #: Below this many kept laps, use the single best lap instead of averaging.
 #: Two is enough. Three was throwing away a lap rather than pooling it: of 46
 #: recorded sessions, 13 -- Monza, Monaco, Daytona, Suzuka, Madrid, Bahrain,
@@ -120,6 +126,22 @@ def select(paths, tolerance: float = TOLERANCE,
         seen.add(value)
         unique.append((value, path))
     timed = unique
+    # A fragment is not a fast lap. The logger sometimes writes a partial one
+    # -- a session left mid-lap, or a track length it read wrong -- and such a
+    # file carries a time far below anything really driven. Everything below
+    # rests on the best time in the session, so one 35.525 s file among
+    # seventeen Albert Park laps set the bar at 36.6 s and the whole session
+    # collapsed to that one broken lap. `lap.problem` catches the file, but it
+    # runs long after this has already thrown the session away.
+    #
+    # Nothing here loads a lap -- this is meant to be filename arithmetic --
+    # so the test is against the session's own middle. A real session spreads
+    # ten or fifteen percent from best to worst; nothing genuine is a third
+    # quicker than the median.
+    middle = statistics.median([t for t, _p in timed])
+    whole = [(t, p) for t, p in timed if t >= middle * FRAGMENT_SHARE]
+    if whole:
+        timed = whole
     best = timed[0][0]
     kept = [p for t, p in timed if t <= best * tolerance]
     return kept if len(kept) >= minimum else [timed[0][1]]
