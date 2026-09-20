@@ -31,8 +31,15 @@ TOLERANCE = 1.03
 #: Two is enough. Three was throwing away a lap rather than pooling it: of 46
 #: recorded sessions, 13 -- Monza, Monaco, Daytona, Suzuka, Madrid, Bahrain,
 #: Spa and the Hungaroring among them -- had two consistent laps and were
-#: modelled on one of them. Measured out of sample, keeping both is better:
-#: 0.95% mean against 1.01%, and 2.62% worst against 2.86%.
+#: modelled on one of them.
+#:
+#: The mean error does not separate the two settings. It did when this was
+#: changed (0.95% against 1.01%) and it does not now (0.90 against 0.89),
+#: because the laps inflating the three-lap figure were the corrupt duplicates
+#: that are refused outright since. What still separates them is bias, -0.01%
+#: against -0.12%, and the worst case, 2.52% against 2.86% -- and the plain
+#: fact that discarding a lap you have is hard to argue for when the
+#: measurement is indifferent.
 MIN_LAPS = 2
 
 #: A tighter consistency window was tried here -- keep only laps within 1.5%
