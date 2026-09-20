@@ -576,3 +576,90 @@ is wrapped twice — a CSP without it loses the sidecar, not the lap — but the
 first real proof is a lap driven with the new logger, whose `.map` file should
 appear beside it and whose replay should report itself as recorded rather than
 matched.
+
+---
+
+## Auditing what was decided on the contaminated corpus
+
+Every constant in the model was chosen by measuring replay error on a set of
+laps a quarter of which were scored against the wrong strategy's map. So each
+is a claim that has to survive being made again, and each was made again.
+
+| decision | verdict |
+|---|---|
+| Combined-grip envelope, n = 4 | **held up** — 1.21%, against 1.49% at n = 2 and 1.22% at n = 3, 6 and 8 |
+| Speed ceiling margin, 1.00 | **held up** — 1.21%, against 1.88% at 0.98 and 2.12% at 1.05 |
+| Speed smoothing, 15 samples | **held up** — indistinguishable from 5 to 41 |
+| Drag bin width, 50 m | **held up** — indistinguishable from 25 m to 200 m |
+| Samples per drag bin, 6 | **held up** — indistinguishable from 3 to 24 |
+| Traction percentile, p97 | **held up** — 1.21%, p95 1.20%, p99 1.23% |
+| Unloading the traction fit | **held up** — and the mismatch between the fit's circle and the simulator's n = 4 envelope costs nothing measurable |
+| Harvest in the drag balance | **held up** — leaving it out costs 0.10 points and 0.19 of bias |
+| Motor efficiency, 0.93 | **held up** — 0.88 scores 1.19%, which is inside noise and not a reason to move a physical constant |
+| Power reduction, 100 kW/s | **held up** — 1.21%, against 1.30% at 50 and 1.35% unlimited |
+| Instant-cut threshold, 210 kph | **held up** — 1.18% at 150, inside noise |
+| No settling for a one-shot replay | **held up** — 1.21% against 1.75% with a settling lap |
+| Harvest taper on slot mean | **held up** — 101% of measured harvest, against 98% on the slot maximum |
+| **Lateral-load fraction, 0.7** | **looked changed, and was not** — see below |
+
+### The one that looked like it changed
+
+Raising `lat_fraction` from 0.7 to 0.9 improved the mean from 1.21% to 1.12%,
+monotonically across 0.5 → 0.9. That is exactly the shape of a real effect, and
+exactly the shape of the corpus's own bias: raising it treats fewer points as
+cornering, which leaves fewer of them capped, which frees the model — and the
+replayed laps are 1% faster than the sessions they are fitted on, so **anything
+that loosens the ceiling flatters itself**.
+
+Splitting the corpus on that:
+
+| lat_fraction | laps faster than their session | laps slower |
+|---|---|---|
+| 0.7 | 1.29% | **1.10%** |
+| 0.8 | 1.18% | **1.10%** |
+| 0.9 | 1.14% | **1.10%** |
+| 1.0 | 1.09% | 1.12% |
+
+On the fourteen laps where the model is not being asked to invent anything, 0.7,
+0.8 and 0.9 are **identical**, and the whole apparent gain sits on the other
+half. It was the selection gradient. **0.7 stands.**
+
+This is the check the pooling-tolerance mistake needed and did not get.
+
+### Pooling, re-measured on the corpus as it now stands
+
+| tolerance | mean | bias | laps fitted |
+|---|---|---|---|
+| 1.0% | 0.84% | −0.15% | 2.2 |
+| 2.0% | 0.86% | −0.09% | 2.3 |
+| **3.0% (kept)** | **0.90%** | **−0.01%** | 2.6 |
+| 5.0% | 1.11% | +0.34% | 4.1 |
+
+Same answer as before: 1–3% within 0.06 points of each other, 5% and looser
+clearly worse, and 3% has the least bias of any of them. **3% stands**, and the
+on-track result that contradicted the tighter window stands with it.
+
+**`MIN_LAPS` needs a correction.** It was moved from 3 to 2 on a measured gap of
+0.95% against 1.01%. That gap has since closed — 1, 2, 3 and 4 now score 0.90,
+0.90, 0.89 and 0.87 — because the laps that were inflating the three-lap figure
+were the corrupt duplicates now refused outright. The mean no longer separates
+them. Two still has the best bias (−0.01% against −0.12%) and the best worst
+case (2.52% against 2.86%), and thirteen of forty-six sessions had two
+consistent laps and were being modelled on one, so it stays at two — but **the
+number originally quoted for it no longer holds.**
+
+### What this audit cannot reach
+
+Decisions about the *search* — the extra starting points, subdividing a solved
+map rather than seeding a fine one, VRC's own maps as seeds — are comparisons
+between one simulated map and another. No lap attribution enters them, so the
+contamination never touched them; what they do depend on is the model being
+right, and the model has changed. The old-solver-against-new benchmark is what
+re-validates them, and it says 0 of 5 circuits worse in either strategy.
+
+One stated justification did not reproduce. The brake-based test for "was the
+driver flat here" is argued in the code from a Monza race replay losing two
+thirds of its harvest to the alternative. On the clean corpus the alternatives
+are indistinguishable — all four score 1.21% and 100–101% of measured harvest.
+The rule is not wrong, and the brake test is still the physically right
+question; but the number behind it belongs to the old measurement.
