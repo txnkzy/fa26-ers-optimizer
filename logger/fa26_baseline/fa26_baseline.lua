@@ -37,6 +37,9 @@ local lastSpline = 0
 local started = false
 local sawPitlane = false
 local sawInvalid = false
+--: Every strategy slot the wheel sat on during this lap, as a set. The driver
+--: changes it mid-lap often enough that one number is not the answer.
+local strats = {}
 
 local lapsSaved = 0
 local lastSavedName = ""
@@ -131,12 +134,88 @@ local function resetLap()
     elapsed = 0
     sawPitlane = false
     sawInvalid = false
+    strats = {}
+end
+
+--- How many splits and fields a deployment map has, and how many maps exist.
+--- Mirrors cars/fa26.py; if the car ever gains more, both move together.
+local MAPS = 12
+local SPLITS_PER_MAP = 24
+local FIELDS_PER_SPLIT = 6
+
+--- The deployment map the car is running, read out of the setup rather than
+--- inferred afterwards.
+---
+--- This is the whole point of the file it writes. Attribution used to be a
+--- reconstruction: take the newest setup snapshot written before the lap, on
+--- the assumption the lap was driven on STRAT 1, and hope. Of 178 recorded
+--- laps only 36 survived that, and a quarter of the failures were laps driven
+--- on a different strategy entirely. None of it was a modelling problem. It
+--- was not writing down what the car was doing at the time.
+---
+--- `ac.getSetupSpinnerValue` returns the live value of a setup item by its
+--- declared ID, which is exactly what a deployment map is made of, so there is
+--- nothing to infer. Wrapped, because a CSP without it should cost a sidecar
+--- file rather than the lap.
+local function readMap(index)
+    local splits = {}
+    for s = 1, SPLITS_PER_MAP do
+        local values = {}
+        local live_split = false
+        for f = 1, FIELDS_PER_SPLIT do
+            local id = string.format("DEPLOYMENT_MAP_%d_SPLIT_%d_%d", index, s, f)
+            local ok, value = pcall(ac.getSetupSpinnerValue, id, 0)
+            value = (ok and type(value) == "number") and value or 0
+            values[f] = string.format("%d", math.floor(value + 0.5))
+            if value ~= 0 then live_split = true end
+        end
+        -- An empty split is six zeroes and says nothing; only live ones are
+        -- written, so a map with two zones is two lines rather than twenty-four.
+        if live_split then
+            splits[#splits + 1] = string.format("SPLIT_%d=%s", s, table.concat(values, ","))
+        end
+    end
+    return splits
+end
+
+--- Everything needed to attribute this lap, beside the lap.
+local function saveMaps(path, lap)
+    if not ac.getSetupSpinnerValue then return false end
+    local seen = {}
+    for slot in pairs(lap.strats) do seen[#seen + 1] = slot end
+    table.sort(seen)
+    if #seen == 0 then return false end
+
+    local out = {
+        "; The deployment maps live while this lap was recorded, read from the",
+        "; setup as it finished. Written by the logger so the lap needs no",
+        "; guessing about which map it ran.",
+        "[LAP]",
+        "LOGGER=" .. tostring(LOGGER_VERSION),
+        string.format("TRACK_LENGTH_M=%.1f", trackLength()),
+        "STRATS=" .. table.concat(seen, ","),
+        "DOMINANT_STRAT=" .. tostring(lap.dominant or seen[1]),
+    }
+    for _, slot in ipairs(seen) do
+        if slot >= 1 and slot <= MAPS then
+            out[#out + 1] = string.format("[MAP_%d]", slot)
+            local splits = readMap(slot)
+            for _, line in ipairs(splits) do out[#out + 1] = line end
+        end
+    end
+    io.save(path, table.concat(out, "
+") .. "
+")
+    return true
 end
 
 local function sample(car, dt)
     elapsed = elapsed + dt
     if car.isInPitlane then sawPitlane = true end
     if not car.isLapValid then sawInvalid = true end
+    -- setup_ers_strat_maps.lut is zero-based, so delivery 0 is STRAT 1.
+    local slot = math.floor((car.mgukDelivery or 0) + 1.5)
+    strats[slot] = (strats[slot] or 0) + 1
 
     local parts = {
         string.format("%.4f", elapsed),
@@ -185,6 +264,9 @@ local function saveLap(lap, officialTime)
         trackTag(), ac.getCarID(0), sessionStamp, lapsSaved + 1,
         formatLapTime(shown) .. (lap.sawPitlane and "_pit" or ""))
     io.save(baseDir() .. "/" .. name, header() .. "\n" .. table.concat(lap.rows, "\n") .. "\n")
+    -- Beside the lap, the maps it was driven on. Same name, different
+    -- suffix, so nothing looking for laps picks it up.
+    pcall(saveMaps, baseDir() .. "/" .. name:gsub("%.csv$", ".map"), lap)
 
     lapsSaved = lapsSaved + 1
     lastSavedName = name

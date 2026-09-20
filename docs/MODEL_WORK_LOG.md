@@ -525,3 +525,54 @@ have never been contacted.
 
 One thing is now verified that was not: the logger's lap-time handling, checked
 against all 179 recorded files rather than against the game. See above.
+
+---
+
+# Round two
+
+## Attribution written down, not worked out
+
+Of 178 recorded laps only 36 could be honestly attributed to a map, and a
+quarter of the failures were laps driven on one strategy and scored against
+another. None of that was a modelling problem. It was the logger not writing
+down what the car was doing at the time, and everything downstream trying to
+infer it later from setup-file timestamps.
+
+CSP exposes `ac.getSetupSpinnerValue(id, fallback)`, which returns the live
+value of a setup item by its declared ID — and a deployment map *is* setup
+items, `DEPLOYMENT_MAP_<n>_SPLIT_<s>_<f>`. There is nothing to infer.
+
+So the logger reads them. At the moment a lap is captured it takes every
+strategy slot the wheel sat on during that lap, reads that slot's 24 splits
+out of the setup, and writes them beside the lap as `<lapname>.map`:
+
+```
+[LAP]
+LOGGER=2
+TRACK_LENGTH_M=5770.0
+STRATS=1,2
+DOMINANT_STRAT=2
+[MAP_2]
+SPLIT_1=0,317,317,454,350,0
+...
+```
+
+`provenance.attribute` reads that first and consults no snapshot at all when it
+finds it. The behavioural matching stays, for the 178 laps already on disk.
+
+**Verified.** An existing lap — one driven on STRAT 2, which is exactly the
+case that used to be misattributed — was copied, given a sidecar written byte
+for byte the way the Lua writes it, and handed to the real `attribute()` with
+**no snapshots**. It came back with the right strategy, the right map, marked
+`recorded`, having ignored a second strategy's map deliberately placed in the
+same file; and when snapshots *were* offered it still preferred what was
+written down. That round trip is now a permanent check, as is parsing the Lua
+— `luaparser` catches a deliberately broken `local function` and passes the
+real file.
+
+**Not verified.** Whether `ac.getSetupSpinnerValue` returns what it should
+in-game. The function is in this CSP install's own API definitions and the call
+is wrapped twice — a CSP without it loses the sidecar, not the lap — but the
+first real proof is a lap driven with the new logger, whose `.map` file should
+appear beside it and whose replay should report itself as recorded rather than
+matched.

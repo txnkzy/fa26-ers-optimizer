@@ -103,6 +103,7 @@ page has no framework and no build step.
 | `core/recharge.py` | per-circuit recharge allowances, from FIA notices |
 | `cars/fa26.py` | the car: power curves, limits, map encoding |
 | `core/provenance.py` | which map a recorded lap was actually driven on |
+| `<lap>.map` | the maps that lap ran, written beside it by the logger |
 | `logger/` | the in-game app that records laps |
 
 `docs/FA26_FINDINGS.md` is the engineering record — what was measured, what was

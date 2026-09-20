@@ -304,6 +304,90 @@ check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
 
+# --- the logger's own record ----------------------------------------------
+# The logger now writes the deployment maps a lap was driven on into a file
+# beside it, so attribution is a read rather than a reconstruction. Two things
+# have to hold for that to be worth anything: the Lua has to parse, and the
+# file it writes has to be the file Python reads.
+def _lua_parses() -> tuple[bool, str]:
+    source = Path(A.__file__).resolve().parent / "logger" / "fa26_baseline" / "fa26_baseline.lua"
+    try:
+        from luaparser import ast as _lua_ast
+    except ImportError:
+        return True, "luaparser not installed, skipped (pip install luaparser)"
+    try:
+        _lua_ast.parse(source.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return False, "%s: %s" % (type(exc).__name__, exc)
+    return True, "parses"
+
+
+_ok, _why = _lua_parses()
+check("the in-game logger is valid Lua", _ok, _why)
+
+
+def _sidecar_round_trips() -> tuple[bool, str]:
+    """A lap carrying its own map attributes with no snapshots in sight.
+
+    The sidecar is written here exactly as `saveMaps` in the Lua writes it --
+    the same format string, transcribed -- so a change to either side that
+    leaves them disagreeing shows up as a failure rather than as laps quietly
+    falling back to being matched by behaviour.
+    """
+    import provenance as _prov
+    import lap as _laplib
+    import fa26 as _fa26
+
+    lap_path = None
+    for candidate in sorted(A.baseline_dir().glob("*.csv")):
+        try:
+            driven = _laplib.load(candidate)
+        except Exception:
+            continue
+        if not _laplib.problem(driven):
+            lap_path = candidate
+            break
+    if lap_path is None:
+        return True, "no usable lap to test with, skipped"
+
+    scratch = SCRATCH / "sidecar"
+    scratch.mkdir(parents=True, exist_ok=True)
+    copy = scratch / lap_path.name
+    shutil.copy2(lap_path, copy)
+    want = [_fa26.Split(0, 300, 300, 500, 350, 0),
+            _fa26.Split(500, 700, 700, 900, 150, 0)]
+    other = [_fa26.Split(0, 100, 100, 200, 120, 0)]
+    driven = _laplib.load(copy)
+    slot = _prov.driven_strat(driven) or 1
+    spare = 1 if slot != 1 else 2
+    lines = ["[LAP]", "LOGGER=2", "TRACK_LENGTH_M=%.1f" % driven.length_m,
+             "STRATS=%d,%d" % tuple(sorted((slot, spare))),
+             "DOMINANT_STRAT=%d" % slot]
+    for index, splits in sorted(((slot, want), (spare, other))):
+        lines.append("[MAP_%d]" % index)
+        for n, s in enumerate(splits, start=1):
+            lines.append("SPLIT_%d=%d,%d,%d,%d,%d,%d" % (
+                n, s.start_m, s.deploy_end_m, s.clip_start_m, s.end_m,
+                s.deploy_kw, s.clip_kw))
+    copy.with_suffix(_prov.SIDECAR_SUFFIX).write_text(
+        "\n".join(lines) + "\n", encoding="utf-8")
+
+    found = _prov.attribute(_laplib.load(copy), [], {})
+    if not found:
+        return False, "a lap with its own map was refused: " + found.reason
+    if not found.recorded:
+        return False, "the recorded map was not used"
+    got = [(s.start_m, s.end_m, s.deploy_kw) for s in found.splits]
+    expect = [(s.start_m, s.end_m, s.deploy_kw) for s in want]
+    if got != expect:
+        return False, "read back the wrong map: %s" % (got,)
+    return True, "STRAT %d, %d splits, no snapshots needed" % (slot, len(got))
+
+
+_ok, _why = _sidecar_round_trips()
+check("a lap carrying its own map needs no snapshots", _ok, _why)
+
+
 # --- the page actually runs ------------------------------------------------
 # A page whose script throws on load still serves, still returns 200, and
 # still contains every element the markup declares -- so every check that

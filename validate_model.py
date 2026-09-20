@@ -178,6 +178,7 @@ def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
         "strat": case.found.strat,
         "map_skill": case.found.skill,
         "map_source": case.found.source,
+        "map_recorded": case.found.recorded,
         "top_kph": max(shape.cap) * 3.6 if getattr(shape, "cap", None) else 0.0,
     }
 
@@ -259,6 +260,11 @@ def main(argv=None) -> int:
     summary = summarise(rows)
     mode = "in-sample" if args.in_sample else "holdout"
     print(report(summary, rows, mode))
+    recorded = sum(1 for r in rows if r.get("map_recorded"))
+    print("  %d of %d laps carried the map the logger recorded; %d had to be "
+          "matched to a snapshot by behaviour." % (recorded, len(rows),
+                                                   len(rows) - recorded))
+    print()
     if refused and not args.quiet:
         print("  laps that could not be attributed to a map:")
         for reason, count in sorted(refused.items(), key=lambda kv: -kv[1]):

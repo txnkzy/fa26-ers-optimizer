@@ -56,6 +56,11 @@ MAX_OFF_STRAT = 0.02
 MIN_DEPLOYED_MJ = 0.05
 
 
+#: Suffix of the file the logger writes beside each lap, holding the
+#: deployment maps that were live while it was recorded.
+SIDECAR_SUFFIX = ".map"
+
+
 @dataclass
 class Attribution:
     """Which map a lap ran, and how sure that is."""
@@ -65,9 +70,58 @@ class Attribution:
     skill: float          #: `fa26.map_fit` improvement over an empty map
     source: str           #: the snapshot it came from, for the record
     reason: str = ""      #: why it failed, when `splits` is empty
+    #: True when the logger recorded the map with the lap, rather than it
+    #: having been matched to one afterwards.
+    recorded: bool = False
 
     def __bool__(self) -> bool:
         return bool(self.splits)
+
+
+def read_sidecar(lap_path) -> dict | None:
+    """The maps the logger wrote beside this lap, or None if it wrote none.
+
+    The file is the ground truth this module used to have to reconstruct. It
+    carries every strategy slot the wheel sat on during the lap and the map
+    each of them held, read out of the setup as the lap finished -- so nothing
+    here has to guess which setup was loaded or which strategy was live.
+    """
+    path = Path(lap_path).with_suffix(SIDECAR_SUFFIX)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    out: dict = {"maps": {}, "strats": [], "dominant": 0, "logger": 0,
+                 "length_m": 0.0, "path": path}
+    section = None
+    for raw in text.replace("\r", "").split("\n"):
+        line = raw.strip()
+        if not line or line.startswith(";") or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].upper()
+            if section.startswith("MAP_"):
+                out["maps"].setdefault(int(section[4:]), [])
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip().upper(), value.strip()
+        if section == "LAP":
+            if key == "STRATS":
+                out["strats"] = [int(v) for v in value.split(",") if v.strip()]
+            elif key == "DOMINANT_STRAT":
+                out["dominant"] = int(float(value))
+            elif key == "LOGGER":
+                out["logger"] = int(float(value))
+            elif key == "TRACK_LENGTH_M":
+                out["length_m"] = float(value)
+        elif section and section.startswith("MAP_") and key.startswith("SPLIT_"):
+            numbers = [int(float(v)) for v in value.split(",")]
+            if len(numbers) == 6:
+                out["maps"][int(section[4:])].append(fa26.Split(*numbers))
+    return out if out["maps"] else None
 
 
 def driven_strat(lap) -> int | None:
@@ -108,6 +162,16 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
     if strat is None:
         return Attribution([], 0, 0.0, "",
                            "the strategy was changed during the lap")
+
+    # Written down at the time beats worked out afterwards, every time. When
+    # the logger recorded the map with the lap there is nothing to decide:
+    # this is the map, and no snapshot is consulted at all.
+    recorded = read_sidecar(getattr(lap, "path", None) or "")
+    if recorded and recorded["maps"].get(strat):
+        splits = recorded["maps"][strat]
+        _fit, _null, skill = fa26.map_fit(lap, splits)
+        return Attribution(splits, strat, skill if skill == skill else 1.0,
+                           recorded["path"].name, "", recorded=True)
 
     best = Attribution([], strat, float("-inf"), "", "")
     for snap in snapshots:
@@ -151,13 +215,15 @@ def describe(laps, paths, telemetry_dir, item_map, circuit: str) -> list[str]:
     What the deployment actually did settles it, so that is what is asked here.
     """
     snaps = lapsession.snapshots(telemetry_dir, circuit)
-    if not snaps:
-        return []
     found = [attribute(lap, snaps, item_map) for lap in laps]
+    if not snaps and not any(f.recorded for f in found):
+        return []
     known = [f for f in found if f]
     strats = {f.strat for f in found if f.strat}
 
     out = []
+    if known and all(f.recorded for f in known) and len(known) == len(found):
+        return []                  # every lap brought its own map; nothing to say
     if not known:
         out.append("None of these laps match any deployment map this tool has "
                    "recorded, so a lap time from them is not a comparison "

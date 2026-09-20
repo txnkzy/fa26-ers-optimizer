@@ -38,6 +38,10 @@ class Lap:
     #: Distance from integrating speed, which does not depend on the
     #: logger's idea of how long the track is.
     driven_m: float = 0.0
+    #: Where this lap was loaded from. Carried because the logger writes the
+    #: deployment maps it was driven on into a file beside it, and a lap that
+    #: has forgotten its own path cannot find them.
+    path: str = ""
 
     # Derived, filled by `differentiate`
     deploy_kw: list[float] = field(default_factory=list)
@@ -101,6 +105,7 @@ def load(path: str | Path) -> Lap:
     lap.driven_m = sum((lap.t[i + 1] - lap.t[i])
                        * (lap.speed[i] + lap.speed[i + 1]) / 2.0
                        for i in range(len(lap.t) - 1))
+    lap.path = str(path)
     differentiate(lap)
     return lap
 
