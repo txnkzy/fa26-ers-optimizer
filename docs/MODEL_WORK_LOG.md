@@ -1072,3 +1072,50 @@ everything mechanical, and STRAT Map pointing at 2 in both.
 Worth stating: those maps are built on a 13 September profile, slower than the
 driver's current pace. Both sides share it, so the comparison holds; the maps
 themselves are not what a fresh session would produce.
+
+---
+
+## Super-clipping, on track
+
+The first claim from any of this work to be tested against a stopwatch rather
+than against itself. Two setups differing in 38 values, all 38 in the race map,
+driven in three stints so track evolution could not hide inside the answer:
+
+| stint | | laps | mean | best |
+|---|---|---|---|---|
+| 15:09 | the driver's own map | 4 | 82.244 | 81.710 |
+| 15:20 | **clip** | 4 | 81.652 | 81.329 |
+| 15:59 | **noclip** | 4 | 82.232 | 82.055 |
+| 16:09 | **clip** | 3 | 81.428 | 81.120 |
+
+**The no-clip stint sits between two clip stints in time and is slower than
+both.** The track was getting quicker across the session — the later clip stint
+beat the earlier one by 0.22 s — which works against the effect rather than for
+it, so if anything this understates it.
+
+| | predicted | measured |
+|---|---|---|
+| best to best | +0.928 s | **+0.936 s** |
+| mean to mean | +0.928 s | +0.676 s |
+| clean laps only, mean | — | +0.708 s |
+| extra energy deployed | +0.74 MJ | +0.50 MJ |
+
+Best-lap to best-lap the prediction is right to eight thousandths of a second,
+which is luck at this sample size but not the wrong kind of luck. On means the
+model overstates the gain by about a quarter, and it overstates the extra energy
+by a third — the mechanism is real and a little smaller than claimed.
+
+So the earlier conclusion holds and is now more than an argument about the
+solver's action space: **super-clipping was unreachable, it is reachable, and it
+is worth about seven tenths of a second at Albert Park.** The 1.082 s figure
+from the model-only test was the right order and the optimistic end of it.
+
+### What this does not settle
+
+The regulations describe super-clipping as the alternative to lift-and-coast,
+which costs time *and* switches the active aero from Straight Mode to Corner
+Mode. This model has no active aero and takes the driver's throttle trace as
+given, so in it the alternative to clipping is simply harvesting less, which is
+free. That asymmetry would bias the search against clipping wherever the car
+genuinely needs energy braking cannot supply — and a qualifying lap, which is
+exactly that case, has not been tested this way.
