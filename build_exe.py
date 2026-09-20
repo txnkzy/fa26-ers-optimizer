@@ -176,6 +176,20 @@ def main() -> int:
 
     OUT.mkdir(parents=True, exist_ok=True)
     target = OUT / exe.name
+    # Windows will not let this overwrite a running executable, and the fix is
+    # not to kill it. That is somebody's open window, and killing it mid-run
+    # leaves them looking at "cannot reach the optimizer" with no idea why --
+    # which happened twice in one afternoon, both times to the person this was
+    # being built for. Say so and stop.
+    if target.exists():
+        try:
+            with open(target, "r+b"):
+                pass
+        except OSError:
+            print("%s is open -- close the FA26 Optimizer window and run this "
+                  "again.\nThe build itself is finished; only the copy is "
+                  "blocked." % target)
+            return 1
     shutil.copy2(exe, target)
     for name in ("READ ME FIRST.txt", "Installation.pdf"):
         shutil.copy2(SRC / "docs" / name, OUT / name)

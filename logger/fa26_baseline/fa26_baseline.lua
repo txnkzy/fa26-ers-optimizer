@@ -74,7 +74,6 @@ local function trackLength()
 end
 
 local autoRecord = true
-local onlyValidLaps = true
 local skipPitLaps = true
 
 local rows = {}
@@ -82,7 +81,7 @@ local elapsed = 0
 local lastSpline = 0
 local started = false
 local sawPitlane = false
-local sawInvalid = false
+local sawInvalid = 0
 --: Every strategy slot the wheel sat on during this lap, as a set. The driver
 --: changes it mid-lap often enough that one number is not the answer.
 local strats = {}
@@ -179,7 +178,7 @@ local function resetLap()
     rows = {}
     elapsed = 0
     sawPitlane = false
-    sawInvalid = false
+    sawInvalid = 0
     strats = {}
 end
 
@@ -240,6 +239,7 @@ local function saveMaps(path, lap)
         string.format("TRACK_LENGTH_M=%.1f", trackLength()),
         "STRATS=" .. table.concat(seen, ","),
         "DOMINANT_STRAT=" .. tostring(lap.dominant or seen[1]),
+        "INVALID_SAMPLES=" .. tostring(lap.sawInvalid or 0),
         "SETUP_FILE=" .. tostring(lap.setupFile or ""),
         "SETUP_PROBE=" .. tostring(lap.setupProbe or ""),
     }
@@ -282,7 +282,7 @@ end
 local function sample(car, dt)
     elapsed = elapsed + dt
     if car.isInPitlane then sawPitlane = true end
-    if not car.isLapValid then sawInvalid = true end
+    if not car.isLapValid then sawInvalid = sawInvalid + 1 end
     -- setup_ers_strat_maps.lut is zero-based, so delivery 0 is STRAT 1.
     --
     -- Read through pcall like every other channel, and for the same reason
@@ -323,10 +323,19 @@ local function saveLap(lap, officialTime)
         lastSkipReason = "in/out lap (pitlane) -- turn off 'Skip in/out laps' to keep these"
         return
     end
-    if onlyValidLaps and lap.sawInvalid then
-        lastSkipReason = "lap invalidated"
-        return
-    end
+    -- A lap the stewards did not like is still a lap that happened, and this
+    -- app's job is to record what happened. There used to be a switch here
+    -- that threw those laps away, on by default, and it was eating the good
+    -- ones: a push lap out of a recharge lap where a corner was cut arrived
+    -- with the game still reporting the previous lap invalid, so the push lap
+    -- -- clean, quick, the whole point of the run -- was discarded without a
+    -- word. Several 1:38s at Austin went that way.
+    --
+    -- Nothing is lost by keeping them. `lap_valid` is recorded per sample in
+    -- the file itself and the count goes in the sidecar, so anything that
+    -- wants to exclude an invalidated lap still can -- visibly, and after the
+    -- fact, where the decision can be seen and undone. The recording end does
+    -- not get to make that call.
 
     -- The game's own time when there is one and it agrees with ours to within
     -- a tenth. Ours is one frame short by construction, so a bigger gap than
@@ -436,10 +445,6 @@ function windowMain()
     if ui.button(autoRecord and "Auto-record: ON" or "Auto-record: OFF", vec2(330, 26)) then
         autoRecord = not autoRecord
         if not autoRecord then resetLap() end
-    end
-    if ui.button(onlyValidLaps and "Only valid laps: ON" or "Only valid laps: OFF",
-        vec2(330, 22)) then
-        onlyValidLaps = not onlyValidLaps
     end
     -- Out laps were being thrown away, which is fine until the thing you need
     -- to explain happens on one.

@@ -907,3 +907,46 @@ That is three faults in the same file in one day — a mangled string that stopp
 it parsing, a half-applied edit that would have stopped it writing, and an
 unguarded field read that stopped it recording. Each one shipped because the
 check that would have caught it did not exist yet. Each one now has it.
+
+---
+
+## The recorder does not get to decide what counts
+
+`Only valid laps: ON` was the default, and it was eating the laps that mattered.
+A push lap out of a recharge lap where a corner had been cut arrived with the
+game still reporting the previous lap invalid, so the push lap — clean, quick,
+the whole reason for the run — was discarded silently. Several 1:38s at Austin
+went that way.
+
+The switch is gone, and so is the button. `lap_valid` is already written per
+sample, and the count of invalid samples now goes in the sidecar, so excluding
+an invalidated lap is still possible — downstream, visibly, where the decision
+can be seen and reversed. Nothing is lost by recording; a great deal is lost by
+not.
+
+## The probe found the key
+
+`ac.getSetupSpinnerValue` returns **527** for `CUSTOM_SCRIPT_ITEM_1052183907`,
+which is exactly what `cota.ini` holds for the end of the first split of map 1.
+So the deployment values *are* readable — keyed by the **section name**, not
+the `ID=` the car declares, which is why every attempt by declared ID came back
+as the fallback.
+
+Reading the whole map that way would make the sidecar immune to the setup file
+being rewritten. It needs the ID-to-index map, which the app already computes
+and could write beside the logger at install time. **Noted, not done** — one
+change to that file at a time is the lesson of the last three sessions.
+
+## Where Austin stands
+
+Two push laps recorded on the new qualifying map, against what the model said
+for the charge each actually started with:
+
+| lap | battery | driven | model | model is |
+|---|---|---|---|---|
+| lap03 | 93% | 1:39.053 | 1:39.358 | +0.305 s |
+| lap05 | 89% | 1:39.159 | 1:39.453 | +0.294 s |
+
+**Consistently 0.3 s pessimistic**, which is close to the +0.63% bias the
+harness reports for Austin and in the same direction. The 1:38s that were
+thrown away would sharpen it; they are gone.

@@ -93,7 +93,8 @@ def read_sidecar(lap_path) -> dict | None:
         return None
 
     out: dict = {"maps": {}, "strats": [], "dominant": 0, "logger": 0,
-                 "length_m": 0.0, "path": path, "setup_file": "", "probe": ""}
+                 "length_m": 0.0, "path": path, "setup_file": "", "probe": "",
+                 "invalid_samples": 0}
     section = None
     for raw in text.replace("\r", "").split("\n"):
         line = raw.strip()
@@ -119,6 +120,12 @@ def read_sidecar(lap_path) -> dict | None:
                 out["setup_file"] = value
             elif key == "SETUP_PROBE":
                 out["probe"] = value
+            elif key == "INVALID_SAMPLES":
+                # The logger records invalidated laps rather than discarding
+                # them -- it was throwing away the push lap after a recharge
+                # lap where a corner had been cut. The count is kept so the
+                # decision to exclude one can still be made, visibly, here.
+                out["invalid_samples"] = int(float(value))
             elif key == "TRACK_LENGTH_M":
                 out["length_m"] = float(value)
         elif section and section.startswith("MAP_") and key.startswith("SPLIT_"):
