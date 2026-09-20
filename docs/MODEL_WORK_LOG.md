@@ -1038,3 +1038,37 @@ was a 1:38.867 that the valid-lap filter threw away, and if that stands the gap
 is nearer 0.15 s. One recorded lap on one side is not an A/B, and the honest
 statement is that **the new map is not slower and the driver's best ever lap is
 on it.** Settling the size needs the old map driven again.
+
+---
+
+## The Albert Park super-clip A/B, on the user's disk
+
+Super-clip being worth 1.082 s was measured inside the model: the solver
+allowed to clip against the same solver forbidden to. That is a real result
+about the *search*, and it has never been driven.
+
+An A/B is the right test, because the model's own bias cancels — both maps come
+out of the same model, off the same laps, and only the availability of
+super-clip differs. Whatever the model is wrong about, it is wrong about both.
+
+Built from Albert Park's largest usable session (13 September, 4 laps pooled,
+best 1:19.577 — the newest session pools only two):
+
+| | lap | deployed | recovered | clip zones |
+|---|---|---|---|---|
+| allowed to clip | **81.182** | 6.00 MJ | 6.01 MJ | 2 |
+| forbidden | 82.305 | 5.10 MJ | 5.13 MJ | 0 |
+
+**+1.123 s**, and the mechanism is visible in the energy: clipping recovers
+0.88 MJ more than braking alone can, and spends it. The two zones are
+850–982 m at 350 kW and 3880–3992 m at 250 kW.
+
+Written as two new setups, `melbourne_clip.ini` and `melbourne_noclip.ini`,
+both copied from the user's own `melbourne.ini`, which is untouched. Checked
+item by item: **29 setup values differ between them and all 29 are in
+deployment map 2.** Not one thing else — same STRAT 1, same STRAT 3, same
+everything mechanical, and STRAT Map pointing at 2 in both.
+
+Worth stating: those maps are built on a 13 September profile, slower than the
+driver's current pace. Both sides share it, so the comparison holds; the maps
+themselves are not what a fresh session would produce.
