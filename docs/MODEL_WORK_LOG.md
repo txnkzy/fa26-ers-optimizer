@@ -1182,3 +1182,57 @@ energy-limited at 5.55 MJ and the floor was stopping it reaching that. This is
 a judgement call rather than a bug — a race map that empties the battery has
 nothing to defend with — but it is a second and a half of the driver's own lap
 time, and it is larger than the super-clip effect that prompted the question.
+
+---
+
+## The race map's battery floor, removed
+
+`min_store_fraction = 0.25` refused any race map whose store dipped below a
+quarter. Measured across seven circuits it costs **0.99 s a lap** — and not
+because a quarter is too much:
+
+| floor | mean lap | mean low | against 25% |
+|---|---|---|---|
+| **none** | **88.377** | 4% | **+0.987 s** |
+| 5% | 89.260 | 19% | +0.104 s |
+| 10% | 89.229 | 17% | +0.135 s |
+| 15% | 89.245 | 22% | +0.119 s |
+| 25% | 89.364 | 28% | — |
+
+Five, ten and fifteen percent all land within 0.13 s of twenty-five. **The cost
+is the constraint existing, not its size**, because it is a rejection rather
+than a preference: a map that touches the floor once is discarded whole, and a
+4 MJ battery cannot cycle 8 MJ of per-lap allowance without going low. The
+floor was capping how much energy could move, not how much was held back.
+
+Its own justification does not survive either. The worry was that a map neutral
+at zero would give a quick first lap off a full battery and slow ones after —
+true, and measured at 0.17 to 0.98 s. But the settling lap already makes the
+reported time the repeating one, and **the repeating lap with no floor is still
+a second quicker than the floored map**. What remained was a reserve for
+attacking, and this tool hands the driver three maps: the reserve is STRAT 1.
+
+One idea that did not work, recorded because it looked obvious: scoring the map
+at several starting charges, the way the qualifying search does. It changes
+nothing for a race map — 81.610 against 81.612 — because that search settles,
+and settling erases the charge it started from. `charge_fractions` is a
+one-shot mechanism and cannot do this job.
+
+What the change costs is a lap arrived at with half the planned charge:
+**+0.08 to +0.66 s**, once, before the store settles again. The card now says
+when a map runs the battery to nothing, because a driver reaching for an
+overtake at that point will find nothing there.
+
+## Where the model stands
+
+With the driver's Albert Park and Austin sessions added, and their maps recorded
+by the logger rather than reconstructed:
+
+| | laps | mean | worst | bias |
+|---|---|---|---|---|
+| start of this work | 36 | 1.47% | 3.20% | +1.22% |
+| **now** | **56** | **0.82%** | **2.52%** | **+0.18%** |
+
+**19 of the 56 carry the map the logger wrote beside them.** The rest are still
+matched by behaviour, and always will be — they were driven before the logger
+recorded anything.

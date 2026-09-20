@@ -44,11 +44,28 @@ class Objective:
     #: 1.06; scoring the mean across charges instead cut that to 0.48 and beat
     #: VRC at every level. Costs one extra simulation per charge per candidate.
     charge_fractions: tuple = ()
-    #: A repeating lap has to be neutral, but neutral at zero is still neutral,
-    #: and that is where the search settled: deploy exactly equalled harvest
-    #: with the store pinned empty. The first lap off a full battery was quick
-    #: and every lap after it was slow. A race lap has to keep a usable buffer,
-    #: so it must stay above this fraction of the store all lap.
+    #: The lowest the store may go, as a fraction, before a plan is refused.
+    #:
+    #: The race search used to set this to a quarter, on the reasoning that a
+    #: repeating lap neutral at zero is still neutral and leaves nothing in
+    #: hand. Measured across seven circuits it costs **a second a lap**, and
+    #: not because a quarter is too much -- 5%, 10% and 15% all land within
+    #: 0.13 s of 25%, while no floor at all is 0.99 s quicker than any of them.
+    #: The cost is the constraint existing, not its size, because this is a
+    #: rejection rather than a preference: a map that touches the floor once is
+    #: discarded whole, and a 4 MJ battery cannot cycle 8 MJ of allowance in a
+    #: lap without going low. The floor was capping how much energy could move.
+    #:
+    #: Its own justification does not survive either. The worry was that the
+    #: first lap off a full battery would be quick and every lap after it slow,
+    #: which is true -- 0.17 to 0.98 s, measured -- but the settling lap already
+    #: makes the reported time the repeating one, and the repeating lap with no
+    #: floor is still a second quicker than the floored map. What was left is a
+    #: reserve for attacking, and this tool hands the driver three maps: the
+    #: reserve is STRAT 1, not a quarter of the battery held back every lap.
+    #:
+    #: What it does cost is a lap arrived at with half the planned charge:
+    #: +0.08 to +0.66 s, once, before the store settles again.
     min_store_fraction: float = 0.0
 
     def score(self, result, start_store_kj: float) -> float | None:

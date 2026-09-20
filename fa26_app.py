@@ -1252,7 +1252,10 @@ class Engine:
             objective = optimise26.Objective(
                 name=label, harvest_cap_mj=cap,
                 energy_neutral=neutral, one_shot=one_shot,
-                min_store_fraction=0.25 if neutral else 0.0,
+                # No floor. A quarter of the battery held back every lap
+                # costs a second and buys a reserve the driver already
+                # has in STRAT 1 -- see Objective.min_store_fraction.
+                min_store_fraction=0.0,
                 # A qualifying map assumes the recharge lap left the store
                 # full. Arrive at 78% instead, as a real Spa lap did, and a map
                 # tuned only for full falls apart faster than one that was not
@@ -1550,6 +1553,19 @@ class Engine:
         # permitted energy that was neither used nor recovered. It is a search
         # result worth doubting rather than a fault in the car, so it is said
         # plainly and not dressed up as advice.
+        # A race map that runs the store to nothing is the fastest one and is
+        # what the regulations intend -- drivers are expected to use the whole
+        # battery every lap -- but it is worth saying out loud, because the
+        # driver who reaches for an overtake at the wrong moment will find
+        # nothing there.
+        if strat_no == 2 and result.store_min_kj < laplib.STORE_CAPACITY_KJ * 0.08:
+            notes.append(
+                "This map runs the battery down to %.0f%% at its lowest. That "
+                "is where the lap time is, but there is nothing spare for an "
+                "attack at that point — switch to STRAT 1 for that."
+                % (100 * result.store_min_kj / laplib.STORE_CAPACITY_KJ))
+            self.note("   " + notes[-1])
+
         unused = cap - result.harvested_mj
         if (strat_no != 3 and cap < 90.0
                 and unused > self.UNUSED_ALLOWANCE_MJ and recoverable <= 0.1):
