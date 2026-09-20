@@ -1223,6 +1223,85 @@ What the change costs is a lap arrived at with half the planned charge:
 when a map runs the battery to nothing, because a driver reaching for an
 overtake at that point will find nothing there.
 
+## Deployment through a corner taken flat out
+
+Reported from the car, at Austin: the map spends nothing through the long right
+in the final sector and saves it for the two short corners after, which looks
+backwards. More time at full throttle should be worth more energy, not less.
+
+It is worth nothing, and the reason is a ceiling rather than physics. Forcing
+350 kW through the whole corner changes the simulated speed by **0.0 kph at
+4500, 4600, 4700, 4800 and 4880 m**, and costs 0.033 s for the energy wasted.
+In `core/profile.py` a slot is left uncapped only where
+
+    power_limited = gas >= 0.99 and brake < 0.01 and not cornering
+
+so a corner taken flat is capped at the speed the driver managed. Deployment
+there cannot move the car by construction. The driver is not choosing that
+speed; they are flat out and the car is going as fast as that much power takes
+it round that radius. What the telemetry shows through the corner:
+
+| dist | speed | gas | lat g | share of lat_max | grip left |
+|---|---|---|---|---|---|
+| 4400 | 211.0 | 1.00 | 2.26 | 0.55 | 0.96 |
+| 4500 | 236.4 | 1.00 | 3.29 | 0.80 | 0.84 |
+| 4600 | 236.3 | 1.00 | 3.46 | 0.84 | 0.86 |
+| 4700 | 240.4 | 1.00 | 2.98 | 0.72 | 0.89 |
+| 4800 | 246.4 | 1.00 | 2.31 | 0.56 | 0.94 |
+| 4880 | 251.2 | 1.00 | 2.14 | 0.52 | 1.00 |
+
+At 4800 m the tyre is at 56% of the lateral load it reaches elsewhere on the
+lap. There is grip in hand, and the argument for deploying there is a good one.
+
+### Two ways to let it move, both measured
+
+**Gaining.** Lift the ceiling where the driver is flat *and still accelerating*,
+and let the force balance decide. Adjacent samples cannot answer "still
+accelerating": at 236 kph the logger writes one every half metre and a car
+pulling away at half a g gains 0.01 kph in that distance, under the noise the
+smoothing leaves. Ten samples, about four metres, does answer it — a first
+attempt at 1.0002x per sample never fired at all and measured nothing.
+
+**Ellipse.** The same, plus lateral load that answers to simulated speed:
+`grip_left` reads the load straight off the lap, so a model running faster than
+the driver through a corner is charged the driver's cornering load and none of
+its own. Same radius, more speed, more lateral g, and grip runs out on its own.
+
+Both make the model worse. On the holdout corpus, split by laps quicker and
+slower than their own session — because loosening a ceiling always flatters a
+corpus of quick laps, the trap that made a `lat_fraction` of 0.9 look like an
+improvement:
+
+| | all 59 | quicker than session | slower than session |
+|---|---|---|---|
+| capped, as it stands | **0.78%** (+0.19%) | 0.74% | **0.86%** |
+| gaining: uncapped | 0.80% (+0.08%) | 0.74% | 0.92% |
+| gaining + ellipse | 0.79% (+0.01%) | 0.71% | 0.95% |
+
+The bias does improve, from +0.19% to near zero: the ceiling makes the model
+slightly too slow, as the argument predicts. But the error *grows* on the half
+the selection effect cannot flatter, 0.86% to 0.95%. That is a term with the
+right sign and the wrong magnitude, and the freed model shows where it goes
+wrong — through the same corner it invents **273 kph where the driver did
+246**. The model is staying as it is.
+
+### Left to the car
+
+That answers whether to change the model, not whether the corner is worth
+deploying in. `cota_longright.ini` carries both answers on the wheel, written
+from `cota.ini` and leaving it untouched:
+
+* **strat 1** — the map the search chooses now: 200 kW to 4477 m, nothing
+  through the long right.
+* **strat 2** — the map the freed model chooses: 250 kW to 4709 m, 232 m of
+  deployment through the long right.
+
+Both deploy **12.00 MJ** and both finish on an empty battery, so the only thing
+that differs is where the energy goes. The model as it stands expects strat 1 to
+win by **0.291 s**; the freed model expects strat 2 to win by about 0.2 s. Lap
+to lap scatter in that session was 0.29 s, so this needs several laps each and
+an A/B/A stint order, as the super-clip test did.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
