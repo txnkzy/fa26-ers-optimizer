@@ -93,7 +93,7 @@ def read_sidecar(lap_path) -> dict | None:
         return None
 
     out: dict = {"maps": {}, "strats": [], "dominant": 0, "logger": 0,
-                 "length_m": 0.0, "path": path}
+                 "length_m": 0.0, "path": path, "setup_file": "", "probe": ""}
     section = None
     for raw in text.replace("\r", "").split("\n"):
         line = raw.strip()
@@ -115,13 +115,20 @@ def read_sidecar(lap_path) -> dict | None:
                 out["dominant"] = int(float(value))
             elif key == "LOGGER":
                 out["logger"] = int(float(value))
+            elif key == "SETUP_FILE":
+                out["setup_file"] = value
+            elif key == "SETUP_PROBE":
+                out["probe"] = value
             elif key == "TRACK_LENGTH_M":
                 out["length_m"] = float(value)
         elif section and section.startswith("MAP_") and key.startswith("SPLIT_"):
             numbers = [int(float(v)) for v in value.split(",")]
             if len(numbers) == 6:
                 out["maps"][int(section[4:])].append(fa26.Split(*numbers))
-    return out if out["maps"] else None
+    # A sidecar is worth having if it names the setup even when it carries no
+    # map of its own -- naming the file is the harder half, and on this build
+    # it is the only half the game will give up.
+    return out if (out["maps"] or out["setup_file"]) else None
 
 
 def driven_strat(lap) -> int | None:
@@ -172,6 +179,30 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
         _fit, _null, skill = fa26.map_fit(lap, splits)
         return Attribution(splits, strat, skill if skill == skill else 1.0,
                            recorded["path"].name, "", recorded=True)
+
+    # Failing the map itself, the name of the setup the car loaded. That is
+    # the thing the old rule was guessing at, and the logger knows it for
+    # certain -- `ac.onSetupFile` hands it over as the game loads it.
+    #
+    # It is still checked rather than trusted, because a setup file is not
+    # immutable: this tool overwrites them, and a lap driven before a write
+    # names a file whose contents have since changed. `map_fit` settles that
+    # in one pass -- a map the car really followed explains the power it
+    # delivered, and one that has been overwritten since does not.
+    if recorded and recorded["setup_file"] and item_map:
+        named = Path(recorded["setup_file"])
+        try:
+            splits = fa26.read_map(
+                named.read_text(encoding="utf-8", errors="replace"),
+                item_map, strat)
+        except Exception:
+            splits = []
+        if splits:
+            _fit, _null, skill = fa26.map_fit(lap, splits)
+            if skill != skill or skill >= MIN_SKILL:
+                return Attribution(splits, strat,
+                                   skill if skill == skill else 1.0,
+                                   named.name, "", recorded=True)
 
     best = Attribution([], strat, float("-inf"), "", "")
     for snap in snapshots:

@@ -15,7 +15,36 @@ local CAR_MATCH = "vrc_formula_alpha_2026"
 
 --: Written into every map sidecar, so a lap recorded by an older logger can
 --: be told apart from one that carries its own map.
-local LOGGER_VERSION = 2
+local LOGGER_VERSION = 3
+
+--: The setup file the car loaded, which is the thing that actually settles
+--: which deployment map a lap ran.
+---
+--- Reading the map itself out of the setup was tried first, through
+--- `ac.getSetupSpinnerValue`, and it comes back zero for every deployment item
+--- on this build -- the sidecars it wrote carried a correct strategy and an
+--- empty map. The file name does not need the value of anything: the optimiser
+--- can read a setup file perfectly well, and always could. What it never knew
+--- was *which* file, which is the whole of the ambiguity this is here to
+--- remove.
+local setupFile = ""
+if ac.onSetupFile then
+    pcall(ac.onSetupFile, function(_operation, filename)
+        setupFile = filename or ""
+    end)
+end
+
+--- What the setup API returns, recorded once per lap so the question of why
+--- it returns nothing does not cost another session on track to ask.
+local function setupProbe()
+    if not ac.getSetupSpinnerValue then return "absent" end
+    local parts = {}
+    for _, id in ipairs({ "DEPLOYMENT_MAP_1_SPLIT_1_4", "ARB_F" }) do
+        local ok, value = pcall(ac.getSetupSpinnerValue, id, -1)
+        parts[#parts + 1] = id .. ":" .. (ok and tostring(value) or "raised")
+    end
+    return table.concat(parts, " ")
+end
 
 local MIN_SAMPLES = 200
 
@@ -184,7 +213,6 @@ end
 
 --- Everything needed to attribute this lap, beside the lap.
 local function saveMaps(path, lap)
-    if not ac.getSetupSpinnerValue then return false end
     local seen = {}
     for slot in pairs(lap.strats) do seen[#seen + 1] = slot end
     table.sort(seen)
@@ -199,6 +227,8 @@ local function saveMaps(path, lap)
         string.format("TRACK_LENGTH_M=%.1f", trackLength()),
         "STRATS=" .. table.concat(seen, ","),
         "DOMINANT_STRAT=" .. tostring(lap.dominant or seen[1]),
+        "SETUP_FILE=" .. tostring(lap.setupFile or ""),
+        "SETUP_PROBE=" .. tostring(lap.setupProbe or ""),
     }
     for _, slot in ipairs(seen) do
         if slot >= 1 and slot <= MAPS then
@@ -329,9 +359,20 @@ function script.update(dt)
             for slot, count in pairs(strats) do
                 if count > most then dominant, most = slot, count end
             end
+            -- The setup file and the probe are read here rather than in
+            -- `saveMaps`, so both belong to the lap that just ended rather
+            -- than to whatever the next frame finds.
+            local file = setupFile
+            if file == "" and ac.INIConfig and ac.INIConfig.currentSetup then
+                local ok, config = pcall(ac.INIConfig.currentSetup)
+                if ok and config and config.filename then file = config.filename end
+            end
+            local probed, probe = pcall(setupProbe)
             pendingSave = { rows = rows, elapsed = elapsed,
                             sawPitlane = sawPitlane, sawInvalid = sawInvalid,
-                            strats = strats, dominant = dominant }
+                            strats = strats, dominant = dominant,
+                            setupFile = file,
+                            setupProbe = probed and probe or "raised" }
         end
         started = true
         resetLap()

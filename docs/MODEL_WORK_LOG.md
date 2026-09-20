@@ -775,3 +775,66 @@ spot, it is now open, and the solver walks through it. Both halves of what made
 that possible — a clip-carrying starting map in the family, and a single-split
 move that turns clipping on from nothing — are now permanent checks, because
 both were once absent with nothing noticing.
+
+---
+
+## The logger, in the game at last
+
+Four laps were driven and nothing recorded them. Assetto Corsa's log said why:
+
+```
+Failed to parse: fa26_baseline.lua:206: unfinished string near '"'
+```
+
+A shell heredoc had turned a `\n` escape into an actual line break, leaving a
+short string spanning two lines. **`luaparser` accepted it.** Real Lua does not
+allow a raw newline in a short string; the Python parser did not care, so the
+check written specifically to stop this was blind to it. `lua_lint.py` is the
+lexer that is not blind to it — on the rejected file it reports line 206, the
+same line the game reported.
+
+Reading the file properly turned up two more from the same half-applied edit,
+one of them fatal on its own: **the finished lap never carried the strategy
+tally**, so `saveMaps` read `lap.strats` off a table that did not have it,
+`pairs(nil)` raised, the `pcall` around the call swallowed it, and no sidecar
+would ever have been written even with the string repaired. Both halves of the
+file are now checked against each other — every `lap.<field>` the writer reads
+must be a key the saved lap carries — and removing those two fields again fails
+the check by name.
+
+### Then it wrote sidecars with an empty map
+
+With the parse fixed, five laps produced five sidecars, each carrying the right
+strategy — including lap 4, where the wheel was moved mid-lap and the tally
+recorded `[1, 2, 12]` and picked 1. But every `[MAP_n]` block was empty:
+`ac.getSetupSpinnerValue` returns zero for every deployment item on this build.
+
+The map was never the hard part. **The optimiser can read a setup file
+perfectly well, and always could — what it never knew was which file.** That is
+the whole of the ambiguity, and `ac.onSetupFile` hands the name over as the
+game loads it. So the logger records the name, and the reader follows it.
+
+Verified on the five real laps, with the real setup on disk and no snapshots in
+sight:
+
+| lap | strat | deployed | `map_fit` skill | attributed |
+|---|---|---|---|---|
+| lap01 1:41.211 | 2 | 8.01 MJ | 0.86 | cota.ini |
+| lap02 1:53.385 | 2 | 7.88 MJ | 0.85 | cota.ini |
+| lap03 1:40.872 | 2 | 8.26 MJ | 0.84 | cota.ini |
+| lap04 1:39.925 | 1 | 10.62 MJ | 0.77 | cota.ini |
+| lap05 1:39.966 | 1 | 8.77 MJ | 0.51 | cota.ini |
+
+The STRAT 2 laps get STRAT 2's map and the STRAT 1 laps get STRAT 1's, and
+`map_fit` confirms each one explains the power the car actually delivered. The
+name is followed but not trusted: this tool overwrites setups, so a lap naming
+a file whose contents have since changed falls back to the old matching.
+
+### And a logger fault worth naming
+
+`lap06` of this session: 15,929 samples for a 1:40 lap against ~13,300 for the
+others, the energy store frozen at 1404 kJ from first sample to last, zero
+deployment. The same signature as an Austin lap on 19 September, and in both
+cases it is **the last lap of the session** — the ERS channels stop updating
+while position and speed keep coming. `lap.problem()` refuses it, which is the
+guard added for exactly this, working on a case it had not seen.
