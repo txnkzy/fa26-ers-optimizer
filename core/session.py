@@ -99,6 +99,20 @@ def select(paths, tolerance: float = TOLERANCE,
     if not timed:
         return [Path(p) for p in paths][:1]
     timed.sort()
+    # Two laps of one session sharing a time to the millisecond are one lap
+    # saved twice, not two laps: the odds against it otherwise are a thousand
+    # to one per pair, and the corpus has exactly one instance -- an Austin
+    # lap whose copy also carries a frozen energy store. A duplicate does not
+    # merely add nothing, it double-weights that lap in everything pooled from
+    # the session, so the later copy goes.
+    seen: set[float] = set()
+    unique = []
+    for value, path in timed:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique.append((value, path))
+    timed = unique
     best = timed[0][0]
     kept = [p for t, p in timed if t <= best * tolerance]
     return kept if len(kept) >= minimum else [timed[0][1]]

@@ -304,3 +304,140 @@ data rather than keeping less of it:
 Of 46 recorded sessions, **13** had two consistent laps and were being modelled
 on one of them: Monza, Monaco, Daytona, Suzuka, Madrid, Bahrain, Spa and the
 Hungaroring. `MIN_LAPS` is now 2.
+
+---
+
+## The solver is a hill climb, and cannot be a dynamic program
+
+`_climb` walks single-split moves and paired deploy/harvest moves until a sweep
+improves nothing. That is a hill climb, not the dynamic program over track
+position and energy state the design called for.
+
+It cannot be one, for two reasons that are both about the car rather than the
+code. **The control is not a power per metre.** It is 24 splits, each with four
+positions and two powers, and a DP over (position, energy) produces a schedule
+that in general no set of 24 splits can encode. **The admissible control
+depends on history.** The no-increase rule latches the demand from the moment
+the throttle is picked up until the driver lifts, so what a zone may ask for is
+a function of everything since the last lift, not of where the car is and how
+much charge it has. Add that lap time needs speed as a state and the harvest
+cap is an integral constraint, and the separability a DP needs is gone.
+
+So the climb stays, and what it cannot reach it has to be started from.
+
+## Seeds were being named one at a time, which does not converge
+
+`_all_out` was (the whole lap, 350 kW). `_front_loaded` was (the first 45%,
+350 kW). Each was added after a circuit turned up where the climb got stuck,
+and each carried a guard deciding when it was worth the extra climb. There was
+no reason to think those two were the only shapes that mattered, and nothing
+said which to try next.
+
+The family is now enumerated: four coverages crossed with three power levels,
+plus three that deploy early and super-clip the rest — fifteen maps. Each is
+screened with **one simulation** and only the best three are climbed. A climb
+is hundreds of simulations, so fifteen screens cost less than a tenth of one,
+and widening the grid is nearly free where naming another shape was not.
+
+### Super-clipping: a search blind spot, not a model bias
+
+Asked directly whether super-clip is reachable:
+
+- **It is in the action space.** `_level_clip` is among the single-split moves.
+- **It was in no starting map.** Both named seeds set clip to zero everywhere.
+- **The climb cannot get there on an energy-neutral map.** One zone of harvest
+  with nothing to spend it on is pure loss, so it is rejected before the
+  deployment that would pay for it is ever tried. The paired move exists for
+  exactly that and pairs one zone with one other — a map wanting several zones
+  of clip to fund one long deployment is out of reach from every direction.
+
+And it is not the model undervaluing corner speed. Checked forward against
+measured acceleration, the force balance is *optimistic* at low speed
+(+0.89 m/s² at 30–50 m/s), which is where deployment out of a corner is worth
+most. A model error of that sign pushes a solver **towards** super-clip, not
+away from it. So the avoidance was the search, and `_clip_blanket` is now among
+the screened starts.
+
+## Speed: rank on a coarse grid, measure on a fine one
+
+The climbs ran at 2.5 m, which is the resolution the reported lap time needs
+and far finer than ranking candidate maps against each other needs. The coarse
+climbs now run at 5 m and only the refinement at 2.5 m:
+
+| | before | after | cost |
+|---|---|---|---|
+| Madrid, qualifying | 143 s | **88 s** | 0.006 s |
+| Spa, qualifying | 199 s | **113 s** | 0.077 s |
+
+Both costs are far inside the model's own error band.
+
+## Making the wider search never worse
+
+Screening on one simulation each was not enough on its own. Against the old
+solver, five circuits, both strategies, the first version was worse at three of
+five in each — and *never worse* was the property the search it replaced had
+been built to have.
+
+**A screen ranks maps as they stand, not by how well they climb.** For a
+one-shot lap that difference has a known answer: spending the whole store is
+the job. That start is now climbed whatever the screen thinks of it — Austin
+−0.134 → +0.049, Suzuka −0.145 → +0.034.
+
+**A full store refusing recovery is invisible to a screen**, because a map that
+throws recovery away still gives a lap. The guarded climb from a spend-early
+map is back, on the same threshold the app reports waste at. Monaco −0.271 →
+−0.172.
+
+**A coarse answer is never the answer.** Between 3.5 m and 3.634 m at Monaco
+the map falls off a cliff — 73.555 s and 11.95 MJ to 74.672 s and 9.52 —
+because at some step size a boundary the map needs stops being representable.
+The cliff is sharp, circuit-specific, and no rule tying step size to lap length
+dodges it. So the coarse pass only ranks starting points now, whatever it picks
+is climbed again at 2.5 m before subdividing, and it runs only where there is
+something to accelerate: qualifying searches above 4.5 km. Monaco solves in
+under a minute at full resolution anyway, and ranking a *race* search's starts
+on a 5 m grid picked the wrong one at Spa, 0.339 s worse, for a saving Spa did
+not need.
+
+Where it lands:
+
+| | mean gain | best | worse at | time |
+|---|---|---|---|---|
+| qualifying | **+0.140 s** | +0.658 s | **0 of 5** | 251 s → 246 s |
+| race | **+0.315 s** | +1.228 s | **0 of 5** | 146 s → 319 s |
+
+Race searches are about twice as long. They were the fast ones — tens of
+seconds, because the energy-neutral constraint rejects most moves outright —
+and the extra starting points are what found Austin 1.23 s and Suzuka 0.25 s.
+
+---
+
+## The logger's lap-time fix, verified from the data
+
+This was carried as unverified because verifying it seemed to need the game. It
+does not. `saveLap` takes the game's own `previousLapTimeMs` **only when it
+agrees with the logger's own measured `elapsed` to within a tenth**, and falls
+back to `elapsed` otherwise. So the question is whether any recorded file is
+named with a time that is not its own.
+
+Across all **179 recorded files, none** has a filename time disagreeing with
+its own recorded elapsed by more than half a second. The fix holds.
+
+## Two laps, one lap
+
+One duplicated lap time exists in the corpus: an Austin session with two files
+both named 1:40.204. They are the same lap — their speed traces agree at 249 of
+253 sampled points — and the second copy has its energy store frozen to the
+kilojoule for all 15,001 samples.
+
+Two things follow. A lap whose store never moves is refused: the car harvests
+under braking whatever map it is on, so a frozen store is the logger having
+stopped reading rather than a measurement. Six files go, and the smallest real
+store movement among the rest is 269 kJ against a 5 kJ threshold. And two laps
+of one session sharing a time to the millisecond are treated as one lap saved
+twice — a duplicate does not merely add nothing, it double-weights that lap in
+everything pooled from the session.
+
+Removing them makes the measured error slightly **worse**, 1.13% → 1.21%,
+because the duplicate was quietly contributing a second copy of a good speed
+trace. **1.21% is the honest number.**

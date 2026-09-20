@@ -11,9 +11,9 @@ at 8 circuits — against a car fitted from the *other* laps of the same session
 
 | | mean | worst |
 |---|---|---|
-| **all 36 laps** | **1.13%** | 2.70% |
-| Madrid, Monaco, Bahrain, Austin | 0.22 – 0.83% | 1.62% |
-| Albert Park, Red Bull Ring, Monza, Suzuka | 1.31 – 1.71% | 2.70% |
+| **all 36 laps** | **1.21%** | 3.03% |
+| Madrid, Monaco, Bahrain, Austin | 0.22 – 0.99% | 1.62% |
+| Red Bull Ring, Monza, Albert Park, Suzuka | 1.46 – 1.71% | 3.03% |
 
 The error scales with how fast the circuit is — it correlates with top speed at
 r = +0.85 — so a single number across all of them would flatter the fast ones

@@ -755,11 +755,21 @@ class Evaluator:
 BLANKET_COVERAGE = (0.25, 0.45, 0.70, 1.00)
 BLANKET_LEVELS = (fa26.FLOOR_KW, 250.0, fa26.POWER_MAX)
 
+#: Refused recovery worth one more climb from a map that spends earlier. Set
+#: to match the figure the app reports as wasted: anything worth telling the
+#: user about is worth a second look.
+REFUSAL_WORTH_CHASING_MJ = 0.1
+
+#: How much of the lap that second look spends flat out. Enough to empty a
+#: full store before the first heavy braking of the second half, so the
+#: harvesting that follows has somewhere to go.
+FRONT_LOAD_FRACTION = 0.45
+
 #: How many screened starting points to actually climb, over and above the
 #: throttle-trace seed and any authored maps found for the track. Three is
 #: where the gain flattens: the screen ranks the family well enough that the
 #: fourth has never been the one that wins.
-SCREEN_KEEP = 3
+SCREEN_KEEP = 2
 
 
 def _blanket(splits, profile, coverage: float, power: float) -> "list[fa26.Split]":
@@ -825,12 +835,44 @@ def _family(splits, profile) -> "list[list[fa26.Split]]":
     return out
 
 
-#: Step size for the coarse climbs, in metres. The final refinement runs at
+def _always_climb(splits, profile, objective: Objective) -> "list[list[fa26.Split]]":
+    """Starting maps that are climbed whatever the screen thinks of them.
+
+    A screen is one simulation, and one simulation cannot tell which map will
+    climb best -- only which is best as it stands. For a one-shot lap that
+    distinction has a known answer: spending the whole store is not a
+    heuristic but the job, and a map that ends on the charge it started with
+    has failed however good its lap time looks. Leaving that start to the
+    screen cost Austin 0.13 s and Suzuka 0.15 s against the guarded climb it
+    replaced, so it is not left to the screen.
+    """
+    if not objective.one_shot:
+        return []
+    return [_blanket(splits, profile, 1.0, fa26.POWER_MAX)]
+
+
+#: Largest step for the coarse climbs, in metres. The final refinement runs at
 #: `ds`, which is what the reported lap time is measured at; the climbs before
 #: it are only ranking candidate maps against each other, and they do not need
 #: to do that to the nearest 2.5 m. Doubling the step halves every simulation,
 #: and the search is nothing but simulations.
 COARSE_DS = 5.0
+
+#: A coarse answer is never the answer. Between 3.5 m and 3.634 m at Monaco
+#: the map falls off a cliff -- 73.555 s and 11.95 MJ to 74.672 s and 9.52 --
+#: because at some step size a zone boundary the map needs stops being
+#: representable. The cliff is sharp, it is circuit-specific, and no rule
+#: tying the step to lap length dodges it: Monza, Spa, Suzuka and Austin are
+#: all untroubled at 5 m and Monaco is ruined by 3.634. So the coarse pass
+#: ranks starting points and gets close, and whatever it picks is then climbed
+#: again at `ds` before anything is subdivided. Coarse is an accelerator, not
+#: an oracle.
+#:
+#: And it is only used where there is something to accelerate. A short circuit
+#: solves quickly anyway -- Monaco takes under a minute at full resolution --
+#: so it is not worth any risk at all there, and the re-climb does not fully
+#: recover it: 73.716 s against 73.555 for a saving of twenty seconds.
+COARSE_MIN_LENGTH_M = 4500.0
 
 
 def screen(splits, car, longitudinal, profile, powertrain, objective: Objective,
@@ -897,6 +939,14 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
     cap_kj = objective.harvest_cap_mj * 1000
     settle = not objective.one_shot
     charges = tuple(f * STORE_CAPACITY_KJ for f in objective.charge_fractions)
+    # Only where there is something to accelerate and something to lose by
+    # not: the qualifying search on a long circuit is the one that takes
+    # minutes. A race search is already tens of seconds -- it settles faster
+    # because the energy-neutral constraint rejects most moves outright -- and
+    # ranking its starts on a 5 m grid picked the wrong one at Spa, 0.339 s
+    # worse, for a saving that circuit did not need.
+    if profile.length_m < COARSE_MIN_LENGTH_M or not objective.one_shot:
+        coarse_ds = ds
     fine = Evaluator(car, longitudinal, profile, powertrain, ds,
                      start_store_kj, cap_kj, settle, reset_zones,
                      speed_zones, charges)
@@ -924,10 +974,16 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         scored.sort(key=lambda pair: pair[0])
         screened = [candidate for _score, candidate in scored[:SCREEN_KEEP]]
 
-    starts = [splits] + authored + screened
+    fixed = [make_executable(
+        [ensure_live_exit(sanitise(s, profile), profile) for s in candidate],
+        profile, evaluator.reset_zones)
+        for candidate in _always_climb(splits, profile, objective)]
+    seen = {_key(c) for c in screened}
+    starts = ([splits] + authored + screened
+              + [c for c in fixed if _key(c) not in seen])
     # One climb per starting point, plus the refining climb over the
     # subdivided answer.
-    climbs = len(starts) + 1
+    climbs = len(starts) + 3
     finished = [0]
 
     def report(sweep: int, sweeps: int) -> None:
@@ -949,15 +1005,38 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         if score is not None and (best_score is None or score < best_score):
             coarse, result, best_score = candidate, candidate_result, score
 
+    # One guarded climb survives the enumeration, because what it responds to
+    # is not visible until something has been climbed. A full store refusing
+    # recovery says the lap should have spent earlier, and the screen cannot
+    # see that: it ranks maps by the lap they give, and a map that throws
+    # recovery away still gives a lap. Monaco is the case -- short, heavy on
+    # brakes, generous allowance, store full long before the end -- and
+    # leaving it to the screen cost 0.27 s there while every other circuit was
+    # level or better.
+    if result is not None and result.refused_mj > REFUSAL_WORTH_CHASING_MJ:
+        candidate, candidate_result = _climb(
+            _blanket(splits, profile, FRONT_LOAD_FRACTION, fa26.POWER_MAX),
+            evaluator, profile, objective, start_store_kj, max_sweeps,
+            on_sweep=report)
+        done()
+        score = objective.score(candidate_result, start_store_kj)
+        if score is not None and (best_score is None or score < best_score):
+            coarse, result, best_score = candidate, candidate_result, score
+
     if coarse is None:
         coarse, result = _climb(
             splits, evaluator, profile, objective, start_store_kj, max_sweeps)
 
-    # Everything above ranked maps against each other at the coarse step. The
-    # refinement, and the lap time that gets reported, are measured at `ds`:
-    # a map chosen on a 5 m grid is still a map, but a lap time read off one
-    # is not the number to put on a card.
-    result = fine.one(coarse)
+    # Everything above ranked maps against each other at the coarse step, and
+    # a map that wins on a 5 m grid is a lead, not a result. It is climbed
+    # again at `ds` from where the coarse pass left it -- which is quick,
+    # because it starts close -- and only then subdivided.
+    if coarse_ds > ds and coarse is not None:
+        coarse, result = _climb(coarse, fine, profile, objective,
+                                start_store_kj, max_sweeps, on_sweep=report)
+        done()
+    else:
+        result = fine.one(coarse)
     subdivided = subdivide(coarse, profile)
     if len(subdivided) > len(coarse):
         refined, refined_result = _climb(
