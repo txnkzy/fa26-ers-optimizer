@@ -262,14 +262,49 @@ async function paintLive(key) {
   try {
     d = await get("/api/live?key=" + encodeURIComponent(key));
   } catch (e) { box.hidden = true; return; }
-  if (!d || !d.ready) { box.hidden = true; return; }
+  // The box itself stays -- it carries the switch, and a switch you can only
+  // reach once a number has appeared is a switch nobody finds.
   box.hidden = false;
+  const sw0 = $("live-search");
+  if (sw0 && d && sw0.checked !== !!d.live_search) sw0.checked = !!d.live_search;
+  $("le-body").hidden = !(d && d.ready);
+  if (!d || !d.ready) {
+    $("le-full").hidden = !(d && d.live_search);
+    return;
+  }
   $("le-time").textContent = d.predicted;
   const tag = $("le-tag");
   tag.textContent = d.converged ? "settled" : "provisional";
   tag.dataset.state = d.converged ? "converged" : "provisional";
   $("le-note").textContent = d.note + " Your best so far is " + d.best_real
     + ". A full run searches from here and can only do better.";
+
+  // The switch reflects what the app has stored, not what the box was last
+  // clicked to: it persists across restarts and the page is not the record.
+  const sw = $("live-search");
+  if (sw && sw.checked !== !!d.live_search) sw.checked = !!d.live_search;
+
+  const full = $("le-full");
+  const f = d.full || {};
+  full.hidden = !d.live_search;
+  if (!d.live_search) return;
+  const fullTag = $("lf-tag");
+  if (f.ready) {
+    $("lf-time").textContent = f.predicted;
+    fullTag.textContent = f.searching ? "searching" : "done";
+    fullTag.dataset.state = f.searching ? "provisional" : "converged";
+    $("lf-note").textContent = "From " + f.laps
+      + (f.laps === 1 ? " lap, " : " laps, ")
+      + f.deploy_mj.toFixed(1) + " MJ, searched in "
+      + Math.round(f.took_s) + "s.";
+  } else {
+    $("lf-time").textContent = f.searching ? "…" : "—";
+    fullTag.textContent = f.searching ? "searching" : "waiting";
+    fullTag.dataset.state = "provisional";
+    $("lf-note").textContent = f.searching
+      ? "Running the full search on the laps so far."
+      : "Starts a few seconds after your next lap.";
+  }
 }
 
 /* ------------------------------------------------------------- past runs
@@ -1255,6 +1290,18 @@ $("ac-save").onclick = saveAcPath;
 for (const tab of document.querySelectorAll(".tab")) {
   tab.onclick = () => showView(tab.dataset.view);
 }
+$("live-search").onchange = async (e) => {
+  try {
+    await post("/api/livesearch", { on: e.target.checked });
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    return;
+  }
+  // Repaint now rather than at the next lap. The block this reveals is the
+  // whole feedback for the switch, and a switch that appears to do nothing
+  // for four minutes gets clicked again.
+  if (state.detail) paintLive(state.detail.key);
+};
 $("compare-go").onclick = runCompare;
 $("compare-clear").onclick = () => { compare.picked = []; $("compare-out").textContent = ""; loadRuns(); };
 $("setup-change").onclick = () => showView("folders");

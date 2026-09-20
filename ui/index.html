@@ -70,12 +70,34 @@
         <p class="circuit" id="circuit-name"></p>
         <dl class="facts" id="facts"></dl>
         <div class="live-estimate" id="live-estimate" hidden>
-          <div class="le-head">
-            <span class="le-label">Qualifying, as it stands</span>
-            <span class="le-tag" id="le-tag"></span>
+          <div id="le-body" hidden>
+            <div class="le-head">
+              <span class="le-label">Qualifying, as it stands</span>
+              <span class="le-tag" id="le-tag"></span>
+            </div>
+            <div class="le-time" id="le-time"></div>
+            <p class="le-note" id="le-note"></p>
           </div>
-          <div class="le-time" id="le-time"></div>
-          <p class="le-note" id="le-note"></p>
+
+          <div class="le-full" id="le-full" hidden>
+            <div class="le-head">
+              <span class="le-label">Full search</span>
+              <span class="le-tag" id="lf-tag"></span>
+            </div>
+            <div class="le-time" id="lf-time"></div>
+            <p class="le-note" id="lf-note"></p>
+          </div>
+
+          <label class="check le-switch">
+            <input type="checkbox" id="live-search">
+            <span>Keep searching between laps</span>
+          </label>
+          <p class="hint le-warn">
+            Off by default. It runs the same search the button runs, again
+            every time you finish a lap &mdash; <b>minutes of one processor
+            core at full tilt, while the game is using the rest</b>. Turn it on
+            only if your machine has the headroom.
+          </p>
         </div>
         <details class="laps" id="lap-detail">
           <summary><span id="lap-summary"></span></summary>

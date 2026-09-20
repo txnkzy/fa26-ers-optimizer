@@ -303,6 +303,43 @@ A.forget_user_limits("__e2e_test__")
 check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
 print()
+
+# --- the page actually runs ------------------------------------------------
+# A page whose script throws on load still serves, still returns 200, and
+# still contains every element the markup declares -- so every check that
+# reads the HTML passes while the app does nothing at all. That is exactly
+# what happened: one duplicated `const` inside a function stopped app.js
+# executing, and the rail sat on its placeholder text through a full round of
+# element-level testing.
+#
+# So the page is loaded in the browser the app itself uses, headless, and
+# asked for something only the script can produce.
+def _browser_renders() -> tuple[bool, str]:
+    exe = A.find_browser()
+    if not exe:
+        return True, "no Chromium-based browser found, skipped"
+    import subprocess as _sp
+    profile = SCRATCH / "headless-profile"
+    try:
+        out = _sp.run(
+            [str(exe[0] if isinstance(exe, tuple) else exe),
+             "--headless=new", "--disable-gpu", "--no-first-run",
+             "--user-data-dir=" + str(profile),
+             "--virtual-time-budget=6000", "--dump-dom", BASE + "/"],
+            capture_output=True, timeout=90).stdout.decode("utf-8", "replace")
+    except Exception as exc:
+        return True, "could not run headless (%s), skipped" % exc
+    # `version` is written into the header by the script, never by the markup.
+    stamped = 'id="version">' in out and "</span>" in out
+    filled = out.split('id="version">', 1)[-1].split("<", 1)[0].strip() if stamped else ""
+    if filled:
+        return True, "script ran, stamped v" + filled
+    return False, "the page loaded but its script did not run"
+
+
+_ok, _why = _browser_renders()
+check("the page's script runs in a real browser", _ok, _why)
+
 print("FAILED: %s" % ", ".join(fails) if fails else "ALL PASS")
 srv.shutdown()
 sys.exit(1 if fails else 0)

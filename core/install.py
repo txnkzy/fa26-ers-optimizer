@@ -109,6 +109,22 @@ def save_telemetry(folder: str | Path | None) -> None:
     _write_config(telemetry=str(folder) if folder else "")
 
 
+def live_search_enabled() -> bool:
+    """Whether to run a full search between laps. Off unless asked for.
+
+    A full search is minutes of one processor at full tilt, and the machine it
+    would run on is the machine running Assetto Corsa. Defaulting this on would
+    cost frames in the one place a user would never think to look for the
+    cause, so it defaults off and stays off until somebody turns it on knowing
+    what it costs. The cheap provisional estimate runs either way.
+    """
+    return bool(_config().get("live_search", False))
+
+
+def save_live_search(on: bool) -> None:
+    _write_config(live_search=bool(on))
+
+
 def is_ac_root(path: Path) -> bool:
     """Whether this folder really is an Assetto Corsa install."""
     return (path / "content" / "cars").is_dir()

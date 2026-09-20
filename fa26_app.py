@@ -483,6 +483,7 @@ def readiness() -> dict:
            # is actually in it. When something is not found, this is the
            # whole answer, and it used to be invisible.
            "app_dir": str(install.app_dir()),
+           "live_search": install.live_search_enabled(),
            "documents": {
                "folder": str(docs_dir()),
                "exists": docs_dir().is_dir(),
@@ -609,6 +610,152 @@ def live_estimate(key: str) -> dict:
     }
     _LIVE_CACHE[key] = (revision, out)
     return out
+
+
+class LiveSearch:
+    """A full search between laps, for people who have asked for one.
+
+    The provisional estimate is the screening step alone -- fifteen
+    simulations, under half a second -- and it runs for everybody because it
+    costs nothing. This is the other thing: the real search, the same one the
+    button runs, started again every time a lap lands.
+
+    It is off by default and it stays off until somebody turns it on, because
+    the processor it would run on is the processor running Assetto Corsa. A
+    solve is minutes of one core at full tilt, and a user whose frame rate
+    dropped would have no reason at all to suspect the lap-time tool sitting
+    behind the game. So the cost is stated where the switch is, and the switch
+    starts off.
+
+    One search at a time, never while the main engine is working, and abandoned
+    the moment a newer lap arrives -- a result computed from laps that have
+    already been superseded is the stale-lap problem again, wearing a hat.
+    """
+
+    #: How long after a lap lands before starting. A driver who has just
+    #: crossed the line is about to drive another lap, and starting a solve
+    #: into the first corner is the worst possible moment for it.
+    SETTLE_S = 8.0
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.result: dict | None = None
+        self.running = False
+        self.want = None            # (key, revision) waiting to be searched
+        self.generation = 0
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def snapshot(self, key: str) -> dict:
+        with self.lock:
+            found = self.result
+            busy = self.running
+        if found and found.get("key") == key:
+            out = dict(found)
+            out["searching"] = busy
+            return out
+        return {"ready": False, "searching": busy}
+
+    def note(self, key: str, revision: str) -> None:
+        """A session is current. Queue a search for it if one is wanted."""
+        if not install.live_search_enabled():
+            with self.lock:
+                self.result = None
+            return
+        with self.lock:
+            self.want = (key, revision)
+
+    def _loop(self) -> None:
+        pending = None
+        since = 0.0
+        while True:
+            time.sleep(1.0)
+            with self.lock:
+                want = self.want
+            if want is None:
+                continue
+            if want != pending:
+                pending, since = want, time.time()
+                continue
+            if time.time() - since < self.SETTLE_S:
+                continue
+            if ENGINE.running:
+                since = time.time()          # the button wins; wait it out
+                continue
+            with self.lock:
+                if self.result and self.result.get("revision") == want[1]:
+                    continue
+                self.running = True
+                self.generation += 1
+                mine = self.generation
+            try:
+                found = self._search(want[0], mine)
+            except Exception:
+                found = None
+            with self.lock:
+                self.running = False
+                if found is not None and mine == self.generation:
+                    found["key"], found["revision"] = want[0], want[1]
+                    self.result = found
+
+    def _stale(self, mine: int) -> bool:
+        with self.lock:
+            return mine != self.generation or ENGINE.running
+
+    def _search(self, key: str, mine: int) -> dict | None:
+        paths = session_paths(key)
+        laps = []
+        for path in paths:
+            try:
+                candidate = laplib.load(path)
+            except Exception:
+                continue
+            if not laplib.problem(candidate):
+                laps.append(candidate)
+        if not laps:
+            return None
+        laps.sort(key=lambda l: l.lap_time_s)
+
+        data = install.ensure_unpacked(fa26.CAR_ID)
+        car = carphysics.load(data)
+        measured = [s["fuel_l"] for s in (scan_lap(p) for p in paths) if s["fuel_l"]]
+        if measured:
+            car.fuel_liters = sum(measured) / len(measured)
+        cal = calibrate.fit_longitudinal(laps, car)
+        shape = prof.Profile(laps)
+
+        alloc = recharge.lookup(str(paths[0]))
+        saved = load_user_limits().get(
+            recharge.normalise("__".join(key.split("__")[:-1])))
+        cap = (saved["qualify"] / 10.0) if saved else alloc.mj("qualify")
+        powertrain = fa26.Powertrain(taper=fa26.taper_for(alloc.curve_override))
+        objective = optimise26.Objective(
+            name="Qualifying", harvest_cap_mj=cap, energy_neutral=False,
+            one_shot=True, min_store_fraction=0.0, charge_fractions=(0.75,))
+
+        def abandon(_fraction: float) -> None:
+            """The search's own way out. Checked on every progress tick, so a
+            newer lap or a press of the button stops it within a sweep rather
+            than at the end of a solve."""
+            if self._stale(mine):
+                raise Cancelled()
+
+        started = time.time()
+        _splits, result, _evals = optimise26.optimise(
+            optimise26.seed_splits(laps[0], shape), car, cal, shape, powertrain,
+            objective, optimise26.starting_store_kj(laps[0], "quali"),
+            reset_zones=alloc.reset_zones_for("qualify", shape.length_m),
+            speed_zones=alloc.speed_zones_for(shape.length_m),
+            on_progress=abandon)
+        return {
+            "ready": True,
+            "laps": len(laps),
+            "predicted_s": result.lap_time_s,
+            "predicted": clock(result.lap_time_s),
+            "best_real_s": laps[0].lap_time_s,
+            "best_real": clock(laps[0].lap_time_s),
+            "deploy_mj": result.deployed_mj,
+            "took_s": time.time() - started,
+        }
 
 
 def current() -> dict:
@@ -1544,6 +1691,7 @@ class Engine:
 
 
 ENGINE = Engine()
+LIVE = LiveSearch()
 
 
 # --------------------------------------------------------------------- server
@@ -1643,8 +1791,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"revision": session_revision(key) if key else ""})
             elif route == "/api/live":
                 key = query.get("key", [""])[0] or newest_key()
-                self._json(live_estimate(key) if key
-                           else {"ready": False, "reason": "no session yet"})
+                if not key:
+                    self._json({"ready": False, "reason": "no session yet"})
+                else:
+                    out = live_estimate(key)
+                    LIVE.note(key, session_revision(key))
+                    out["full"] = LIVE.snapshot(key)
+                    out["live_search"] = install.live_search_enabled()
+                    self._json(out)
             elif route == "/api/history":
                 self._json({"runs": history.load()})
             elif route == "/api/compare":
@@ -1689,6 +1843,9 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/apply":
                 self._json(ENGINE.apply(body["path"],
                                         bool(body.get("write_alloc", True))))
+            elif route == "/api/livesearch":
+                install.save_live_search(bool(body.get("on")))
+                self._json({"live_search": install.live_search_enabled()})
             elif route == "/api/setpath":
                 folder = Path(body.get("path", "").strip().strip('"'))
                 if not install.is_ac_root(folder):
