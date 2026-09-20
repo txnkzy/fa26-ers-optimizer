@@ -950,3 +950,47 @@ for the charge each actually started with:
 **Consistently 0.3 s pessimistic**, which is close to the +0.63% bias the
 harness reports for Austin and in the same direction. The 1:38s that were
 thrown away would sharpen it; they are gone.
+
+---
+
+## Driving the protocol properly broke the harness
+
+A qualifying run is a **mixed session** by construction — recharge lap, push
+lap, recharge lap, push lap. The holdout rule fitted each lap on *all* the other
+laps of its session, so a push lap was having its car built from the session's
+1:55 recharge laps and was then asked to reproduce a 1:39. It came back 1:48,
+a 9.6% error, on the two laps whose map the logger had recorded perfectly.
+
+That is not the model being wrong. It is the harness pooling laps the app never
+would, and it only appeared once somebody drove the protocol properly.
+
+Two corrections, both making the harness match what the tool actually does:
+
+**Fit through the pooling rule.** `session.select` is what the app uses, and the
+harness now uses it too, so a push lap is fitted on push laps.
+
+**Replay only laps the tool would model.** A recharge lap is deliberately slow —
+it gives up time to put charge back — and replaying one against a push-lap
+profile measures something nothing here has claimed. An Austin 1:53 came back
+as a predicted 1:40, which is the model correctly observing that the lap could
+have been driven faster, and not an error in it.
+
+| | laps | mean | worst | bias |
+|---|---|---|---|---|
+| before | 36 | 1.21% | 3.03% | +0.56% |
+| **after** | **39** | **0.93%** | **2.52%** | **+0.07%** |
+
+More laps, less error, and a bias of seven hundredths of a percent — the model
+is neither optimistic nor pessimistic across the corpus. Albert Park went from
+1.56% to 0.93% and Suzuka from 1.71% to 0.95%; both were being fitted on laps
+the app would have discarded.
+
+### The first two laps attributed from the logger's own record
+
+| lap | strat | driven | model | error | source |
+|---|---|---|---|---|---|
+| 1:39.053 | 1 | 99.053 | 99.362 | +0.31% | cota.ini |
+| 1:39.159 | 1 | 99.159 | 98.591 | −0.57% | cota.ini |
+
+Both from the setup the logger named, no snapshot consulted. The mechanism
+works end to end on laps driven with it.

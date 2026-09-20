@@ -104,6 +104,16 @@ def cases(folder: Path, item_map) -> tuple[list[Case], dict[str, int]]:
                 key_t = trouble.split(" -- ")[0].split(",")[0]
                 refused[key_t] = refused.get(key_t, 0) + 1
                 continue
+            # Only laps the tool would actually model. A recharge lap is
+            # deliberately slow -- it gives up time to put charge back -- and
+            # replaying one against a profile built from push laps measures
+            # something nothing here has ever claimed: an Austin 1:53 came
+            # back as a predicted 1:40, which is the model correctly saying
+            # "you could have driven that faster" and not an error in it.
+            if path not in lapsession.select(paths):
+                refused["a lap the pooling rule would not model"] = refused.get(
+                    "a lap the pooling rule would not model", 0) + 1
+                continue
             found = provenance.attribute(driven, snaps, item_map)
             if not found:
                 refused[found.reason] = refused.get(found.reason, 0) + 1
@@ -127,9 +137,18 @@ def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
     if in_sample:
         fit_laps = [driven]
     else:
+        # The other laps of the session, put through the same pooling rule the
+        # app uses rather than taken whole.
+        #
+        # A qualifying run is a *mixed* session by construction -- recharge
+        # lap, push lap, recharge lap, push lap -- and fitting a push lap on
+        # its own session's recharge laps builds the car from a 1:55 and then
+        # asks it to reproduce a 1:39. It came back 1:48. That is not the model
+        # being wrong, it is the harness pooling laps the app never would, and
+        # it only showed up once somebody drove the protocol properly.
         others = [p for p in case.siblings if p != case.path]
         loaded = []
-        for p in others:
+        for p in lapsession.select(others) if others else []:
             try:
                 other = laplib.load(p)
             except Exception:

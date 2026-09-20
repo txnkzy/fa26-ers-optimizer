@@ -11,17 +11,18 @@ at 8 circuits — against a car fitted from the *other* laps of the same session
 
 | | mean | worst |
 |---|---|---|
-| **all 36 laps** | **1.21%** | 3.03% |
-| Madrid, Monaco, Bahrain, Austin | 0.22 – 0.99% | 1.62% |
-| Red Bull Ring, Monza, Albert Park, Suzuka | 1.46 – 1.71% | 3.03% |
+| **all 39 laps** | **0.93%** | 2.52% |
+| Monaco, Bahrain, Austin, Albert Park, Suzuka | 0.41 – 0.95% | 1.63% |
+| Monza, Red Bull Ring | 1.43 – 1.46% | 2.52% |
 
 The error scales with how fast the circuit is — it correlates with top speed at
 r = +0.85 — so a single number across all of them would flatter the fast ones
 and slander the slow ones. Run `python validate_model.py` for the current table
 on your own laps.
 
-Almost all of what is left is the model declining to invent speed. Given a
-lap's own line it reproduces that lap to **0.69%, unbiased to +0.16%**; the
+Overall bias is **+0.07%** — the model is neither optimistic nor pessimistic
+across the corpus. Almost all of what is left is it declining to invent speed:
+given a lap's own line it reproduces that lap to **0.69%**; the
 extra shows up only when it is asked to predict a lap *faster* than the session
 it was fitted on. Laps slower than their session siblings come back unbiased at
 −0.13%, laps faster at +1.16%. That is the behaviour you want from something
