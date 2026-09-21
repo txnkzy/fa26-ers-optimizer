@@ -1364,6 +1364,60 @@ This A/B is the regression case for that work: a corner, two maps, one
 megajoule of difference, 2 ms of measurement noise, and a known answer of
 -0.460 s.
 
+## The controlled A/B, and what it caught in the model
+
+One lap each with a recharge lap between them. The control worked: both timed
+laps crossed the line on a full battery, **94.8% and 94.1%**, at **193.2 and
+194.3 kph**, and the logger recorded `STRATS=1` and `STRATS=2` -- each timed lap
+ran on one map start to finish, every switch confined to the lap between.
+
+**Map B is 1.233 s quicker**, 98.794 against 100.027.
+
+With one lap each that number cannot separate the map from the driver on its
+own. Where the time appears can. Cut into 500 m pieces, against where the two
+maps differ:
+
+| metres | A | B | B - A | B's map |
+|---|---|---|---|---|
+| 1000-1500 | 7.221 | 7.245 | +0.023 | same |
+| 1500-2000 | 9.933 | 9.944 | +0.011 | same |
+| 2000-2500 | 7.826 | 7.567 | **-0.258** | +50 kW |
+| 2500-3000 | 10.447 | 10.219 | **-0.228** | +100 kW |
+| 3000-3500 | 5.870 | 5.609 | **-0.261** | +100 kW |
+| 4000-4500 | 12.184 | 12.158 | -0.026 | same |
+| 4500-5000 | 7.819 | 7.399 | **-0.421** | the long right |
+| 5000-5429 | 9.035 | 8.993 | -0.043 | same |
+
+**Where the maps agree, the two laps agree to about 0.02 s per 500 m.** That is
+the driver, and it is the noise floor of this measurement. Every place the maps
+differ is ten to twenty times it, and every one of them moves in the direction
+the map does. This is the map, not the lap.
+
+The corner on its own came out at **-0.435 s** with B exiting 13.5 kph faster --
+an independent repeat of the -0.460 s and +16 kph measured the day before, from
+a different battery state, on a different pair of laps.
+
+### What it caught
+
+The two maps were built to deploy the same energy and the model said both would
+spend **12.00 MJ**. The car spent **5.00 MJ on A and 7.98 MJ on B**, and A
+finished the lap still holding **74%** of its battery.
+
+So three things are wrong at once, and only the first was known:
+
+1. the corner is worth 0.44 s and the model scores it at zero;
+2. the model is out by more than a factor of two on how much energy its own maps
+   deliver -- 12.00 MJ planned against 5.00 driven;
+3. a qualifying map that ends the lap on 74% is not a qualifying map, and
+   nothing in the tool noticed.
+
+Part of B's 1.233 s is therefore simply that it spent three more megajoules than
+A did, which is a real advantage of map B but not an answer to where energy
+should go. The corner measurement is unaffected -- it is metres long, both laps
+had charge in hand through it, and it repeats across two sessions -- but the
+whole-lap number should be read as "B is the better map", not as "deploying in
+the long right is worth 1.2 s".
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
