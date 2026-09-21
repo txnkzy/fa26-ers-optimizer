@@ -1595,6 +1595,56 @@ demand latch correctly refused it -- the check was measuring the latch, not the
 corner. Splits now open before the preceding lift, which is the advice the tool
 gives its own users. It reports **13.5 kph** on Austin against the 16 measured.
 
+## The fixed model on track: a dead heat, and why that is useful
+
+The first map the tool wrote with the corner and the latch both fixed, against
+map B, which had driven a 98.794. Recharge lap between, switched at the line,
+`STRATS=1` and `STRATS=2` in the logger, both from `cota_v2.ini`.
+
+**98.673 against 98.668.** Four thousandths apart.
+
+Not a setup that failed to load. The two maps did entirely different things:
+
+| | deployed | ends on | long right | exits it |
+|---|---|---|---|---|
+| the new map | **11.39 MJ** | **9.4%** | 1.53 MJ | **277.0 kph** |
+| map B | 10.63 MJ | 28.7% | 1.00 MJ | 267.4 kph |
+
+The corner fix is confirmed a third time and on a third pair of laps: half a
+megajoule more through the long right is worth **0.236 s and 9.6 kph of exit
+speed**. The under-deployment fix works too -- the new map finishes on 9.4%
+where map B leaves 28.7% in the battery.
+
+And it bought nothing, because of where the energy came from. Timed off the
+logger's own clock rather than by integrating speed, which matters: integrating
+disagreed with the recorded lap by up to 0.2 s and would have supported a
+conclusion the car does not.
+
+| metres | energy the new map adds | time it gains | rate |
+|---|---|---|---|
+| 500-1000 | +0.22 MJ | +0.065 s | 0.30 s/MJ |
+| 2000-2500 | +0.26 MJ | +0.056 s | 0.22 s/MJ |
+| **2500-3000** | **-0.28 MJ** | **-0.116 s** | 0.41 s/MJ lost |
+| 4000-4500 | +0.37 MJ | +0.135 s | 0.36 s/MJ |
+| **4500-5000** | **+0.46 MJ** | **+0.236 s** | **0.51 s/MJ** |
+| **5000-5428** | **-0.16 MJ** | **-0.160 s** | **1.00 s/MJ lost** |
+
+The long right returns 0.51 s per megajoule, the best rate on the lap bar one.
+**The last two corners return 1.00 s/MJ -- twice as much -- and the search took
+energy out of them to pay for the corner.** 2500-3000 returns 0.41 and lost
+energy too. Gains of 0.49 s against losses of 0.54 s, and the lap comes out level.
+
+So the corner is no longer the problem. The problem is now the other end: the
+model undervalues deployment out of slow corners, where the car is at its most
+responsive to power, and is willing to sell them to buy a fast one. That is the
+next thing to measure, and it comes with its own ground truth already.
+
+One anomaly, recorded rather than explained: 3500-4000 has the new map spending
+0.04 MJ *more* and running 0.141 s *slower*. The driver's noise floor where two
+maps agree is about 0.02 s per 500 m -- 0-500 came in at 0.011 s and 1500-2000
+at 0.029 s -- so 0.141 s is seven times it and in the wrong direction. One lap
+each cannot separate that from a mistake in a technical section.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
