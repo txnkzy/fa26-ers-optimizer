@@ -1645,6 +1645,72 @@ maps agree is about 0.02 s per 500 m -- 0-500 came in at 0.011 s and 1500-2000
 at 0.029 s -- so 0.141 s is seven times it and in the wrong direction. One lap
 each cannot separate that from a mistake in a technical section.
 
+## Balance: the search has not levelled its own rates
+
+Reported from the car: the maps look concentrated, favouring one long traction
+zone, and a spread across the high-speed corner, the slow-corner exits and the
+run to turn one might be worth more than piling into any one of them.
+
+That has an exact form. At an optimum the last megajoule spent in each place
+returns the same time; if one zone returns twice another, energy should move
+until the rates level. And the Austin map finishes the lap on empty, so the lap
+is **energy-limited** -- the total is fixed and the only question is placement.
+
+### The search stops short of its own optimum
+
+Moving 50 kW from one zone to another in the map the search chose, **nine single
+moves make the model's own lap time faster**, the best by 0.098 s:
+
+| out of | into | change | the car rates them |
+|---|---|---|---|
+| 2000-2500 | 2500-3000 | **-0.098 s** | 0.22 -> 0.41 s/MJ |
+| 5000-5428 | 2500-3000 | -0.093 s | **1.00 -> 0.41 s/MJ** |
+| 4000-4500 | 2500-3000 | -0.087 s | 0.36 -> 0.41 s/MJ |
+| 4500-5000 | 2500-3000 | -0.079 s | 0.51 -> 0.41 s/MJ |
+| 4000-4500 | 500-1000 | -0.066 s | 0.36 -> 0.30 s/MJ |
+
+This is not a physics fault. By its own reckoning the search left time on the
+table, which means it is stopping before it has equalised anything.
+
+### And where it wants to move energy is backwards
+
+Every one of the best moves feeds **2500-3000** or **500-1000**, which the car
+rates at 0.41 and 0.30 s/MJ. Two of them pay for it out of **5000-5428, which
+the car rates at 1.00 s/MJ, the highest on the lap.** The model is selling the
+most valuable stretch of the circuit to buy two of the cheapest.
+
+Measured rates from the dead-heat pair, best first:
+
+| metres | s/MJ | what it is | rests on |
+|---|---|---|---|
+| 5000-5428 | **1.00** | the last two corners | 0.16 MJ |
+| 4500-5000 | 0.51 | the long right | 0.46 MJ |
+| 2500-3000 | 0.41 | the back straight | 0.28 MJ |
+| 4000-4500 | 0.36 | approach to the long right | 0.37 MJ |
+| 500-1000 | 0.30 | out of turn one | 0.22 MJ |
+| 2000-2500 | 0.22 | | 0.26 MJ |
+
+The ordering wants reading with care. A rate is a ratio, and the two at the top
+of it rest on the smallest energy differences on the lap -- 0.16 MJ for the last
+corners against 0.46 for the long right -- so the long right's 0.51 is the more
+solid number and the 1.00 is the more likely to move with more laps.
+
+### The run to turn one is the latch, not a choice
+
+Nothing is deployed from the line to turn one because nothing *can* be: the car
+arrives flat out on the recharge map and demand cannot be raised under throttle.
+Switching to the qualifying map before the final corner establishes the demand
+during that lift, and the car crosses the line already entitled to it:
+
+| switch | lap | crosses at |
+|---|---|---|
+| as you cross the line | 98.510 | 190 kph on 99% |
+| before the final corner | **98.388** | 211 kph on 87% |
+
+**0.122 s**, and free -- it costs a habit, not a megajoule. Worth noting that
+before the latch was modelled this same comparison read 1.145 s; the fix made
+the estimate an eighth of what it was, and more believable for it.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
