@@ -1399,24 +1399,89 @@ a different battery state, on a different pair of laps.
 
 ### What it caught
 
-The two maps were built to deploy the same energy and the model said both would
-spend **12.00 MJ**. The car spent **5.00 MJ on A and 7.98 MJ on B**, and A
+The two maps were built to deploy the same energy and the model expected both to
+spend about **11.8 MJ**. The car spent **8.79 MJ on A and 10.75 MJ on B**, and A
 finished the lap still holding **74%** of its battery.
+
+*(Corrected: these were first written up as 5.00 and 7.98 MJ. The logger's
+deployment counter carries the previous lap's total for the first two to four
+samples after the line before resetting, so subtracting `deployed_kj[0]` takes
+a whole lap's deployment off the answer. The shortfall is 3.0 MJ on A and 1.0 on
+B, not the factor of two first reported. Every other number here is measured
+from differences later in the lap and is unaffected.)*
 
 So three things are wrong at once, and only the first was known:
 
 1. the corner is worth 0.44 s and the model scores it at zero;
-2. the model is out by more than a factor of two on how much energy its own maps
-   deliver -- 12.00 MJ planned against 5.00 driven;
+2. map A is 3.0 MJ short of what the model expected it to deliver, and 2.3 MJ of
+   that is one split that delivers nothing at all;
 3. a qualifying map that ends the lap on 74% is not a qualifying map, and
    nothing in the tool noticed.
 
-Part of B's 1.233 s is therefore simply that it spent three more megajoules than
-A did, which is a real advantage of map B but not an answer to where energy
-should go. The corner measurement is unaffected -- it is metres long, both laps
-had charge in hand through it, and it repeats across two sessions -- but the
+Part of B's 1.233 s is therefore simply that it spent two more megajoules than A
+did, which is a real advantage of map B but not an answer to where energy should
+go. The corner measurement is unaffected -- it is metres long, both laps had
+charge in hand through it, and it repeats across two sessions -- but the
 whole-lap number should be read as "B is the better map", not as "deploying in
 the long right is worth 1.2 s".
+
+## Why the maps under-deploy, and why that is the same question
+
+Two causes, and the second is the one reported from the car.
+
+### The first split of the lap delivers nothing
+
+Over the first 519 m at Austin the driver is at full throttle, accelerating from
+195 to 268 kph, for 7.7 seconds. Both maps command power there -- 300 kW on A,
+200 kW on B. The car deploys **zero**:
+
+| metres | gas | kph | deployed, A | deployed, B |
+|---|---|---|---|---|
+| 5 | 1.00 | 195 | 0.0 | 0.0 |
+| 200 | 1.00 | 241 | 0.0 | 0.0 |
+| 500 | 1.00 | 268 | 0.0 | 0.0 |
+| 540 | 0.00 | 255 | 1.2 | 0.5 |
+| 700 | 0.69 | 116 | **17.7** | **17.9** |
+| 760 | 1.00 | 178 | **268.0** | **259.9** |
+
+Deployment begins at 700 m -- after the driver lifts for turn one and gets back
+on the power. This is the demand latch: power *demand* cannot be raised while
+under throttle. The lap begins with the car already flat out, so the new lap's
+map cannot take effect until the first lift, and the biggest uninterrupted
+acceleration on the circuit is dead in every map the tool writes. It asked for
+2327 kJ on A and 1558 kJ on B and got none of it.
+
+The model does not know. `reset_zones` for Austin is **empty**, so the simulation
+deploys from metre zero and counts energy the car will never spend.
+
+### The long right is the second biggest place to put energy, and map A declines it
+
+Ranking every stretch of continuous full throttle by how much energy it could
+absorb at 350 kW:
+
+| metres | seconds | MJ at 350 kW | covered by map A |
+|---|---|---|---|
+| 2611-3583 | 13.0 | 4.55 | all of it |
+| **4289-4882** | **9.7** | **3.41** | **32%** |
+| 1-519 | 7.7 | 2.70 | all of it, and latched dead |
+| 721-1211 | 7.6 | 2.65 | 73% |
+| 1990-2407 | 6.4 | 2.24 | all of it |
+| 5005-5168 | 2.7 | 0.93 | 44% |
+| 5326-5429 | 2.1 | 0.75 | 99% |
+
+**The long right is the second largest energy sink on the lap and map A uses a
+third of it.** With the third largest latched dead at the line, map A is left
+without anywhere to put its battery, and finishes the lap on 74%. Map B takes
+439 m of that stretch and spends 1.75 MJ there, and finishes on 24%.
+
+So the two questions have one answer. The ceiling tells the search a flat-out
+corner is worth nothing; the search declines the second biggest energy sink on
+the circuit; and the map it writes then cannot spend the battery it was given.
+The under-deployment is not a separate bug from the corner -- it is what the
+corner error does to the map.
+
+Map B is not the fix either: it stops deploying at 4709 m and leaves the last
+173 m of that stretch, about a megajoule of capacity, unused.
 
 ## Where the model stands
 
