@@ -1483,6 +1483,65 @@ corner error does to the map.
 Map B is not the fix either: it stops deploying at 4709 m and leaves the last
 173 m of that stretch, about a megajoule of capacity, unused.
 
+## Taking on the two fixes, and what stopped one of them
+
+### Teaching the model the latch makes the maps worse, on its own
+
+The latch is real. Every one of seven Austin laps deployed **exactly zero**
+before the first lift, and across the corpus **160 of 216 laps** deployed under
+50 kJ there. The simulation primes the latch by walking the last 600 m of the
+lap under the map being scored, so it starts the lap entitled to whatever that
+map's last split asked for -- which is not how anyone arrives, because the lap
+before a flying lap runs a different map that asked for nothing.
+
+Two attempts at the variant were mislabelled before one of them bit, which is
+worth recording. Deleting the priming loop does **not** make the car arrive with
+nothing: it leaves `throttle_time` at zero, which the main loop reads as the
+throttle having just been applied, and *grants* the opening split whatever it
+asks for -- the opposite. And setting the demand before the priming loop is
+wiped by the loop itself. Only a change after the loop does anything, and the
+proof that it does is that the searched map changes at all.
+
+Measured on the holdout, arriving latched is a small trade: energy error 1.18 ->
+**1.09 MJ** and its bias +0.38 -> **+0.19 MJ**, against lap time 0.76% -> 0.78%.
+
+But the map it writes is worse:
+
+| | lap | deployed | ends on |
+|---|---|---|---|
+| believing the line deploys | 98.672 | 11.76 MJ | 0% |
+| knowing it arrives latched | 99.421 | 11.08 MJ | **17%** |
+
+Told it cannot spend at the line, and still told a flat-out corner is worth
+nothing, the search has nowhere left to put the energy and leaves 17% of the
+battery unspent. **The two faults are one fault and have to be fixed together.**
+The latch change is not shipped.
+
+### The check that would have caught it is not the obvious one
+
+A warning on the predicted end-of-lap charge would not have caught the Austin
+map. That map was **predicted to finish empty and finished on 74%**: the model
+was wrong about where the energy went, and a check on the model's own prediction
+cannot catch the model being wrong. Checking the driven laps instead says
+nothing either -- 66 of 87 strat-1 laps in the corpus finish above 10%, mostly
+because they did not start full.
+
+What is checkable is the request. Energy commanded before the driver's first
+lift is energy the car has been measured refusing, whatever the model believes:
+
+* **map A: 2.30 MJ, 19% of everything it spends**
+* map B: 1.53 MJ, 11%
+
+Both waste it and only one is dramatic. Shipped at a tenth so both are named,
+with `first_lift_m` reading the pooled profile so it is where this driver lifts.
+On a fresh solve of the same session it fires: *"1.9 MJ of this map -- 11% of
+everything it spends -- is commanded before the first corner, and the car will
+refuse most of it."*
+
+A second note covers a qualifying map **predicted** to finish holding 10% or
+more, which is what the latch-aware search produced. It is the weaker of the two
+and is documented as such.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded

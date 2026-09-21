@@ -853,6 +853,49 @@ def braking_zones(profile, min_m: float = 25.0) -> list[list[float]]:
     return zones
 
 
+def first_lift_m(profile) -> float:
+    """Where the driver first comes off the power after the line.
+
+    Until that point the car is running on whatever demand the previous lap
+    left it with, because power demand may not be raised under throttle and the
+    lap begins with the car already flat. Read off the pooled profile so it is
+    where this driver lifts rather than where they lifted once.
+    """
+    gas = getattr(profile, "gas_mean", None)
+    if not gas:
+        return 0.0
+    for slot, value in enumerate(gas):
+        if value < fa26.DEMAND_RESET_GAS:
+            return slot * profile.ds
+    return 0.0
+
+
+def commanded_kj(splits, profile, a: float, b: float) -> float:
+    """Energy a map asks for between two distances, at the driver's own pace.
+
+    What the car will actually deliver depends on the latch, the taper and the
+    store; this is only what the map requests, which is the quantity worth
+    reporting when the question is whether it is requesting it somewhere
+    useless.
+    """
+    total = 0.0
+    for split in splits:
+        if split.deploy_kw <= 0:
+            continue
+        lo = max(a, float(split.start_m))
+        hi = min(b, float(split.deploy_end_m))
+        if hi <= lo:
+            continue
+        d = lo
+        while d < hi:
+            step = min(profile.ds, hi - d)
+            speed = profile.measured_speed_at(d)
+            if speed > 1.0 and profile.gas_mean[profile._slot(d)] >= 0.2:
+                total += split.deploy_kw * step / speed
+            d += step
+    return total
+
+
 def plural(n: int, one: str, many: str | None = None) -> str:
     return one if n == 1 else (many or one + "s")
 
@@ -1411,6 +1454,36 @@ class Engine:
     #: at 2.25 -- are the ones worth a second look.
     UNUSED_ALLOWANCE_MJ = 1.5
 
+    #: Charge a qualifying map is still *predicted* to hold at the line before
+    #: it is worth saying so. A one-lap map is meant to arrive empty and a
+    #: searched one normally does, so this fires on a search that could not
+    #: place the energy rather than on an ordinary map.
+    #:
+    #: It would not have caught the Austin map that started this. That one was
+    #: predicted to finish empty and finished on 74%, because the model was
+    #: wrong about where the energy went, and a check on the model's own
+    #: prediction cannot catch the model being wrong. `OPENING_SHARE` is the
+    #: one that catches that.
+    QUALI_LEFTOVER_PCT = 10.0
+
+    #: Share of a map's commanded deployment that may sit before the driver's
+    #: first lift of the lap before it is worth saying so.
+    #:
+    #: The car crosses the line already at full throttle, and power demand may
+    #: not be raised under throttle, so the opening command is refused until
+    #: the driver first comes off the power. Measured, not assumed: every one
+    #: of seven Austin laps deployed exactly zero before the first lift, and
+    #: 160 of 216 laps across the whole corpus deployed under 50 kJ there. The
+    #: simulation does not model this -- it primes the latch from the tail of
+    #: the same map, which is not the map anyone arrives on -- so the energy
+    #: has to be counted and flagged rather than simulated away.
+    #:
+    #: A tenth, because both Austin maps waste energy there and only one of
+    #: them is dramatic about it: map A commands 2.30 MJ before the first lift
+    #: and map B 1.53 MJ, 19% and 11% of what each spends. Set at 12% it
+    #: caught the bad one and let a megajoule and a half through on the other.
+    OPENING_SHARE = 0.10
+
     #: How far before the line to consider putting STRAT 1 on, and how finely.
     #: Six hundred metres is the whole run out of any final corner; beyond it
     #: the driver is on the previous lap's business.
@@ -1578,6 +1651,42 @@ class Engine:
                 "is where the lap time is, but there is nothing spare for an "
                 "attack at that point — switch to STRAT 1 for that."
                 % (100 * result.store_min_kj / laplib.STORE_CAPACITY_KJ))
+            self.note("   " + notes[-1])
+
+        # A qualifying map exists to empty the battery over one lap, and one
+        # that crosses the line still holding charge has failed at the only
+        # thing it was asked to do. This is not hypothetical: the map the
+        # search wrote for Austin finished the lap on 74%, three megajoules
+        # unspent, and nothing here said a word about it -- it was found by
+        # driving the thing and reading the telemetry afterwards.
+        #
+        # The store is reported as a fraction of capacity rather than against
+        # the allowance, because this is about the battery the lap had in its
+        # hands and did not use, not about recovery it was never granted.
+        opening = first_lift_m(profile)
+        if opening > 0:
+            before = commanded_kj(splits, profile, 0.0, opening)
+            total = commanded_kj(splits, profile, 0.0, lap.length_m)
+            if total > 0 and before / total >= self.OPENING_SHARE:
+                notes.append(
+                    "%.1f MJ of this map — %.0f%% of everything it spends — is "
+                    "commanded before the first corner, and the car will refuse "
+                    "most of it. You cross the line flat out, and the power it "
+                    "may ask for cannot go up until you lift, so the opening "
+                    "stretch runs on whatever the lap before it left behind. "
+                    "Move that energy later in the lap."
+                    % (before / 1000.0, 100.0 * before / total))
+                self.note("   " + notes[-1])
+
+        left = 100.0 * result.store_end_kj / laplib.STORE_CAPACITY_KJ
+        if strat_no == 1 and left >= self.QUALI_LEFTOVER_PCT:
+            notes.append(
+                "This map finishes the lap still holding %.0f%% of the battery "
+                "— about %.1f MJ it never spent. A qualifying map should arrive "
+                "at the line empty, so either the search could not find "
+                "anywhere to put it, or somewhere it did put it is not "
+                "delivering. Worth re-running before you trust it."
+                % (left, result.store_end_kj / 1000.0))
             self.note("   " + notes[-1])
 
         unused = cap - result.harvested_mj

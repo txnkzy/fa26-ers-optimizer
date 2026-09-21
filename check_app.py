@@ -679,6 +679,50 @@ _ok, _why = _toggle_is_visible()
 check("the between-laps switch is visible before the first lap", _ok, _why)
 
 
+# --- energy commanded where the car will refuse it -------------------------
+# The car crosses the line already flat out and power demand may not be raised
+# under throttle, so a split starting at metre zero is refused until the driver
+# first lifts. Seven Austin laps deployed exactly zero before the first lift
+# while the map asked for 2.30 MJ there. The simulation does not model it, so
+# the tool has to say so instead of quietly writing the map.
+def _opening_energy_flagged() -> tuple[bool, str]:
+    import lap as _laplib
+    import profile as _prof
+    laps = []
+    for path in sorted(A.baseline_dir().glob("*.csv"))[:40]:
+        try:
+            one = _laplib.load(path)
+        except Exception:
+            continue
+        if not _laplib.problem(one) and one.length_m > 1500:
+            laps.append(one)
+            break
+    if not laps:
+        return True, "no telemetry to check against, skipped"
+    shape = _prof.Profile(laps)
+    lift = A.first_lift_m(shape)
+    if lift <= 0:
+        return True, "this lap never lifts, skipped"
+    # one map that piles everything into the opening, one that spends later
+    bad = [fa26.Split(0, int(lift), fa26.CLIP_OFF, int(lift), 350, 0)]
+    good = [fa26.Split(int(lift) + 200, int(lift) + 700, fa26.CLIP_OFF,
+                       int(lift) + 700, 350, 0)]
+    b = A.commanded_kj(bad, shape, 0.0, lift)
+    g = A.commanded_kj(good, shape, 0.0, lift)
+    if b <= 0:
+        return False, "a split across the whole opening commands nothing"
+    if g > 1.0:
+        return False, "a split well after the first lift commands %.0f kJ before it" % g
+    total = A.commanded_kj(bad, shape, 0.0, shape.length_m)
+    if total <= 0 or b / total < A.Engine.OPENING_SHARE:
+        return False, "an all-opening map is not over the threshold"
+    return True, "first lift at %.0f m, %.2f MJ commanded before it" % (lift, b / 1000)
+
+
+_ok, _why = _opening_energy_flagged()
+check("energy commanded before the first lift is counted", _ok, _why)
+
+
 # --- the driver is told a landmark, not a distance -------------------------
 # "about 340 m before the line, roughly 4.2s out" is a number to read after
 # the session. The two things a driver can actually do are flip it at the
