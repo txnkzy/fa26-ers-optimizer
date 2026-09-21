@@ -88,22 +88,30 @@
             <p class="le-note" id="lf-note"></p>
           </div>
 
-          <label class="check le-switch">
-            <input type="checkbox" id="live-search">
-            <span>Keep searching between laps</span>
-          </label>
-          <p class="hint le-warn">
-            Off by default. It runs the same search the button runs, again
-            every time you finish a lap &mdash; <b>minutes of one processor
-            core at full tilt, while the game is using the rest</b>. Turn it on
-            only if your machine has the headroom.
-          </p>
         </div>
         <details class="laps" id="lap-detail">
           <summary><span id="lap-summary"></span></summary>
           <ul class="lap-list" id="lap-list"></ul>
         </details>
       </div>
+    </section>
+
+    <!-- This used to sit inside the live estimate, which only appears once a
+         lap has landed -- so the one switch you would want to set *before*
+         driving was the one you could not reach until after. It lives on its
+         own now, visible from the moment the window opens. -->
+    <section class="block" id="autosearch-block">
+      <h2 class="block-title">Between laps</h2>
+      <label class="check auto-switch">
+        <input type="checkbox" id="live-search">
+        <span>Keep searching between laps</span>
+      </label>
+      <p class="hint auto-warn">
+        Off by default. It runs the same search the button runs, again every
+        time you finish a lap &mdash; <b>minutes of one processor core at full
+        tilt, while the game is using the rest</b>. Turn it on only if your
+        machine has the headroom.
+      </p>
     </section>
 
     <section class="block" id="warnings-block" hidden>
@@ -250,23 +258,26 @@
           <button type="button" class="primary" id="apply-open">Save to a setup&hellip;</button>
         </div>
       </div>
+
+      <!-- The only thing on this page that has to be done in the car, so it
+           goes above the maps rather than inside a note on one of them. -->
+      <div class="switch-call" id="switch-call" hidden>
+        <p class="switch-label">In the car</p>
+        <p class="switch-where" id="switch-where"></p>
+        <p class="switch-why" id="switch-why"></p>
+      </div>
+
       <div class="cards" id="cards"></div>
     </div>
 
     <section class="panel done" id="applied" hidden></section>
 
-    <section class="activity-wrap" id="activity-wrap" hidden>
-      <div class="activity-head">
-        <h2>Activity</h2>
-        <div class="activity-controls">
-          <label class="check tiny">
-            <input type="checkbox" id="show-detail">
-            <span>Details</span>
-          </label>
-          <button type="button" class="link" id="activity-toggle">Hide</button>
-        </div>
-      </div>
-      <div class="activity" id="activity" aria-live="polite"></div>
+    <!-- Starting and saving both used to report their failures into the
+         activity log. With the log gone they need somewhere of their own,
+         and a failure is worth more room than a line in a feed anyway. -->
+    <section class="panel trouble" id="trouble" hidden>
+      <p class="trouble-title">That did not work</p>
+      <p class="trouble-text" id="trouble-text"></p>
     </section>
   </section>
 </div>

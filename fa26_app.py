@@ -879,6 +879,12 @@ class Engine:
         self.generation = 0
         self.results: list = []
         self.summary: list[dict] = []
+        #: The one instruction the driver has to act on outside the setup
+        #: screen: which of the two landmarks to put STRAT 1 on at. It rides
+        #: on every poll rather than inside the summary, because the page
+        #: shows it above the maps and the summary is only sent when it
+        #: changes.
+        self.switch_note = ""
         self.lap = None
         self.alloc = None
         self.unlimited = False
@@ -970,6 +976,7 @@ class Engine:
                 "cancelled": self.cancelled,
                 "generation": self.generation,
                 "error": self.error,
+                "switch": self.switch_note,
             }
             if have != len(self.summary):
                 out["summary"] = self.summary
@@ -984,6 +991,7 @@ class Engine:
             self.lines = []
             self.results = []
             self.summary = []
+            self.switch_note = ""
             self.error = None
             self.stopping = False
             self.cancelled = False
@@ -1011,6 +1019,7 @@ class Engine:
             with self.lock:
                 self.results = []
                 self.summary = []
+                self.switch_note = ""
                 self.status = "Stopped"
                 self.phase = ""
                 self.progress = 0.0
@@ -1337,14 +1346,12 @@ class Engine:
         # change.
         by_strat = {no: sp for _, no, sp, _ in self.results}
         if 1 in by_strat and 2 in by_strat:
-            switch = self._when_to_switch(
+            # It used to be appended to STRAT 1's notes as well. It has its
+            # own place above the maps now, and the same sentence in both is
+            # one of them not being read.
+            self._when_to_switch(
                 by_strat[1], by_strat[2], car, cal, profile,
                 fa26.Powertrain(taper=taper_for(1)), alloc, lap.length_m)
-            if switch:
-                with self.lock:
-                    for entry in self.summary:
-                        if entry["strat"] == 1:
-                            entry["notes"] = list(entry["notes"]) + switch
 
         self.lap = lap
         try:
@@ -1407,12 +1414,11 @@ class Engine:
     #: How far before the line to consider putting STRAT 1 on, and how finely.
     #: Six hundred metres is the whole run out of any final corner; beyond it
     #: the driver is on the previous lap's business.
-    SWITCH_STEP_M = 25.0
-    SWITCH_MAX_M = 600.0
+
 
     def _when_to_switch(self, quali, race, car, cal, profile, powertrain,
                         alloc, length_m) -> list[str]:
-        """When to put STRAT 1 on, on the run down to the line.
+        """When to put STRAT 1 on, in the two places a driver can act on.
 
         Deploy out of the last corner and the lap starts fast and light; wait
         and it starts slow and full. Those are not two effects to be weighed
@@ -1423,69 +1429,77 @@ class Engine:
 
         `sim26.run_to_line` integrates the approach under whichever map is live
         on it, so the speed and the charge that come out are both consequences
-        of where the switch happened. Every switch point is then priced by the
-        lap it actually produces, and the best one wins. The answer is not the
-        same everywhere: Monza wants it 100 m out and pays 0.56 s for it,
-        Suzuka 400 m and 0.85 s, while Madrid and the Red Bull Ring want it at
-        the line and lose a tenth for every early flip.
+        of where the switch happened.
+
+        What comes back is one of two instructions, because those are the only
+        two a driver can actually follow. Metres are not: nobody judges 340 m
+        at 280 kph with a wheel in their hands, and the answer used to be given
+        as "about 340 m before the line -- roughly 4.2s out", which is a number
+        to read afterwards rather than something to do. The last braking zone
+        is a landmark you cannot miss, and the line is painted on the road, so
+        the question becomes which of those two to flip at. Both are simulated
+        and the quicker one is named. The answer is not the same everywhere:
+        Monza and Suzuka want it before the last corner, Madrid and the Red
+        Bull Ring want it at the line and lose a tenth for every early flip.
         """
         cap_kj = alloc.mj("qualify") * 1000.0
         zones = dict(reset_zones=alloc.reset_zones_for("qualify", length_m),
                      speed_zones=alloc.speed_zones_for(length_m))
 
         def lap_from(switch_m):
+            # The approach has to reach back past the switch or the map never
+            # changes inside it, and a long run to the line -- Monza's, out of
+            # Parabolica -- is further from it than the default window.
             state = sim26.run_to_line(
                 race, quali, switch_m, car, cal, profile, powertrain,
                 start_store_kj=laplib.STORE_CAPACITY_KJ,
-                harvest_cap_kj=cap_kj, **zones)
+                harvest_cap_kj=cap_kj,
+                approach_m=max(sim26.PRIME_M, switch_m + 50.0), **zones)
             result = sim26.simulate(
                 quali, car, cal, profile, powertrain,
                 start_store_kj=state.store_kj, harvest_cap_kj=cap_kj,
                 settle=False, entry=state, **zones)
             return state, result.lap_time_s
 
+        # The two places a driver can flip the switch without looking at a
+        # number: as the line goes under the car, or on the way into the last
+        # braking zone of the lap. `braking_zones` reads the pooled profile,
+        # so the last one is where this driver actually brakes for the final
+        # corner rather than where the track map says it is.
+        # Not `zones`: that name is already the reset and speed zones every
+        # simulation here is run with, and `lap_from` closes over it.
+        braking = [z for z in braking_zones(profile) if z[1] < length_m - 30.0]
+        corner_m = (length_m - braking[-1][0]) if braking else None
+
         try:
-            points = []
-            metres = 0.0
-            while metres <= self.SWITCH_MAX_M:
-                state, lap_s = lap_from(metres)
-                points.append((metres, state, lap_s))
-                metres += self.SWITCH_STEP_M
+            at_line_state, at_line = lap_from(0.0)
+            if corner_m is None:
+                return []
+            corner_state, before_corner = lap_from(corner_m)
         except Exception:
             return []
-        if not points:
-            return []
 
-        at_line = points[0][2]
-        best_m, best_state, best_s = min(points, key=lambda p: p[2])
-        gained = at_line - best_s
-
-        if gained <= self.APPROACH_TOLERANCE_S:
-            note = ("Put STRAT 1 on at the line. Deploying on the way to it "
-                    "costs more charge than the speed is worth here — half a "
-                    "straight early is %.2fs slower."
-                    % (lap_from(self.SWITCH_MAX_M / 2)[1] - at_line))
+        gained = at_line - before_corner
+        if gained > self.APPROACH_TOLERANCE_S:
+            where, state, lap_s = "before the final corner", corner_state, before_corner
+            other = at_line
         else:
-            # Metres before a line are hard to judge at 280 kph; seconds are
-            # not, and the driver already has a clock in their head from the
-            # corner. Both are given, and the window rather than a point,
-            # because anything inside it is worth the same.
-            window = [m for m, _s, t_ in points
-                      if t_ <= best_s + self.APPROACH_TOLERANCE_S]
-            seconds = best_m / max(best_state.speed_ms, 1.0)
-            note = ("Put STRAT 1 on about %.0f m before the line — roughly "
-                    "%.1fs out, on the run to it. Worth %.2fs, and anything "
-                    "from %.0f to %.0f m does the same. You will cross at "
-                    "%.0f kph on %.0f%% instead of %.0f kph on %.0f%%."
-                    % (best_m, seconds, gained, min(window), max(window),
-                       best_state.speed_ms * 3.6,
-                       100 * best_state.store_kj / laplib.STORE_CAPACITY_KJ,
-                       points[0][1].speed_ms * 3.6,
-                       100 * points[0][1].store_kj / laplib.STORE_CAPACITY_KJ))
+            where, state, lap_s = ("while crossing the start/finish line",
+                                   at_line_state, at_line)
+            other = before_corner
 
-        self.note("   " + note)
-        self.detail("               flip: " + ", ".join(
-            "%.0fm %.3fs" % (m, t_) for m, _s, t_ in points[::4]))
+        cost = abs(other - lap_s)
+        note = ("Switch to STRAT 1 %s." % where)
+        if cost >= self.APPROACH_TOLERANCE_S:
+            note += (" The other one costs %.2fs." % cost)
+        else:
+            note += " Either works here — they are within %.2fs." % cost
+        note += (" You will start the lap at %.0f kph on %.0f%% battery."
+                 % (state.speed_ms * 3.6,
+                    100 * state.store_kj / laplib.STORE_CAPACITY_KJ))
+
+        with self.lock:
+            self.switch_note = note
         return [note]
 
     def _describe(self, label, strat_no, result, splits, lap, cal, profile,

@@ -628,8 +628,83 @@ def _browser_renders() -> tuple[bool, str]:
     return False, "the page loaded but its script did not run"
 
 
+UI = ROOT / "ui"
+
 _ok, _why = _browser_renders()
 check("the page's script runs in a real browser", _ok, _why)
+
+
+# --- the switch you set before driving is reachable before driving ---------
+# It used to live inside the live estimate, inside the session card, which is
+# hidden until a lap lands. Every check that asks "is the element there?"
+# passed the whole time, because it was there -- three hidden ancestors deep,
+# on a page that has just opened and has no laps yet.
+def _toggle_is_visible() -> tuple[bool, str]:
+    import html.parser
+
+    class Walk(html.parser.HTMLParser):
+        VOID = {"input", "br", "img", "hr", "meta", "link", "source"}
+
+        def __init__(self):
+            super().__init__()
+            self.stack = []
+            self.found = None
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            frame = (tag, a.get("id"), "hidden" in a)
+            if a.get("id") == "live-search":
+                self.found = self.stack + [frame]
+            if tag not in self.VOID:
+                self.stack.append(frame)
+
+        def handle_endtag(self, tag):
+            for i in range(len(self.stack) - 1, -1, -1):
+                if self.stack[i][0] == tag:
+                    del self.stack[i:]
+                    return
+
+    w = Walk()
+    w.feed((UI / "index.html").read_text(encoding="utf-8"))
+    if not w.found:
+        return False, "no between-laps switch on the page at all"
+    buried = [(tag, ident) for tag, ident, hid in w.found if hid]
+    if buried:
+        return False, "hidden behind %s" % ", ".join(
+            i or tg for tg, i in buried)
+    return True, "reachable with no laps, %d levels deep" % len(w.found)
+
+
+_ok, _why = _toggle_is_visible()
+check("the between-laps switch is visible before the first lap", _ok, _why)
+
+
+# --- the driver is told a landmark, not a distance -------------------------
+# "about 340 m before the line, roughly 4.2s out" is a number to read after
+# the session. The two things a driver can actually do are flip it at the
+# line or flip it on the way into the last corner, so the answer has to be
+# one of those two and has to reach the page.
+def _switch_is_actionable() -> tuple[bool, str]:
+    note = snap.get("switch") or ""
+    if not note:
+        return False, "the solve produced no instruction for the driver"
+    landmarks = ("while crossing the start/finish line",
+                 "before the final corner")
+    if not any(w in note for w in landmarks):
+        return False, "names no landmark: " + note[:70]
+    import re
+    stray = re.search(r"\d+\s*m\b", note)
+    if stray:
+        return False, "still measured in metres: " + note[:70]
+    page = (UI / "index.html").read_text(encoding="utf-8")
+    script = (UI / "app.js").read_text(encoding="utf-8")
+    if 'id="switch-where"' not in page or "paintSwitch" not in script:
+        return False, "produced, but the page has nowhere to show it"
+    return True, note[:72]
+
+
+_ok, _why = _switch_is_actionable()
+check("the driver is told a landmark, not a distance", _ok, _why)
 
 print("FAILED: %s" % ", ".join(fails) if fails else "ALL PASS")
 srv.shutdown()

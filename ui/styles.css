@@ -909,75 +909,42 @@ table.split-table {
 .panel.done ul { margin: 8px 0 0; padding-left: 19px; font-size: 13px; color: var(--ink-2); }
 .panel.done li { margin-bottom: 5px; }
 
-/* ------------------------------------------------------------- activity */
-.activity-wrap { margin-top: 6px; }
-.activity-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; margin-bottom: 9px;
-}
-.activity-head h2 {
-  font-family: var(--cond); font-size: 12px; font-weight: 600;
-  letter-spacing: .13em; text-transform: uppercase; color: var(--dim);
-}
-.activity-controls { display: flex; align-items: center; gap: 16px; }
-.check.tiny { font-size: 11.5px; color: var(--faint); align-items: center; }
-.check.tiny input { margin: 0; }
-
-.activity {
-  max-height: 420px;
-  overflow: auto;
-  padding: 14px 18px;
-  background: var(--sunken);
+/* ------------------------------------------------- the call in the car
+ * Everything else on this page is done with a mouse. This one is done at
+ * 280 kph with both hands busy, so it is the largest thing in the results
+ * and it names a landmark rather than a distance. */
+.switch-call {
+  margin: 0 0 20px;
+  padding: 16px 20px;
+  background: var(--raise);
   border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.55;
 }
-.activity:empty::after {
-  content: "Nothing yet.";
-  color: var(--faint); font-style: italic;
+.switch-label {
+  font-family: var(--cond); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--dim);
+  margin-bottom: 6px;
+}
+.switch-where {
+  font-size: 19px; line-height: 1.35; font-weight: 600; color: var(--ink);
+  text-wrap: balance; max-width: 40ch;
+}
+.switch-why {
+  margin-top: 6px;
+  font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 70ch;
 }
 
-.say {
-  display: flex; gap: 10px;
-  padding: 2px 0;
-  color: var(--ink-2);
-  max-width: 86ch;
-  animation: say-in .28s ease-out both;
+/* ------------------------------------------------------------- trouble */
+.panel.trouble { border-left: 3px solid var(--warn); max-width: 660px; }
+.trouble-title {
+  font-family: var(--cond); font-size: 15px; letter-spacing: .03em;
+  color: var(--warn); margin-bottom: 6px;
 }
-@keyframes say-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: none; }
+.trouble-text {
+  font-size: 13px; line-height: 1.55; color: var(--ink-2);
+  max-width: 74ch; white-space: pre-wrap;
 }
-.say .say-text { white-space: pre-wrap; }
-.gap { height: 9px; }
-
-/* Both kinds of flagged line carry the same 3px rail and differ only in
- * colour. A warning glyph was tried and is the wrong call twice over: it
- * depends on the font carrying the character, and it puts a second visual
- * language beside the one the strategy cards already speak. */
-.say.result, .say.warn { margin-top: 3px; }
-.say.result { color: var(--ink); font-weight: 600; }
-.say.warn { color: var(--warn); }
-
-.say.result::before, .say.warn::before {
-  content: "";
-  flex: none;
-  width: 3px; margin: 4px 0;
-  border-radius: 2px;
-  background: var(--accent);
-}
-.say.warn::before { background: var(--warn); }
-
-/* Technical lines are kept, not deleted: they are what makes a surprising
- * answer diagnosable. They are just not the default reading. */
-.say.detail {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--faint);
-  max-width: none;
-}
-.activity[data-detail="false"] .say.detail { display: none; }
 
 /* Motion is decoration here, never the only signal: every state it
  * emphasises is also carried by colour, text or position. */
@@ -1271,5 +1238,7 @@ table.split-table {
   margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--line-soft);
 }
-.le-switch { margin-top: 10px; }
-.le-warn { margin-top: 5px; }
+/* The between-laps switch sits in its own block in the rail now, where it
+ * is reachable before the first lap rather than after it. */
+.auto-switch { margin-top: 2px; }
+.auto-warn { margin-top: 7px; }

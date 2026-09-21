@@ -14,6 +14,11 @@ const WATCH_MS = 4000;       // how often to look for a lap you just finished
 
 const state = {
   detail: null,
+  //: The solver's commentary. No longer shown -- it is a running account of
+  //: a search, which was worth reading while the search was being built and
+  //: is noise now that it works -- but still collected, so "Copy
+  //: diagnostics" carries it when something needs explaining.
+  log: [],
   revision: null,
   qualify: 70,
   race: 80,
@@ -740,8 +745,9 @@ async function run() {
   $("results").hidden = true;
   $("apply-panel").hidden = true;
   $("applied").hidden = true;
-  $("activity-wrap").hidden = false;
-  $("activity").textContent = "";
+  $("trouble").hidden = true;
+  $("switch-call").hidden = true;
+  state.log = [];
   $("cards").innerHTML = "";
   $("running").hidden = false;
   $("running").dataset.stopping = "false";
@@ -770,7 +776,7 @@ async function run() {
     setStatus("Could not start", "bad");
     $("running").hidden = true;
     $("run").disabled = false;
-    addLines([{ kind: "warn", text: String(err.message || err) }]);
+    failure(err);
     return;
   }
   state.running = true;
@@ -802,9 +808,15 @@ async function poll(id) {
     return;
   }
   if (id !== state.pollId) return;
-  if (data.reset) { $("activity").textContent = ""; state.since = 0; }
+  if (data.reset) { state.log = []; state.since = 0; }
   state.since = data.since;
-  addLines(data.lines);
+  // The page stopped showing the solver's commentary, but support still
+  // wants it: it is kept here and goes out with the diagnostics instead.
+  for (const line of data.lines || []) {
+    if (line.text.trim()) state.log.push(line.text);
+  }
+  if (state.log.length > 400) state.log.splice(0, state.log.length - 400);
+  paintSwitch(data.switch);
 
   // The server sends the summary only when ours is out of date.
   if (data.summary) {
@@ -862,24 +874,22 @@ async function stop() {
   }
 }
 
-function addLines(lines) {
-  if (!lines || !lines.length) return;
-  const box = $("activity");
-  const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
-  for (const line of lines) {
-    if (!line.text.trim()) {
-      box.append(el("div", "gap"));
-      continue;
-    }
-    const row = el("div", "say " + line.kind);
-    row.append(el("span", "say-text", line.text));
-    box.append(row);
-  }
-  if (stick) box.scrollTop = box.scrollHeight;
+/* The one instruction on this page that has to be carried out in the car,
+ * so it is set large and sits above the maps. The server sends it as a
+ * sentence naming the landmark followed by what it is worth; the landmark is
+ * what a driver needs at speed, and the rest can be read afterwards. */
+function paintSwitch(text) {
+  const box = $("switch-call");
+  if (!text) { box.hidden = true; return; }
+  const cut = text.indexOf(". ");
+  box.hidden = false;
+  $("switch-where").textContent = cut < 0 ? text : text.slice(0, cut + 1);
+  $("switch-why").textContent = cut < 0 ? "" : text.slice(cut + 2);
 }
 
-function applyDetailFilter() {
-  $("activity").dataset.detail = String($("show-detail").checked);
+function failure(err) {
+  $("trouble-text").textContent = String((err && err.message) || err);
+  $("trouble").hidden = false;
 }
 
 /* ------------------------------------------------------------------ cards */
@@ -889,17 +899,25 @@ function renderCards() {
   if (!state.summary.length) return;
 
   $("results").hidden = false;
+  // The maps outlive the session that produced them -- reopen the window
+  // after driving something else and the run is still there to be saved,
+  // while the session behind it is gone. Reading its name regardless threw,
+  // and a thrown renderer draws no cards at all: the whole result vanished
+  // rather than losing its subtitle.
   const d = state.detail;
   const title = $("results-title");
   title.textContent = "";
-  title.append(
-    document.createTextNode(d.name),
-    el("small", null,
-       "from " + d.pooled + (d.pooled === 1 ? " lap" : " laps")
-       + " · your best was " + d.best
-       + (state.unlimited ? " · no recharge limit"
-                          : " · recharge " + mj(state.qualify) + "/"
-                            + mj(state.race) + " MJ")));
+  title.append(document.createTextNode(d ? d.name : "Your maps"));
+  if (d) {
+    title.append(el("small", null,
+      "from " + d.pooled + (d.pooled === 1 ? " lap" : " laps")
+      + " · your best was " + d.best
+      + (state.unlimited ? " · no recharge limit"
+                         : " · recharge " + mj(state.qualify) + "/"
+                           + mj(state.race) + " MJ")));
+  } else {
+    title.append(el("small", null, "from an earlier session"));
+  }
   $("apply-open").disabled = state.summary.length < 3;
 
   for (const s of state.summary) box.append(card(s));
@@ -1135,11 +1153,16 @@ function diagnostics() {
     }
   }
 
-  const lines = [...document.querySelectorAll("#activity .say")];
-  if (lines.length) {
+  const where = $("switch-where").textContent;
+  if (where) {
+    out.push("");
+    out.push("IN THE CAR");
+    out.push("  " + where + " " + $("switch-why").textContent);
+  }
+  if (state.log.length) {
     out.push("");
     out.push("ACTIVITY");
-    for (const el of lines) out.push("  " + el.textContent);
+    for (const line of state.log) out.push("  " + line);
   }
   return out.join("\n");
 }
@@ -1250,7 +1273,7 @@ async function applyGo() {
     });
   } catch (err) {
     setStatus("Could not save", "bad");
-    addLines([{ kind: "warn", text: String(err.message || err) }]);
+    failure(err);
     $("apply-go").disabled = false;
     return;
   }
@@ -1395,14 +1418,6 @@ $("copy-diag-wait").onclick = () => copyDiagnostics($("copy-diag-wait"));
 $("apply-cancel").onclick = closeApply;
 $("apply-back").onclick = closeApply;
 $("apply-go").onclick = async () => { await applyGo(); closeApply(); };
-$("show-detail").onchange = applyDetailFilter;
-$("activity-toggle").onclick = () => {
-  const box = $("activity");
-  box.hidden = !box.hidden;
-  $("activity-toggle").textContent = box.hidden ? "Show" : "Hide";
-};
-
-applyDetailFilter();
 
 /* The maps live in the server, so reopening the window gets them back rather
  * than making anyone sit through the solve a second time. */
@@ -1419,7 +1434,6 @@ async function restore() {
     $("running").hidden = false;
     $("running").dataset.stopping = String(!!data.stopping);
     $("stop").disabled = !!data.stopping;
-    $("activity-wrap").hidden = false;
     $("run").disabled = true;
     state.pollId += 1;
     poll(state.pollId);
@@ -1428,9 +1442,11 @@ async function restore() {
   if (!data.summary || !data.summary.length) return;
   state.summary = data.summary;
   state.since = data.since;
+  for (const line of data.lines || []) {
+    if (line.text.trim()) state.log.push(line.text);
+  }
   $("intro").hidden = true;
-  $("activity-wrap").hidden = false;
-  addLines(data.lines);
+  paintSwitch(data.switch);
   renderCards();
 }
 
