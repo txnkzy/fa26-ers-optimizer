@@ -35,6 +35,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cars"))
 
 NO_CAP = 1e6
 
+#: How far ahead to look to tell whether the car is still gaining speed.
+#: Adjacent samples cannot answer it: at 236 kph the logger writes one every
+#: half metre, and a car pulling away from a corner at half a g gains 0.01 kph
+#: in that distance, under the noise the smoothing leaves behind. A first
+#: attempt comparing neighbours with a 1.0002 ratio never fired anywhere and
+#: measured nothing at all. Ten samples is about four metres.
+GAINING_SAMPLES = 10
+
 #: Shape of the combined-grip envelope, (1 - share**n)**(1/n). n = 2 is a true
 #: friction circle; real tyres hold more longitudinal grip under lateral load
 #: than that, so the envelope is squarer. Fitted against replays of VRC's own
@@ -92,7 +100,27 @@ class Profile:
             if not 0 <= slot < n:
                 continue
             cornering = lat_limit is not None and lap.lat_g[i] >= lat_limit
-            power_limited = lap.gas[i] >= 0.99 and lap.brake[i] < 0.01 and not cornering
+            # A corner taken flat is not a speed the driver chose. They are at
+            # full throttle and the car is going as fast as that much power
+            # takes it round that radius; pinning the ceiling to what they
+            # managed made deployment there worth exactly zero by construction.
+            # Measured on track at Austin, a megajoule through the long
+            # right-hander is worth 0.460 s and sixteen kph of exit speed, on a
+            # controlled A/B with two milliseconds of scatter. The model scored
+            # it at zero, and the search then declined the second largest
+            # energy sink on the circuit and wrote a map that finished the lap
+            # still holding three quarters of its battery.
+            #
+            # Still gaining speed is the test. Force to spare means the limit
+            # is power, so the force balance decides. Flat and no longer
+            # gaining means the limit is grip, and the ceiling is the only
+            # thing that knows where that is.
+            ahead = i + GAINING_SAMPLES
+            if ahead >= len(speed):
+                ahead = len(speed) - 1
+            gaining = speed[ahead] > speed[i]
+            power_limited = (lap.gas[i] >= 0.99 and lap.brake[i] < 0.01
+                             and (not cornering or gaining))
             value = NO_CAP if power_limited else speed[i] * margin
             # The slowest sample in a slot is not the ceiling: it is the
             # slowest instant of it. A slot is 2.5 m, the logger writes about

@@ -1542,6 +1542,59 @@ A second note covers a qualifying map **predicted** to finish holding 10% or
 more, which is what the latch-aware search produced. It is the weaker of the two
 and is documented as such.
 
+## The force balance, fixed
+
+The corner and the latch each cost accuracy alone and cost nothing together.
+That is the whole result:
+
+| | corner A | corner B | a megajoule worth | corpus | long right | asked at the line | ends on |
+|---|---|---|---|---|---|---|---|
+| **measured on track** | **6.183** | **5.723** | **-0.460 s** | | | | |
+| as it stood | 6.250 | 6.193 | -0.057 s | 0.76% | 221 m | 1.90 MJ | 0% |
+| ceiling lifted only | 6.155 | 5.800 | -0.355 s | 0.78% | 302 m | 1.92 MJ | 0% |
+| latch only | 6.250 | 6.193 | -0.057 s | 0.78% | 137 m | 1.15 MJ | **17%** |
+| **both** | **6.155** | **5.800** | **-0.355 s** | **0.76%** | 229 m | **1.53 MJ** | **0%** |
+
+The model now values a megajoule through the long right at 0.355 s against the
+0.460 s the car measured -- **77% of it, from 12%** -- and predicts the corner
+itself to 0.03 s on the lap it was checked against and 0.08 s on the lap it was
+not. Holdout accuracy over 64 laps is unchanged at **0.76%**.
+
+### Two wrong turns worth keeping
+
+**Cornering drag was the wrong idea.** The signature looked unmistakable: too
+fast with no power, barely moved by power, which is a car sitting on its
+drag-limited equilibrium. So a term was added for the induced drag of a tyre
+carrying lateral load, `K * m * a_lat^2 / g`, fitted on the lap with no
+deployment and asked to predict the lap with one. Fitted, **K wants to be zero**:
+with the ceiling lifted the force balance already puts that lap within 0.03 s
+and 1.3 kph of the car. There was nothing for it to fix.
+
+What was hiding that is the **friction ellipse** -- the earlier idea of making
+lateral load answer to simulated speed. It chokes the drive exactly as the model
+speeds up, so extra power buys nothing, and it made every freed-model result
+read as if the corner were still dead. Lift the ceiling and leave the grip term
+alone and the corner comes right on its own.
+
+**And the A/B harness was serving stale bytecode.** A sweep of eight values of K
+returned eight identical rows. The harness writes each variant to one filename
+and imports it; two variants differing only in a constant of the same length --
+`0.01` against `0.05` -- produce files of identical size, and when the rewrite
+lands inside the same mtime tick Python reuses the cached `.pyc`. It now writes
+a fresh filename per load and invalidates the import caches. The earlier ceiling
+result was re-run against the fixed harness and is unchanged (0.83 -> 0.88 ->
+0.92 on the unselected half), so nothing built on it moves.
+
+### What the checks now hold
+
+`deployment in a corner taken flat out is worth something` builds a split
+through the first flat, still-gaining, laterally loaded stretch it can find and
+requires 350 kW to buy speed there. It caught its own first draft: the split
+opened at the corner, where the driver was already at full throttle, and the
+demand latch correctly refused it -- the check was measuring the latch, not the
+corner. Splits now open before the preceding lift, which is the advice the tool
+gives its own users. It reports **13.5 kph** on Austin against the 16 measured.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded

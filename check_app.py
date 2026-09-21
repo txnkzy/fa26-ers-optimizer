@@ -723,6 +723,80 @@ _ok, _why = _opening_energy_flagged()
 check("energy commanded before the first lift is counted", _ok, _why)
 
 
+# --- deployment in a corner taken flat is worth something -------------------
+# It used to be worth exactly zero, because the speed ceiling pinned a flat-out
+# corner to the speed the driver managed and no amount of power could move it.
+# Measured on track at Austin over a controlled A/B with 2 ms of scatter, a
+# megajoule through the long right-hander is worth 0.460 s and 16 kph of exit
+# speed. The model need not match that, but it must not score it at zero.
+def _flat_corner_pays() -> tuple[bool, str]:
+    import lap as _laplib
+    import profile as _prof
+    import calibrate as _cal
+    import carphysics as _cp
+    import sim26 as _sim
+    import fa26 as _fa26
+    best = None
+    for path in sorted(A.baseline_dir().glob("*.csv")):
+        try:
+            one = _laplib.load(path)
+        except Exception:
+            continue
+        if _laplib.problem(one) or one.length_m < 3000:
+            continue
+        # a stretch taken flat, still gaining, and not the fastest on the lap
+        shape = _prof.Profile([one])
+        for d in range(400, int(one.length_m) - 600, 50):
+            i0 = min(range(len(one.dist)), key=lambda k: abs(one.dist[k] - d))
+            i1 = min(range(len(one.dist)), key=lambda k: abs(one.dist[k] - d - 400))
+            seg = range(i0, i1)
+            if not seg:
+                continue
+            if (min(one.gas[i] for i in seg) >= 0.99
+                    and max(one.brake[i] for i in seg) < 0.01
+                    and one.speed[i1] > one.speed[i0]
+                    and max(one.lat_g[i] for i in seg) > 0.5 * shape.lat_max):
+                best = (one, shape, float(d))
+                break
+        if best:
+            break
+    if not best:
+        return True, "no flat-out corner in the telemetry, skipped"
+    one, shape, d = best
+    # The split has to open before the driver gets back on the power, or the
+    # demand latch refuses it and the test measures the latch instead of the
+    # corner. This is the tool's own advice to users, and it applies here.
+    opens = d
+    for x in range(int(d), 0, -5):
+        slot = shape._slot(float(x))
+        if shape.gas_mean[slot] < _fa26.DEMAND_RESET_GAS:
+            opens = float(x)
+            break
+    car = _cp.load(A.car_data())
+    car.fuel_liters = 45
+    cal = _cal.fit_longitudinal([one], car)
+    empty = [_fa26.Split(int(opens), int(opens), _fa26.CLIP_OFF, int(d) + 400, 0, 0)]
+    full = [_fa26.Split(int(opens), int(d) + 400, _fa26.CLIP_OFF,
+                        int(d) + 400, 350, 0)]
+    pt = _fa26.Powertrain()
+    out = []
+    for m in (empty, full):
+        r = _sim.simulate(m, car, cal, shape, pt, start_store_kj=4000.0,
+                          harvest_cap_kj=9000.0, settle=False)
+        at = lambda x: min(range(len(r.dist)), key=lambda k: abs(r.dist[k] - x))
+        out.append(r.speed[at(d + 400)] * 3.6)
+    gain = out[1] - out[0]
+    if gain < 0.5:
+        return False, ("350 kW from %.0f m through the flat-out corner at %.0f m "
+                       "buys %.1f kph" % (opens, d, gain))
+    return True, ("350 kW from %.0f m through the corner at %.0f m buys %.1f kph"
+                  % (opens, d, gain))
+
+
+_ok, _why = _flat_corner_pays()
+check("deployment in a corner taken flat out is worth something", _ok, _why)
+
+
 # --- the driver is told a landmark, not a distance -------------------------
 # "about 340 m before the line, roughly 4.2s out" is a number to read after
 # the session. The two things a driver can actually do are flip it at the

@@ -300,6 +300,19 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             demand_kw, profile.measured_speed_at(d),
             full_throttle=(throttle_time <= powertrain.floor_hold_s
                            and clip <= 0.0))
+    # ...but it arrives on the map it was already running, not on this one. A
+    # flying lap is entered from an out-lap or a recharge lap, which asked for
+    # nothing, and demand cannot be raised while the driver stays on the
+    # throttle. Priming from this map's own tail left the lap entitled to
+    # whatever its last split asked for, which no driver ever is: seven laps at
+    # Austin deployed exactly zero over the first 519 m while the map asked for
+    # 2.30 MJ there, and 160 of 216 laps across the corpus deploy under 50 kJ
+    # before their first lift. The walk above still has to happen -- it is what
+    # sets `throttle_time`, and without it the opening split reads as a fresh
+    # application of the throttle and is granted in full.
+    if entry is None and on_throttle_at[0]:
+        demand_kw = 0.0
+        prev_level_kw = 0.0
     if entry is not None:
         v = min(entry.speed_ms, ceiling[lo % n])
         demand_kw = entry.demand_kw
