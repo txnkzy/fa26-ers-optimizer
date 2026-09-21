@@ -1302,6 +1302,68 @@ win by **0.291 s**; the freed model expects strat 2 to win by about 0.2 s. Lap
 to lap scatter in that session was 0.29 s, so this needs several laps each and
 an A/B/A stint order, as the super-clip test did.
 
+## The long corner, settled on track
+
+Four laps at Austin, strat 1 / 2 / 2 / 1 -- the balanced order, so a track
+rubbering in through the run adds the same to each pair and cancels. The logger
+recorded the map for every lap and all four ran from `cota_longright.ini` with
+no invalid samples. The maps did what they were built to do: **0.01 MJ** through
+the long right on strat 1, **1.01 MJ** on strat 2.
+
+Through the corner itself, 4477-4885 m:
+
+| lap | map | enters | exits | time | deployed |
+|---|---|---|---|---|---|
+| 01 | A | 229.1 | 250.1 | 6.184 | 0.01 MJ |
+| 02 | B | 231.8 | 265.8 | **5.720** | 1.01 MJ |
+| 03 | B | 231.9 | 267.4 | **5.726** | 1.00 MJ |
+| 04 | A | 228.1 | 251.0 | 6.182 | 0.01 MJ |
+
+**Deploying through the corner is worth 0.460 s and sixteen kph of exit speed**,
+with 2 ms of scatter inside each pair and no overlap between them. The model
+said it was worth **zero**. It was wrong, and the report from the car was right.
+
+Whole-lap time cannot be used here and is recorded only so nobody tries: the
+battery drained across the run, arriving at the corner with 100%, 58%, 55% and
+46%, so the -0.769 s whole-lap difference is mostly drift. The corner
+measurement is immune to it -- both B laps arrived with *less* charge than both
+A laps and were still half a second quicker through it.
+
+### Which term was hiding it
+
+The ceiling, and only the ceiling. Holding everything else and removing each
+suspect in turn:
+
+| | map A | map B | B - A |
+|---|---|---|---|
+| measured on track | 6.183 s, exits 250.6 | 5.723 s, exits 266.6 | **-0.460 s** |
+| model as it stands | 6.504, exits 248.8 | 6.504, exits 248.8 | +0.000 |
+| without the grip clamp | 6.435, exits 249.8 | 6.435, exits 249.8 | +0.000 |
+| without the speed ceiling | 5.495, exits 265.7 | 5.396, exits 268.3 | -0.099 |
+
+The friction ellipse is not binding in that corner at all -- removing it changes
+nothing. The ceiling is doing all of it.
+
+### Why neither answer is the fix
+
+Taking the ceiling out does not fix the model, it breaks it differently. With
+the ceiling **on**, map A is 0.32 s slow and map B is 0.78 s slow. With it
+**off**, map A becomes 0.69 s *fast* -- the model reaches 265.7 kph on a lap
+where the car managed 250.6 with barely any deployment -- while map B lands
+near the measurement.
+
+So the model responds far too weakly to power in that corner (+2.6 kph for the
+same megajoule that gave the car +16) while its no-deployment baseline is far
+too strong. The ceiling was hiding both errors by pinning the answer to the
+driver's own lap, which is why lifting it made the corpus worse: it removed the
+mask without fixing what was underneath. That is consistent with the holdout
+result and with this one at the same time, and it means the real work is in the
+force balance at 250 kph, not in the ceiling that covers for it.
+
+This A/B is the regression case for that work: a corner, two maps, one
+megajoule of difference, 2 ms of measurement noise, and a known answer of
+-0.460 s.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
