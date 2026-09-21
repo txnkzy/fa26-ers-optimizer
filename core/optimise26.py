@@ -873,6 +873,13 @@ def _always_climb(splits, profile, objective: Objective) -> "list[list[fa26.Spli
 #: it are only ranking candidate maps against each other, and they do not need
 #: to do that to the nearest 2.5 m. Doubling the step halves every simulation,
 #: and the search is nothing but simulations.
+#: How near the line a split has to start to count as the lap's opening.
+OPENING_M = 60.0
+
+#: How much more the last split of the lap must ask for than the opening, so
+#: the opening is unambiguously a reduction and the car grants it.
+OPENING_MARGIN_KW = 50
+
 COARSE_DS = 5.0
 
 #: A coarse answer is never the answer. Between 3.5 m and 3.634 m at Monaco
@@ -1063,7 +1070,47 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         refined_score = objective.score(refined_result, start_store_kj)
         if refined_score is not None and (score is None or refined_score < score):
             coarse, result = refined, refined_result
+    coarse = open_the_lap(coarse, profile)
+    if objective.name:
+        result = fine.one(coarse)
     return coarse, result, evaluator.evaluations + fine.evaluations
+
+
+def open_the_lap(splits, profile):
+    """Let the opening split deploy, by asking the last one for more.
+
+    A lap begins with the car already at full throttle, so whatever the last
+    split of the lap established is the demand it carries across the line, and
+    demand cannot be raised under throttle. Measured on six maps at Austin, the
+    opening delivers if and only if the last split of the lap commands *more*
+    than it:
+
+        opening 300, final 300 -> 1 kJ          opening 200, final 200 -> 0 kJ
+        opening 200, final 200 -> 0 kJ          opening 200, final 200 -> 0 kJ
+        opening 190, final 190 -> 0 kJ          opening 199, final 350 -> 1364 kJ
+
+    Equal is not enough, which is why a map of uniform power can never use its
+    own opening -- and why every map this tool has written so far has thrown
+    away the first seven seconds of the lap. That stretch is the third largest
+    energy sink on the circuit.
+
+    The mechanism behind the strictness is not pinned down, and only one of the
+    six maps is a positive case, so this raises the last split rather than
+    trusting a margin of one kilowatt: enough to be unambiguous, and the end of
+    a lap is the run to the line, where the power is worth having anyway.
+    """
+    live = [s for s in splits if s.deploy_kw > 0]
+    if len(live) < 2:
+        return splits
+    opening, final = live[0], live[-1]
+    if opening.start_m > OPENING_M or final.deploy_kw > opening.deploy_kw:
+        return splits
+    want = min(fa26.POWER_MAX, opening.deploy_kw + OPENING_MARGIN_KW)
+    if want <= final.deploy_kw:
+        return splits
+    return [fa26.Split(s.start_m, s.deploy_end_m, s.clip_start_m, s.end_m,
+                       want, s.clip_kw) if s is final else s
+            for s in splits]
 
 
 def _climb(splits, evaluator, profile, objective: Objective,

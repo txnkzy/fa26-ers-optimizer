@@ -797,6 +797,49 @@ _ok, _why = _flat_corner_pays()
 check("deployment in a corner taken flat out is worth something", _ok, _why)
 
 
+# --- the opening split can actually fire -----------------------------------
+# A lap starts with the car already flat, so the demand it carries across the
+# line is whatever the last split established, and demand cannot be raised
+# under throttle. Measured on six maps at Austin: the opening delivers if and
+# only if the last split of the lap asks for MORE than it. Five maps where they
+# were equal deployed nothing over the first 525 m; the one where the last
+# split was higher deployed 1364 kJ. A map of uniform power can never use its
+# own opening, which is why every map written before this threw the first seven
+# seconds of the lap away.
+def _opening_can_fire() -> tuple[bool, str]:
+    import fa26 as _fa26
+    import optimise26 as _opt
+    ds = 2.5
+    flat = [_fa26.Split(0, 500, _fa26.CLIP_OFF, 500, 200, 0),
+            _fa26.Split(1000, 1500, _fa26.CLIP_OFF, 1500, 200, 0),
+            _fa26.Split(4000, 4500, _fa26.CLIP_OFF, 4500, 200, 0)]
+
+    class Shape:
+        length_m = 5000.0
+
+    fixed = _opt.open_the_lap(flat, Shape())
+    live = [s for s in fixed if s.deploy_kw > 0]
+    if live[-1].deploy_kw <= live[0].deploy_kw:
+        return False, ("a uniform map came back with final %d against opening %d"
+                       % (live[-1].deploy_kw, live[0].deploy_kw))
+    # and a map that already ends higher is left alone
+    steep = [_fa26.Split(0, 500, _fa26.CLIP_OFF, 500, 200, 0),
+             _fa26.Split(4000, 4500, _fa26.CLIP_OFF, 4500, 350, 0)]
+    if _opt.open_the_lap(steep, Shape()) != steep:
+        return False, "a map that already ends higher was changed anyway"
+    # and one that does not start at the line is not its business
+    late = [_fa26.Split(900, 1400, _fa26.CLIP_OFF, 1400, 200, 0),
+            _fa26.Split(4000, 4500, _fa26.CLIP_OFF, 4500, 200, 0)]
+    if _opt.open_the_lap(late, Shape()) != late:
+        return False, "a map with no split at the line was changed"
+    return True, ("uniform 200 kW becomes final %d, opening %d"
+                  % (live[-1].deploy_kw, live[0].deploy_kw))
+
+
+_ok, _why = _opening_can_fire()
+check("the opening split is left able to fire", _ok, _why)
+
+
 # --- the driver is told a landmark, not a distance -------------------------
 # "about 340 m before the line, roughly 4.2s out" is a number to read after
 # the session. The two things a driver can actually do are flip it at the

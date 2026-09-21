@@ -1711,6 +1711,57 @@ during that lift, and the car crosses the line already entitled to it:
 before the latch was modelled this same comparison read 1.145 s; the fix made
 the estimate an eighth of what it was, and more believable for it.
 
+## Why nothing has ever deployed on the front straight
+
+Reported from the car mid-session: strat 1 was not deploying on the front
+stretch. It was not, and neither has any map this tool has ever written. The
+cause is not the driver, the switch, or the search declining it.
+
+A lap begins with the car already at full throttle, so the demand it carries
+across the line is whatever the **last split of the lap** established -- and
+demand cannot be raised while the driver stays on the throttle. Six maps at
+Austin, with the deployment measured over the first 525 m:
+
+| setup | map | opening | final | final > opening? | deployed |
+|---|---|---|---|---|---|
+| cota_longright | 1 | 300 | 300 | no | 1 kJ |
+| cota_longright | 2 | 200 | 200 | no | 0 kJ |
+| cota_v2 | 1 | 200 | 200 | no | 0 kJ |
+| cota_v2 | 2 | 200 | 200 | no | 0 kJ |
+| cota_balance | 1 | 190 | 190 | no | 0 kJ |
+| **cota_balance** | **2** | **199** | **350** | **YES** | **1364 kJ** |
+
+**Equal is not enough.** Every map before this one asked for the same power at
+both ends of the lap, so the opening was never a reduction and was never
+granted. The one map that deployed there did so by accident: its last split was
+350 kW because that is where the car pays best, and the opening asked for 199.
+
+Two consequences. The first seven seconds of the lap -- the third largest energy
+sink on the circuit, 2.7 MJ of capacity -- has been thrown away by every map the
+tool has produced. And **a map of uniform power can never use its own opening**,
+which is not a flaw in the idea of spreading energy but a trap in how it was
+built: opening equals final by construction.
+
+`open_the_lap` now raises the last split above the opening before a map is
+returned. The end of a lap is the run to the line, where power is worth having
+anyway, so the raise costs nothing it was not already worth spending.
+
+Honestly held: the mechanism behind the strictness is not pinned down, and only
+one of the six observations is a positive case. It could be "final > opening",
+or it could be "final at 350". The margin is 50 kW rather than 1 so the answer
+is unambiguous either way, and the discriminating test is cheap -- the same map
+with its last split at 250 instead of 350.
+
+### What it cost the comparison
+
+The even-against-weighted test is spoiled by it. Strat 1, uniform at 190 kW,
+could not fire its opening and finished the lap on 83% having spent 8.0 MJ;
+strat 2 spent 11.3 and finished empty. The 1.4 s between them is mostly the
+3.3 MJ, not the placement, so **the balance question is still open**.
+
+What was won anyway: **1:38.467**, a new best, on the weighted map, against a
+previous best of 1:38.668.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
