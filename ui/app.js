@@ -1310,6 +1310,29 @@ function renderApplied(res) {
       "The car has not picked this up yet — " + res.stale));
   }
 
+  // What went onto the Power & Energy Limits page, in the menu's own words,
+  // so it can be checked against the setup screen without opening the file.
+  if (res.unlimited) {
+    panel.append(el("p", null,
+      "Per-lap recharge limit switched off, as you asked."));
+  } else if (res.limits && res.limits.length) {
+    panel.append(el("p", null, {
+      notice: "ERS limits set to the FIA notice for this circuit:",
+      yours: "ERS limits set to the figures you chose. Race + OT, practice "
+        + "and the out lap follow from them:",
+      default: "There is no FIA notice for this circuit, so the ERS limits "
+        + "are set to the regulation defaults:",
+    }[res.limits_from] || "ERS limits set:"));
+    const dl = el("dl", "facts");
+    for (const [label, value] of res.limits) {
+      dl.append(el("dt", null, label), el("dd", null, value));
+    }
+    panel.append(dl);
+    panel.append(el("p", "hint",
+      "Power and Energy Limits is left as you set it. Qualify makes a "
+      + "practice session hold you to qualifying's limits."));
+  }
+
   const ul = el("ul");
   const items = [
     "Check it worked: STRAT 3 should feel several seconds a lap slower and "

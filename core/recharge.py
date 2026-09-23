@@ -303,22 +303,24 @@ CURVE_INDEX = {
     "Alt 1": 4,
 }
 
-#: setup_ers_session_limits.lut. "Current Session" makes the car enforce
-#: whichever session is loaded, which is right once all five per-session
-#: figures are the published ones.
-SESSION_LIMITS_CURRENT = 0
-
-
 def updates_for(alloc: Allocation, mapping: dict[str, int]) -> dict[int, int]:
-    """Setup items to write so a car uses this allocation."""
+    """Setup items to write so a car uses this allocation.
+
+    Every item on the car's Power & Energy Limits page that the event notice
+    sets: the five per-lap recharge limits, the power reduction rate and the
+    four power curves. Not the Power and Energy Limits selector above them,
+    which says which session's figures the car enforces. The notice has no
+    view on that; it is how a driver makes a practice session run to
+    qualifying's limits, and it was being reset to "Current Session" on every
+    apply -- a Baku setup set to Qualify came back from the 12:15 apply on
+    Current Session and was put back by hand at 12:31.
+    """
     updates = {
         mapping[item]: getattr(alloc, session)
         for session, item in SESSION_ITEMS.items()
     }
     if "ERS_POWER_REDUCTION_RATE" in mapping:
         updates[mapping["ERS_POWER_REDUCTION_RATE"]] = alloc.rate_kw_s
-    if "ERS_SESSION_LIMITS" in mapping:
-        updates[mapping["ERS_SESSION_LIMITS"]] = SESSION_LIMITS_CURRENT
 
     # Article C5.2.8 names the curve for normal running and for Override. The
     # car selects one per session: PQ covers practice and qualifying, which run
@@ -341,6 +343,35 @@ def updates_for(alloc: Allocation, mapping: dict[str, int]) -> dict[int, int]:
         if index is not None and item in mapping:
             updates[mapping[item]] = index
     return updates
+
+
+#: What `updates_for` writes, as the car's Power & Energy Limits page labels it.
+MENU_RECHARGE = (("Max Lap Recharge (Race)", "race"),
+                 ("Max Lap Recharge (Race + OT)", "race_overtake"),
+                 ("Max Lap Recharge (Qualify)", "qualify"),
+                 ("Max Lap Recharge (Practice)", "practice"),
+                 ("Max Lap Recharge (Non-Race Outlap)", "outlap"))
+MENU_CURVES = (("Max Power vs Speed (Race)", "curve_standard"),
+               ("Max Power vs Speed (Race + OT)", "curve_override"),
+               ("Max Power vs Speed (Race Alt)", "curve_alternative"),
+               ("Max Power vs Speed (Non-Race)", "curve_override"))
+
+
+def menu_rows(alloc: Allocation) -> list[tuple[str, str]]:
+    """The settings `updates_for` writes, worded as the car's menu shows them.
+
+    So the driver can hold what was saved against the setup screen without
+    opening the file. A curve the table does not name is left out, because
+    `updates_for` leaves that item alone.
+    """
+    rows = [(label, "%.1f MJ" % (getattr(alloc, session) / 10.0))
+            for label, session in MENU_RECHARGE]
+    rows.append(("Power Reduction Rate", "%d kW/s" % alloc.rate_kw_s))
+    for label, field_name in MENU_CURVES:
+        name = getattr(alloc, field_name)
+        if name in CURVE_INDEX:
+            rows.append((label, name))
+    return rows
 
 
 def reference_maps_for(track: str) -> list:

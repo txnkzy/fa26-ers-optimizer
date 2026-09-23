@@ -1315,16 +1315,19 @@ class Engine:
             self.enter(kind)
             self.say("Working out the %s map…" % label.lower())
 
-            # The car's ERS_SESSION_LIMITS defaults to "Current Session", so
-            # the cap actually enforced is whichever session is loaded --
-            # practice allows 9.0 MJ where qualifying allows 8.0. A lap that
+            # The car's Power and Energy Limits item (ERS_SESSION_LIMITS)
+            # defaults to "Current Session", so the cap actually enforced is
+            # whichever session is loaded -- practice allows 9.0 MJ where
+            # qualifying allows 8.0. Apply writes the notice's figures and
+            # leaves that item as the driver set it, so a lap that
             # demonstrably harvested more than the table allows is taken as
             # proof of the real limit.
             cap = 99.0 if unlimited else alloc.mj(session)
             if not unlimited and harvested > cap + 0.2 and strat_no == 1:
                 self.note("These laps recovered more than qualifying allows. "
-                          "Practice is more generous — drive in a Qualify "
-                          "session to match this plan.")
+                          "Practice is more generous — set Power and Energy "
+                          "Limits to Qualify in the setup, or drive in a "
+                          "Qualify session, to match this plan.")
             objective = optimise26.Objective(
                 name=label, harvest_cap_mj=cap,
                 energy_neutral=neutral, one_shot=one_shot,
@@ -1830,7 +1833,13 @@ class Engine:
         # 500 *after* writing the file correctly.
         return {"backup": str(backup) if backup else "",
                 "stale": self._car_has_loaded(setup_path),
-                "active": DEFAULT_ACTIVE}
+                "active": DEFAULT_ACTIVE,
+                "limits": ([] if not write_alloc or self.unlimited
+                           else recharge.menu_rows(self.alloc)),
+                "limits_from": ("notice" if self.alloc.source.startswith("fia:")
+                                else "default" if self.alloc.is_baseline
+                                else "yours"),
+                "unlimited": bool(write_alloc and self.unlimited)}
 
     def _car_has_loaded(self, written: str) -> str:
         """Whether the game has picked up the file just written.

@@ -290,6 +290,47 @@ for n in (1, 2, 3):
     live = [s for s in splits if s.deploy_kw > 0 or s.clip_kw > 0]
     check("  map %d written" % n, len(live) >= 1, "%d live splits" % len(live))
 
+
+# --- the Power & Energy Limits page is the notice's ---------------------------
+# Every figure on that page as the event notice gives it -- practice included,
+# which used to get the qualifying figure -- and the Power and Energy Limits
+# selector above them left as the driver set it, where every apply used to put
+# it back to Current Session. Baku, from its Power Unit Information notice.
+def _limits_page_is_the_notice() -> tuple[bool, str]:
+    notice = {"ERS_REGEN_MAX_MJ_R": 85, "ERS_REGEN_MAX_MJ_R_OT": 90,
+              "ERS_REGEN_MAX_MJ_Q": 85, "ERS_REGEN_MAX_MJ_P": 90,
+              "ERS_REGEN_MAX_MJ_OL": 90, "ERS_POWER_REDUCTION_RATE": 50,
+              "ERS_POWER_CURVE_R": 0, "ERS_POWER_CURVE_R_OT": 1,
+              "ERS_POWER_CURVE_R_ALT": 4, "ERS_POWER_CURVE_PQ": 1}
+    page = SCRATCH / "limits_page.ini"
+    shutil.copy(src, page)
+    setupfile.write_values(page, {mapping["ERS_SESSION_LIMITS"]: 2}, backup=False)
+    baku = recharge.lookup("baku_2022")
+    fa26.write_strategies(page, mapping, [], 6003.0, allocation=baku, backup=False)
+    got = setupfile.read_values(page.read_text(encoding="utf-8", errors="replace"))
+    for item, want in notice.items():
+        if got.get(mapping[item]) != want:
+            return False, "%s written as %s, the notice says %s" % (
+                item, got.get(mapping[item]), want)
+    if got.get(mapping["ERS_SESSION_LIMITS"]) != 2:
+        return False, ("Power and Energy Limits reset to %s from the driver's Qualify"
+                       % got.get(mapping["ERS_SESSION_LIMITS"]))
+    # What the page tells the driver was saved is worded as the menu words it.
+    attrs = setupfile.item_attributes(A.setup_ini())
+    names = {attrs.get(item, {}).get("NAME") for item in notice}
+    rows = recharge.menu_rows(baku)
+    stray = [label for label, _v in rows if label not in names]
+    if stray or len(rows) != len(notice):
+        return False, "the saved panel lists %s, not the menu's names" % (stray or len(rows))
+    return True, "ten items to the notice, the selector left on Qualify"
+
+
+_ok, _why = _limits_page_is_the_notice()
+check("apply sets the Power & Energy Limits page to the FIA notice", _ok, _why)
+check("apply reports what it set", len(res.get("limits") or []) >= 6
+      and res.get("limits_from") in ("notice", "yours", "default"),
+      "%d rows, from %s" % (len(res.get("limits") or []), res.get("limits_from")))
+
 # --- unlimited round trip -------------------------------------------------
 alloc = recharge.lookup("monza")
 up = A.apply_limits(alloc, 90, 85, True)

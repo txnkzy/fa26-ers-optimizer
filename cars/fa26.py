@@ -608,17 +608,14 @@ def write_strategies(setup_path, mapping: dict[str, int],
 
     if allocation is not None:
         import recharge
+        # Exactly the notice's figures, the practice one included. The
+        # practice limit used to be overwritten with the active strat's session
+        # figure, so a qualifying map tested in practice was held to
+        # qualifying's allowance -- which put 8.5 MJ in a menu slot the notice
+        # sets at 9.0, and did by the back door what the car's own Power and
+        # Energy Limits item does properly. That item is the driver's, and
+        # `updates_for` leaves it alone.
         updates.update(recharge.updates_for(allocation, mapping))
-        # The per-lap recharge limit belongs to the session, not to the strat:
-        # the car applies the practice figure in a practice session whichever
-        # map is selected. Since testing happens in practice, the practice limit
-        # is pointed at the session the active strategy is actually for, so a
-        # race map is held to the race allowance rather than the more generous
-        # practice one.
-        session = {1: "qualify", 2: "race", 3: "race"}.get(active)
-        item = "ERS_REGEN_MAX_MJ_P"
-        if session and item in mapping:
-            updates[mapping[item]] = getattr(allocation, session)
 
     # Keep a dated copy beside the telemetry, of the map going out as well as
     # the one coming in. Without one there is no way to know afterwards which
