@@ -95,6 +95,8 @@ class Profile:
             lat_limit = ordered[int(len(ordered) * 0.98)] * lat_fraction
 
         counts = [0] * n
+        capped_sum = [0.0] * n
+        capped_n = [0] * n
         for i in range(len(lap)):
             slot = int(lap.dist[i] / ds)
             if not 0 <= slot < n:
@@ -134,19 +136,23 @@ class Profile:
             # on average and taking the slot maximum instead makes it 0.66%,
             # with every circuit in the corpus improved and none made worse.
             #
-            # The maximum is not a licence to invent speed. A cap is only set
-            # at all where the driver was off the power, and the question it
-            # answers is "how fast was the car over these 2.5 m", for which the
-            # fastest instant the car was actually measured at is the honest
-            # answer. `min` was never chosen for that question: it is the same
-            # operator that makes any non-power-limited sample cap the slot,
-            # reused across samples by accident.
+            # The maximum overshot, once the model stopped losing time
+            # elsewhere. Much of that 1.22% was power the simulation failed to
+            # deliver at corner exits; with that fixed, a car that reaches its
+            # ceiling everywhere rode the driver's best instant through every
+            # slot and came out 0.64% fast, the holdout gaining most in the
+            # pieces taken at part throttle. The mean of the slot's samples is
+            # the answer to "how fast was the car over these 2.5 m": 0.63%
+            # against 0.78%, bias -0.33% against -0.64%, every circuit's worst
+            # lap better, and the benchmark of differences between maps -- the
+            # thing the search actually runs on -- unmoved at 0.214 s against
+            # 0.213.
             if value >= NO_CAP:
                 self.cap[slot] = min(self.cap[slot], value)
-            elif self.cap[slot] >= NO_CAP:
-                self.cap[slot] = value
             else:
-                self.cap[slot] = max(self.cap[slot], value)
+                capped_sum[slot] += value
+                capped_n[slot] += 1
+                self.cap[slot] = capped_sum[slot] / capped_n[slot]
             self.gas[slot] = max(self.gas[slot], lap.gas[i])
             self.gas_mean[slot] += lap.gas[i]
             self.brake_mean[slot] += lap.brake[i]

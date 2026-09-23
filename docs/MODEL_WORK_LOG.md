@@ -1953,16 +1953,104 @@ reduction at the start of a Power Limited Pending period may exceed 150 kW
 Overtake detection line at 4177 m (L20) and activation line at 4270 m (L21,
 TBC) with a 1.0 s gap.
 
-## Where the model stands
+### Apply writes the whole Power & Energy Limits page
 
-With the driver's Albert Park and Austin sessions added, and their maps recorded
-by the logger rather than reconstructed:
+Apply already wrote the five recharge limits, the reduction rate and the four
+curves when "write the allocation" was ticked. Two things kept the menu from
+reading as the notice does:
+
+* **Practice was overwritten** with the active strat's session figure, so a
+  qualifying map tested in practice was held to qualifying's allowance. At Baku
+  that is 8.5 MJ in a slot the notice sets at 9.0. The car has its own item
+  for exactly this, Power and Energy Limits, and the driver uses it.
+* **That item was reset** to Current Session on every apply. Baku.ini was on
+  Qualify before the 12:15 apply, came back on Current Session, and was put
+  back by hand at 12:31.
+
+Now every figure goes in as published and the selector is left as the driver
+set it. The saved panel lists what was written in the menu's own labels. The
+check writes Baku's notice onto a copy set to Qualify and reads all eleven
+items back.
+
+The driver's copy of the exe is 1.1.0, whose table predates the notice, so
+its apply still writes qualifying 9.0, race with Overtake 8.5 and 100 kW/s.
+The menu in the screenshot showed the notice's figures because they had been
+set by hand; the file on disk did not.
+
+## Pooling, provenance and the corner ceiling
+
+Baku's holdout replay came in at 3.75% mean and 9.15% worst. Three things were
+behind it, and only the last was the model.
+
+### Stopped laps pushed real laps out of the session
+
+The pooling rule throws out a lap quicker than 70% of the session's median as a
+fragment. Today's Baku session held a 10:02 and a 7:34 (the garage, a pause),
+which put the median at 4:42, so every real lap from 1:46 to 1:50 fell under
+the fragment line and lap05 was modelled on the 7:34 alone. The median is now
+taken over the quicker half of the session. Stopped laps can't move it, and
+a genuine fragment still sits far below it: the 35.525 s Albert Park file
+among sixteen 1:21s still puts the line at 57 s. No other circuit moved. Baku:
+**3.75% → 1.48%, worst 9.15% → 3.40%**.
+
+### A setup file written after the lap is not a record of it
+
+A lap that names its setup file was attributed to that file as it reads now,
+if the map fitted. Three Baku laps of 21/09 named the server's shared setup,
+which the server rewrote on 23/09, and the new contents passed at 0.35-0.37
+against a floor of 0.35. A file written since the lap was saved now sends the
+lap to the snapshots instead. 11 laps moved:
+
+| | laps | fit before | fit after | map |
+|---|---|---|---|---|
+| Austin, named cota.ini | 6 | 0.36-0.44 | **0.54-0.61** | different: the 20/09 11:47 snapshot |
+| Baku, named the shared setup | 3 | 0.35-0.37 | 0.37-0.39 | same map, found in Baku.ini's snapshot |
+| Baku, named Baku.ini (saved again at 12:31) | 2 | 0.77-0.78 | 0.77-0.78 | same |
+
+The six Austin laps now fit much better, so they had been replayed on a map
+they never ran. Their lap-time error got *worse* (0.44% → 0.58%, all fast): the
+wrong map had been hiding the model's fast bias. That settled the next
+question.
+
+### The corner ceiling takes the slot mean
+
+The ceiling used the fastest sample in each 2.5 m slot, chosen when the model
+was 1.22% slow. Most of that was power not delivered at corner exits, since
+fixed, and on the corrected corpus the maximum left the model 0.64% fast. The
+mean of the slot's samples, out of sample:
+
+| circuit | laps | max: mean / bias | **mean: mean / bias** |
+|---|---|---|---|
+| Albert Park | 21 | 0.51 / -0.31 | **0.46 / -0.12** |
+| Austin | 27 | 0.55 / -0.49 | **0.43 / -0.11** |
+| Baku | 7 | 1.52 / -1.52 | **1.10 / -1.10** |
+| Monaco | 3 | 0.87 / -0.87 | **0.21 / -0.21** |
+| Monza | 6 | 0.81 / -0.20 | 0.87 / **-0.03** |
+| Red Bull Ring | 3 | 1.41 / -0.92 | **1.34 / -0.68** |
+| Sakhir | 8 | 1.42 / -1.42 | **1.08 / -1.08** |
+| Suzuka | 2 | 0.59 / -0.34 | 0.59 / **-0.13** |
+| **all** | **77** | **0.78 / -0.64** | **0.63 / -0.33** |
+
+Every circuit's worst lap improves. The benchmark the search runs on, which
+compares maps within a session, doesn't move: 0.214 s against 0.213, segments
+0.082 against 0.081, direction 88% against 89%.
+
+### Still open at Baku
+
+Today's laps began with charge in the store (1.9-3.9 MJ, against 23 kJ on
+21/09), and the replay spends all of it: 11.2-11.4 MJ deployed against the
+car's 9.3-10.5. On the 21/09 laps, which began empty, the two agree to
+0.05 MJ. Either the car holds charge back that the model doesn't, or the two
+shared-setup laps (fit 0.51) weren't on the map they're matched to. Not yet
+resolved.
+
+## Where the model stands
 
 | | laps | mean | worst | bias |
 |---|---|---|---|---|
 | start of this work | 36 | 1.47% | 3.20% | +1.22% |
-| **now** | **56** | **0.82%** | **2.52%** | **+0.18%** |
+| Albert Park and Austin added | 56 | 0.82% | 2.52% | +0.18% |
+| **now** | **77** | **0.63%** | **3.02%** | **-0.33%** |
 
-**19 of the 56 carry the map the logger wrote beside them.** The rest are still
-matched by behaviour, and always will be — they were driven before the logger
-recorded anything.
+**29 of the 77 carry the map the logger recorded, or a setup file unchanged
+since the lap.** The rest are matched by behaviour against the snapshots.

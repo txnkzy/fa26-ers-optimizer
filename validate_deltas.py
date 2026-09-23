@@ -100,9 +100,15 @@ def timed_laps(folder: Path, item_map) -> dict:
             if not found or not found.recorded or found.strat == 3:
                 continue
             identity = (found.source, found.strat)
+            sidecar = provenance.read_sidecar(path) or {}
             sessions.setdefault((circuit, key), []).append(
-                {"path": path, "lap": lap, "found": found, "map": identity})
+                {"path": path, "lap": lap, "found": found, "map": identity,
+                 "setup": sidecar.get("setup_file")})
     return sessions
+
+
+ERS_PREFIXES = validate_model.ERS_PREFIXES
+car_setup = validate_model.car_setup
 
 
 def fit_for(circuit: str, exclude_key: str, folder: Path):
@@ -222,7 +228,8 @@ def run(folder: Path) -> dict:
     data_dir = install.ensure_unpacked(fa26.CAR_ID)
     item_map = setupfile.item_index_map(
         (data_dir / "setup.ini").read_text(encoding="utf-8"))
-    out = {"comparisons": [], "noise": []}
+    out = {"comparisons": [], "noise": [], "skipped": []}
+    setups: dict = {}
     for (circuit, key), entries in timed_laps(folder, item_map).items():
         maps = sorted({e["map"] for e in entries})
         if len(maps) < 2:
@@ -236,7 +243,20 @@ def run(folder: Path) -> dict:
         for e in entries:
             rows.setdefault(e["map"], []).append(
                 predict(e, fit_laps, data_dir, edges, item_map))
+        setup_of = {e["map"]: e["setup"] for e in entries}
         for a, b in itertools.combinations(maps, 2):
+            car_a = car_setup(setup_of.get(a), item_map, setups)
+            car_b = car_setup(setup_of.get(b), item_map, setups)
+            if car_a is None or car_b is None or car_a != car_b:
+                changed = sorted(k for k in set(car_a or {}) | set(car_b or {})
+                                 if (car_a or {}).get(k) != (car_b or {}).get(k))
+                out["skipped"].append({
+                    "circuit": circuit, "session": key.split("__")[-1],
+                    "a": "%s strat %d" % a, "b": "%s strat %d" % b,
+                    "why": ("setup unreadable" if car_a is None or car_b is None
+                            else "%d non-ERS settings differ, e.g. %s"
+                            % (len(changed), ", ".join(changed[:3])))})
+                continue
             c = compare(rows[a], rows[b])
             c.update({"circuit": circuit, "session": key.split("__")[-1],
                       "a": "%s strat %d" % a, "b": "%s strat %d" % b,
@@ -280,6 +300,9 @@ def report(result: dict) -> str:
         lines.append("   B %-34s %s" % (c["b"], ", ".join(c["laps_b"])))
         lines.append("   B - A   measured %+7.3f s   predicted %+7.3f s   error %+7.3f s"
                      % (c["measured_s"], c["predicted_s"], c["error_s"]))
+    for k in result.get("skipped", []):
+        lines.append("%s %s  not compared: %s against %s -- %s"
+                     % (k["circuit"], k["session"], k["a"], k["b"], k["why"]))
     s = score(result)
     if s:
         lines.append("")

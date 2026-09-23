@@ -122,6 +122,50 @@ def cases(folder: Path, item_map) -> tuple[list[Case], dict[str, int]]:
     return out, refused
 
 
+#: Setup items two maps may differ in and still be a comparison of maps: the
+#: deployment maps, and the ERS settings written alongside them.
+ERS_PREFIXES = ("DEPLOYMENT_MAP_", "ERS_", "STRAT_MAP")
+
+
+def car_setup(path, item_map, cache: dict) -> dict | None:
+    """Every value in a setup file except its ERS settings, keyed by name.
+
+    Two maps driven in one session are only a comparison of maps if nothing
+    else about the car changed. Baku's first session this week put a
+    server-shared setup against the driver's own, with a pit stop between and
+    the driver still finding a second and a half a lap -- a difference of
+    2.2 s that no map explains, and which alone took the benchmark from 0.213
+    to 0.389 s. Every controlled A/B is two strats of one file, or files
+    copied from one base with only the maps rewritten, and passes this.
+    """
+    if path is None:
+        return None
+    key = str(path)
+    if key not in cache:
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            cache[key] = None
+            return None
+        names = {index: name for name, index in item_map.items()}
+        values, section = {}, None
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+            elif section and line.upper().startswith("VALUE="):
+                name = section
+                if section.startswith("CUSTOM_SCRIPT_ITEM_"):
+                    try:
+                        name = names.get(int(section.rsplit("_", 1)[1]), section)
+                    except ValueError:
+                        pass
+                if not str(name).startswith(ERS_PREFIXES):
+                    values[name] = line.split("=", 1)[1].strip()
+        cache[key] = values
+    return cache[key]
+
+
 def arrival(entry: dict, item_map):
     """The map the car came across the line on, as (splits, switch_m), or None.
 
@@ -200,6 +244,7 @@ def _fuel(path: Path) -> float:
 
 
 _ITEM_MAPS: dict = {}
+_SETUPS: dict = {}
 
 
 def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
@@ -225,6 +270,21 @@ def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
         # being wrong, it is the harness pooling laps the app never would, and
         # it only showed up once somebody drove the protocol properly.
         others = [p for p in case.siblings if p != case.path]
+        # Only laps on the same car. A session can hold a setup change -- Baku
+        # this week went from a server-shared setup to the driver's own after a
+        # pit stop, anti-roll bars and all -- and fitting one on the other
+        # builds a car nobody drove. Laps whose setup was never recorded
+        # cannot be checked and are kept, as before.
+        mine = car_setup((provenance.read_sidecar(case.path) or {}).get("setup_file"),
+                         item_map, _SETUPS)
+        if mine is not None:
+            same = []
+            for p in others:
+                theirs = car_setup((provenance.read_sidecar(p) or {}).get("setup_file"),
+                                   item_map, _SETUPS)
+                if theirs is None or theirs == mine:
+                    same.append(p)
+            others = same
         loaded = []
         for p in lapsession.select(others) if others else []:
             try:

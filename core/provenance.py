@@ -160,6 +160,18 @@ def driven_strat(lap) -> int | None:
     return best
 
 
+def _rewritten_since(setup_file, lap_path) -> bool:
+    """Whether a setup file has been written since this lap was saved.
+
+    False when either time cannot be read, which leaves the fit score to
+    decide as it always did.
+    """
+    try:
+        return Path(setup_file).stat().st_mtime > Path(lap_path).stat().st_mtime
+    except (OSError, TypeError):
+        return False
+
+
 def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution:
     """The map among these snapshots that best explains this lap.
 
@@ -196,7 +208,16 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
     # names a file whose contents have since changed. `map_fit` settles that
     # in one pass -- a map the car really followed explains the power it
     # delivered, and one that has been overwritten since does not.
-    if recorded and recorded["setup_file"] and item_map:
+    #
+    # Mostly. A file written since the lap was saved is not a record of it at
+    # all, and a fit score can pass one by chance: three Baku laps of 21/09
+    # named the server's shared setup, which the server rewrote on 23/09, and
+    # the new contents cleared the bar at 0.35-0.37 against a floor of 0.35.
+    # Such a lap goes to the snapshots instead, which hold what this tool
+    # wrote and when.
+    if (recorded and recorded["setup_file"] and item_map
+            and not _rewritten_since(recorded["setup_file"],
+                                     getattr(lap, "path", None))):
         named = Path(recorded["setup_file"])
         try:
             splits = fa26.read_map(

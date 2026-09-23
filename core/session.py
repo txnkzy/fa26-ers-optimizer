@@ -138,7 +138,17 @@ def select(paths, tolerance: float = TOLERANCE,
     # so the test is against the session's own middle. A real session spreads
     # ten or fifteen percent from best to worst; nothing genuine is a third
     # quicker than the median.
-    middle = statistics.median([t for t, _p in timed])
+    #
+    # The middle of its quicker half, though, not of the whole session. Long
+    # laps pull a plain median up just as fragments pull the best time down:
+    # a Baku session with a 10:02 and a 7:34 in it -- the garage, a pause --
+    # put the median at 4:42, so every real lap from 1:46 to 1:50 fell under
+    # the fragment line and the session was modelled from the 7:34 alone,
+    # nine percent out. Fragments are rare and fall below the quicker half's
+    # middle all the same: seventeen Albert Park laps with a 35.525 s file
+    # among them still put the line at 57 s.
+    quick = [t for t, _p in timed][:(len(timed) + 2) // 2]
+    middle = statistics.median(quick)
     whole = [(t, p) for t, p in timed if t >= middle * FRAGMENT_SHARE]
     if whole:
         timed = whole
