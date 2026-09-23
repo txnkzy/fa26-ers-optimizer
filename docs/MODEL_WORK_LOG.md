@@ -2035,14 +2035,43 @@ Every circuit's worst lap improves. The benchmark the search runs on, which
 compares maps within a session, doesn't move: 0.214 s against 0.213, segments
 0.082 against 0.081, direction 88% against 89%.
 
-### Still open at Baku
+### A charged store is spent: the Baku A/B
 
-Today's laps began with charge in the store (1.9-3.9 MJ, against 23 kJ on
-21/09), and the replay spends all of it: 11.2-11.4 MJ deployed against the
-car's 9.3-10.5. On the 21/09 laps, which began empty, the two agree to
-0.05 MJ. Either the car holds charge back that the model doesn't, or the two
-shared-setup laps (fit 0.51) weren't on the map they're matched to. Not yet
-resolved.
+The replay spent every kilojoule of a charged store (11.2-11.4 MJ) where two
+laps on the server's shared setup had deployed 9.3-9.5 and finished with
+1.4-1.9 MJ left. That was either the car holding charge back or those laps
+being on a different map from the one they were matched to (fit 0.51).
+
+An A/B settled it. `baku_v2.ini`: strat 1 the map the 1.1.0 app wrote at
+12:15, strat 2 the one today's model writes from the two Baku.ini laps, strat
+3 recharge, limits to the notice, Power and Energy Limits on Qualify. Driven
+1 → 3 → 2 → 3 → 1, switching 130-190 m before the line (fuel ran short for
+more).
+
+Every push lap began at 89-91% and **ended at 1%**, deploying 11.3-11.7 MJ.
+The car spends the store, as modelled. It was the shared-setup laps' map
+attribution.
+
+| | strat 1 (lap02, lap06) | strat 2 (lap04) |
+|---|---|---|
+| lap | 1:47.355, 1:46.879 | 1:46.950 |
+| B - A, measured | | **-0.156 s** (against the pair's mean) |
+| B - A, benchmark | | -0.113 s |
+
+Two pieces are the driver, not the map:
+
+* 2000-2500, the castle: lap02 is 0.29 s off lap06; lap04 matches lap06.
+* **4000-4100, T16: lap04 apexed at 105 kph against 117 on both A laps** and
+  lost 0.261 s there. The benchmark had B gaining 0.127 s over 4000-4500 and
+  it lost 0.214.
+
+After T16 the map did what it was built for. 250 kW against 200 overtook
+both A laps by 4260 m and was 6 kph quicker at 4540: -0.054 s over
+4260-4500 and -0.155 over 4500-5000, where the benchmark had -0.151. It ran
+flat about 500 m from the line (+0.124 s in the last piece; modelled +0.271).
+Against lap06, the cleaner A lap, B is 0.071 s behind with 0.278 s lost at
+T16, so roughly **0.2 s quicker** with a normal T16. The model's
+expectation from full was 0.233.
 
 ## Where the model stands
 
