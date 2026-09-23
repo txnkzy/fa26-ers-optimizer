@@ -290,7 +290,11 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             demand_kw = 0.0
             prev_level_kw = 0.0
             continue
-        throttle_time += step / max(profile.measured_speed_at(d), 1.0)
+        # The clock runs from the knee, as in the main loop below.
+        if gas_at[i] < fa26.DEMAND_RESET_GAS:
+            throttle_time = 0.0
+        else:
+            throttle_time += step / max(profile.measured_speed_at(d), 1.0)
         cmd, clip = commands[i]
         if throttle_time <= powertrain.floor_hold_s or in_reset_at[i]                 or gas_at[i] < fa26.DEMAND_RESET_GAS:
             demand_kw = cmd
@@ -300,19 +304,12 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             demand_kw, profile.measured_speed_at(d),
             full_throttle=(throttle_time <= powertrain.floor_hold_s
                            and clip <= 0.0))
-    # ...but it arrives on the map it was already running, not on this one. A
-    # flying lap is entered from an out-lap or a recharge lap, which asked for
-    # nothing, and demand cannot be raised while the driver stays on the
-    # throttle. Priming from this map's own tail left the lap entitled to
-    # whatever its last split asked for, which no driver ever is: seven laps at
-    # Austin deployed exactly zero over the first 519 m while the map asked for
-    # 2.30 MJ there, and 160 of 216 laps across the corpus deploy under 50 kJ
-    # before their first lift. The walk above still has to happen -- it is what
-    # sets `throttle_time`, and without it the opening split reads as a fresh
-    # application of the throttle and is granted in full.
-    if entry is None and on_throttle_at[0]:
-        demand_kw = 0.0
-        prev_level_kw = 0.0
+    # Without an `entry` the lap arrives on its own map -- the driver was on it
+    # when they got back on the power for the final corner, either because it
+    # is a race stint or because they switched before the corner, which is
+    # what a map that uses its opening asks them to do. Arriving any other
+    # way is `run_to_line`'s job, and whether the opening is granted on
+    # arrival is decided at the line in the main loop.
     if entry is not None:
         v = min(entry.speed_ms, ceiling[lo % n])
         demand_kw = entry.demand_kw
@@ -377,7 +374,16 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             # after that power may fall, but only at the ramp rate. Treating it
             # as permanent made the car deploy everywhere the map asked for
             # nothing.
-            throttle_time = throttle_time + dt_guess if on_throttle else 0.0
+            #
+            # The clock starts at the knee, not at the first touch of the
+            # pedal. Below the knee the demand re-arms on every step anyway,
+            # and the car's floor is timed from the knee: measured, the floor
+            # sits at 197 kW half a second after the throttle crosses 60% and
+            # is ramping down by 1.0-1.5 s. Counting from 20% instead ran the
+            # window out during the squeeze, and at Austin refused a 250 kW
+            # split that began 0.29 s after the knee -- the car delivered it,
+            # 1.8 MJ through the long right, and the model delivered 0.12.
+            throttle_time = throttle_time + dt_guess if gas >= reset_gas else 0.0
 
             # Deployment follows the throttle, not just full throttle. Gating it
             # on full throttle made every corner exit invisible to the search:
@@ -413,6 +419,17 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 in_reset = in_reset_at[i % n]
                 if just_applied or in_reset or gas < reset_gas:
                     demand_kw = cmd_deploy
+                elif i % n == 0:
+                    # The start/finish line. The car arrives with the demand
+                    # it established on the last corner of the previous lap,
+                    # on whichever map was live then, and the opening split
+                    # is granted only if it asks for strictly less. Equal is
+                    # refused, and so is more -- not held at the carried
+                    # level as `min` would have it. Every Austin lap with
+                    # charge to spend: carried 300 or 350 against an opening
+                    # of 200 or 199 deployed 1.36-1.44 MJ, three of three;
+                    # 190 against 190 and 0 against 200 deployed nothing.
+                    demand_kw = cmd_deploy if cmd_deploy < demand_kw else 0.0
                 else:
                     demand_kw = demand_kw if demand_kw < cmd_deploy else cmd_deploy
 
@@ -436,7 +453,15 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # Article C5.12.7: a track may declare sectors with a
                 # higher threshold than the usual 210 kph, inside which power
                 # may still be cut instantly at speed.
-                if level < prev_level_kw and v * 3.6 >= cut_kph_at[i % n]:
+                # The ramp applies at any speed outside a declared C5.12.7
+                # sector. Measured after the floor expires, a car well below
+                # 210 kph still comes down at about 100 kW/s -- 197, 150,
+                # 101, then nothing, a second at a time -- where the model had
+                # it drop at once and lost 100-200 kJ on every slow-corner
+                # exit. A declared sector keeps the instant cut the
+                # regulation allows below its own threshold.
+                if level < prev_level_kw and (v * 3.6 >= cut_kph_at[i % n]
+                                              or cut_kph_at[i % n] <= INSTANT_CUT_KPH):
                     # Nor can the level cut instantly. The manual works the
                     # example on p.9: at 300 km/h, over 300 kW down to zero
                     # takes about 250 m -- 3.0 s, the whole reduction at

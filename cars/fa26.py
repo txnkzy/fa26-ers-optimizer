@@ -184,20 +184,29 @@ HARVEST_THROTTLE_CURVE = (
 )
 
 
-#: Delivered deploy power against throttle, measured with speed held to
-#: 150-260 kph and the store not near empty, normalised to the p95 at full
-#: throttle. The relationship is strongly concave -- 20% throttle already
-#: buys 50% of the power -- which is the torque arbitration the manual
-#: describes on p.21 blending ICE and MGU-K, not a proportional pedal.
-#: Scaling deployment linearly by throttle is therefore wrong in both
-#: directions at once: it under-delivers on a real part-throttle sample and
-#: over-delivers when fed a 5 m slot's *maximum* throttle, which runs 1.35x
-#: the mean. Feeding it the slot mean and this curve puts the part-throttle
-#: deploy error back where it belongs.
+#: Fraction of the commanded deploy level delivered at each throttle position.
+#:
+#: Below the arbitration knee the MGU-K delivers nothing at all, and from there
+#: delivery climbs roughly in a straight line to full at about 88% throttle.
+#: Measured on 33 laps whose maps are known from the setup the logger recorded,
+#: over tens of thousands of samples, using only those where the answer is not
+#: muddied: a command of 200 kW or more, so the floor cannot move the level;
+#: below the taper; and no rise in the command since the throttle was last
+#: under the knee, so the latch cannot be holding the level down. The first
+#: second back on the power and everything after it give the same curve, and
+#: so do qualifying and race maps.
+#:
+#: The curve this replaced paid out 60% of the level at 30% throttle and 39% at
+#: 10%, which the model's own `DEMAND_RESET_GAS` says is impossible. It was
+#: normalised against full-throttle delivery without regard to what the map was
+#: asking for, so a floor or a latch showed up as a throttle effect. Traced
+#: zone by zone at Austin, it put 100-280 kJ into a dozen places where the car
+#: delivered nothing -- every one of them a corner exit where the driver eases
+#: back on -- and over-predicted a uniform map by 2.1 MJ.
 DEPLOY_THROTTLE_CURVE = (
-    (0.00, 0.000), (0.10, 0.393), (0.20, 0.500), (0.30, 0.597),
-    (0.50, 0.604), (0.60, 0.708), (0.70, 0.774), (0.80, 0.927),
-    (0.90, 0.998), (1.00, 1.000),
+    (0.00, 0.00), (0.60, 0.00), (0.625, 0.15), (0.675, 0.30),
+    (0.725, 0.45), (0.775, 0.57), (0.825, 0.74), (0.875, 0.94),
+    (0.925, 0.97), (1.00, 1.00),
 )
 
 
@@ -301,7 +310,13 @@ class Powertrain:
 
     floor_kw: float = FLOOR_KW
     taper: tuple[float, float] = TAPER_OVERTAKE
-    floor_hold_s: float = 1.0        # how long the 200 kW floor must be held
+    #: How long the 200 kW floor is held after the throttle crosses the knee.
+    #: Measured from the car's own deployment counter at full throttle, with
+    #: the command unchanged since the throttle came on: a split asking for
+    #: 100 kW delivers 200 for 1.0-1.3 s, then 192, 148 and 100 as it ramps
+    #: down; one asking for 150 holds 200 to about 1.1 s. A second was the
+    #: regulation's minimum, not what the car does.
+    floor_hold_s: float = 1.3
     #: How fast the regulated power level may fall, kW/s. This is NOT the
     #: setup's ERS_POWER_REDUCTION_RATE. That item is per-event at 50 or
     #: 100 kW/s and is still written to the car, but it does not govern the

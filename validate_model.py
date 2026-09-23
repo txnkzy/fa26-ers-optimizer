@@ -122,14 +122,92 @@ def cases(folder: Path, item_map) -> tuple[list[Case], dict[str, int]]:
     return out, refused
 
 
+def arrival(entry: dict, item_map):
+    """The map the car came across the line on, as (splits, switch_m), or None.
+
+    What a lap can deploy before its first corner depends on the demand it
+    carries across the line, and that demand was set by whichever map was live
+    the last time the driver got back on the power -- which need not be the map
+    the lap is driven on. Austin lap02 of the first A/B deployed 1.37 MJ in its
+    opening only because the lap before ran a map whose final split asked for
+    300 kW against this map's 200; the laps that followed a recharge lap, with
+    the wheel turned at the line, carried nothing and deployed nothing.
+
+    So the previous lap is read, and the strategy that matters is the one live
+    while the throttle was coming back on for the final corner -- the floor-hold
+    window after the last time it crossed the knee. Not the strategy just before
+    the last switch: turning the rotary from 3 to 1 passes through 2 for a
+    fraction of a second, and taking that for the arrival map credited laps
+    with 300 kW they never carried.
+
+    When the previous lap cannot be established -- no file for it, no recorded
+    setup, or a store that does not carry over, which is a trip to the pits
+    nobody logged -- the lap is taken to have arrived carrying nothing. That is
+    what every such lap in the corpus did: the first laps of four Austin
+    sessions and three laps after unlogged pit visits all deployed 0-1 kJ
+    before their first lift, whatever their own map asked for at either end.
+    Assuming instead that they arrived on their own map handed some of them an
+    opening the car refused, and made the model's differences worse.
+    """
+    nothing = ([], 0.0)
+    path = Path(entry["path"])
+    try:
+        number = int(path.name.split("__lap")[-1][:2])
+    except ValueError:
+        return nothing
+    previous = sorted(path.parent.glob(
+        path.name.split("__lap")[0] + "__lap%02d_*.csv" % (number - 1)))
+    if not previous:
+        return nothing
+    try:
+        before = laplib.load(previous[0])
+    except Exception:
+        return nothing
+    lap = entry["lap"]
+    if abs(before.store_kj[-1] - lap.store_kj[0]) > 0.05 * laplib.STORE_CAPACITY_KJ:
+        return nothing
+    sidecar = provenance.read_sidecar(previous[0])
+    if not sidecar or not sidecar.get("setup_file"):
+        return nothing
+    knee = fa26.DEMAND_RESET_GAS
+    last = None
+    for i in range(1, len(before.gas)):
+        if before.gas[i - 1] < knee <= before.gas[i]:
+            last = i
+    if last is None:
+        return nothing
+    hold = fa26.Powertrain().floor_hold_s
+    window = [before.strat[i] for i in range(last, len(before.t))
+              if before.t[i] - before.t[last] <= hold and 1 <= before.strat[i] <= fa26.MAPS]
+    if not window:
+        return nothing
+    established = max(set(window), key=window.count)
+    strat = entry["found"].strat
+    if established == strat:
+        return entry["found"].splits, 0.0
+    try:
+        text = Path(sidecar["setup_file"]).read_text(encoding="utf-8", errors="replace")
+        came = fa26.read_map(text, item_map, established)
+    except Exception:
+        return nothing
+    return came, 0.0
+
+
 def _fuel(path: Path) -> float:
     with open(path, encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     return sum(float(r["fuel"]) for r in rows) / len(rows)
 
 
+_ITEM_MAPS: dict = {}
+
+
 def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
     """Simulate this lap on the map it was driven on. None if it cannot be."""
+    item_map = _ITEM_MAPS.get(str(data_dir))
+    if item_map is None:
+        item_map = _ITEM_MAPS[str(data_dir)] = setupfile.item_index_map(
+            (Path(data_dir) / "setup.ini").read_text(encoding="utf-8"))
     driven = laplib.load(case.path)
     if laplib.problem(driven):
         return None
@@ -174,13 +252,24 @@ def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
     alloc = recharge.lookup(str(case.path))
     _, harvested = driven.totals()
     powertrain = fa26.Powertrain(taper=fa26.taper_for(alloc.curve_override))
+    zones = dict(reset_zones=alloc.reset_zones_for(session_name, driven.length_m),
+                 speed_zones=alloc.speed_zones_for(driven.length_m))
+    cap_kj = max(harvested, alloc.mj(session_name)) * 1000.0
+    # Replay the lap the way it was actually entered: the demand it carried
+    # across the line was set on whatever map was live at the final corner.
+    state = None
+    came = arrival({"path": case.path, "lap": driven, "found": case.found},
+                   item_map) if item_map else None
+    if came is not None:
+        state = sim26.run_to_line(
+            came[0], case.splits, came[1], car, cal, shape, powertrain,
+            start_store_kj=driven.store_kj[0], harvest_cap_kj=cap_kj, **zones)
+        state.speed_ms = driven.speed[0]
+        state.store_kj = driven.store_kj[0]
     result = sim26.simulate(
         case.splits, car, cal, shape, powertrain,
-        start_store_kj=driven.store_kj[0],
-        harvest_cap_kj=max(harvested, alloc.mj(session_name)) * 1000.0,
-        settle=False,
-        reset_zones=alloc.reset_zones_for(session_name, driven.length_m),
-        speed_zones=alloc.speed_zones_for(driven.length_m))
+        start_store_kj=driven.store_kj[0], harvest_cap_kj=cap_kj,
+        settle=False, entry=state, **zones)
 
     actual = case.actual_s
     return {

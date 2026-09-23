@@ -840,6 +840,67 @@ _ok, _why = _opening_can_fire()
 check("the opening split is left able to fire", _ok, _why)
 
 
+# --- the line: the opening is granted only below what was carried ------------
+# The demand carried across the line is whatever the last corner established,
+# and the opening split is granted only if it asks for strictly less. Every
+# Austin lap with charge to spend: carried 300 or 350 against an opening of 200
+# or 199 deployed 1.36-1.44 MJ; 190 against 190 deployed nothing. And below the
+# 60% knee the MGU-K delivers nothing at all.
+def _line_rule_holds() -> tuple[bool, str]:
+    import fa26 as _fa26
+    import sim26 as _sim
+    import lap as _laplib
+    import profile as _prof
+    import calibrate as _cal
+    import carphysics as _cp
+    if _fa26.deploy_throttle_frac(0.5) > 0.0:
+        return False, "the curve still pays out below the knee"
+    one = shape = None
+    lift = 0.0
+    for path in sorted(A.baseline_dir().glob("*.csv")):
+        try:
+            cand = _laplib.load(path)
+        except Exception:
+            continue
+        if _laplib.problem(cand) or cand.length_m < 3000:
+            continue
+        cand_shape = _prof.Profile([cand])
+        cand_lift = A.first_lift_m(cand_shape)
+        if cand_lift >= 300:          # a real run to the first corner
+            one, shape, lift = cand, cand_shape, cand_lift
+            break
+    if one is None:
+        return True, "no circuit with a run to the first corner, skipped"
+    car = _cp.load(A.car_data())
+    car.fuel_liters = 45
+    cal = _cal.fit_longitudinal([one], car)
+    end = int(shape.length_m)
+    tail0 = end - 150
+
+    def opening_mj(final_kw):
+        m = [_fa26.Split(0, int(lift), _fa26.CLIP_OFF, int(lift), 200, 0),
+             _fa26.Split(tail0, end - 1, _fa26.CLIP_OFF, end - 1, final_kw, 0)]
+        with_opening = _sim.simulate(m, car, cal, shape, _fa26.Powertrain(),
+                                     start_store_kj=4000.0, harvest_cap_kj=9000.0,
+                                     settle=True)
+        without = _sim.simulate(m[1:], car, cal, shape, _fa26.Powertrain(),
+                                start_store_kj=4000.0, harvest_cap_kj=9000.0,
+                                settle=True)
+        return with_opening.deployed_mj - without.deployed_mj
+
+    higher, equal = opening_mj(300), opening_mj(200)
+    if higher < 0.3:
+        return False, "an opening of 200 under a carried 300 delivered %.2f MJ" % higher
+    if equal > 0.1:
+        return False, "an opening of 200 under a carried 200 delivered %.2f MJ" % equal
+    return True, ("200 under 300 delivers %.2f MJ, 200 under 200 delivers %.2f"
+                  % (higher, equal))
+
+
+_ok, _why = _line_rule_holds()
+check("the opening is granted only below what was carried", _ok, _why)
+
+
 # --- the driver is told a landmark, not a distance -------------------------
 # "about 340 m before the line, roughly 4.2s out" is a number to read after
 # the session. The two things a driver can actually do are flip it at the

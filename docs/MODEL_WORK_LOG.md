@@ -1762,6 +1762,112 @@ strat 2 spent 11.3 and finished empty. The 1.4 s between them is mostly the
 What was won anyway: **1:38.467**, a new best, on the weighted map, against a
 previous best of 1:38.668.
 
+## Scoring the model on differences, and what that found
+
+`validate_model.py` asks whether the model can reproduce a lap on the map it was
+driven on. The optimiser never asks that: it asks which of two maps is quicker
+and by how much. `validate_deltas.py` scores that instead, on every pair of maps
+driven in the same session -- four sessions at Austin and the clip/noclip/clip
+stint at Albert Park, ten comparisons in all -- with each lap matched to its map
+through the setup the logger recorded, the car fitted only on *other* sessions
+so nothing leaks, and each lap cut into 500 m pieces timed off the logger's own
+clock. Where two maps agree, the same driver repeats a piece to 0.075 s; that is
+the floor.
+
+It corrected one claim before it found anything. The "1.224 s predicted, level
+on track" example quoted for `cota_v2` came from how that one prediction was set
+up -- a profile pooled from the same session and a starting charge assumed
+rather than measured. Done properly the model gets that pair to 0.033 s.
+
+### Four errors in how power is delivered
+
+Traced zone by zone, the model over-predicted a uniform map by 2.1 MJ and got a
+weighted one right only because two errors cancelled -- it spent phantom energy
+early, ran the battery dry, and delivered nothing at the end. Each was then
+measured directly from the car's deployment counter on 33 laps with known maps.
+
+**Partial throttle.** Below the 60% knee the car delivers nothing; above it,
+delivery climbs roughly in a straight line to full at 88%:
+
+| throttle | old curve | car |
+|---|---|---|
+| below 0.60 | 20-66% | **0%** |
+| 0.60-0.65 | 72% | 15% |
+| 0.70-0.75 | 81% | 45% |
+| 0.80-0.85 | 94% | 74% |
+| 0.85-0.90 | 98% | 94% |
+
+The old curve contradicted the model's own `DEMAND_RESET_GAS`. It was normalised
+against full-throttle delivery without regard to the command, so a floor or a
+latch read as a throttle effect. The first second back on and later agree, and
+so do qualifying and race maps.
+
+**The floor holds about 1.3 s, then ramps.** A split asking 100 kW delivers 200
+for 1.0-1.3 s, then 192, 148, 100. One asking nothing delivers 197, 150, 101,
+then stops. The model held one second and, below 210 kph -- which is every slow
+corner exit -- dropped at once.
+
+**The latch clock starts at the knee.** The model timed the floor-and-latch
+window from 20% throttle. At Austin a 250 kW split began 0.29 s after the knee;
+the model's window had already run out during the squeeze, and it refused the
+split. The car delivered 1.8 MJ through the long right; the model 0.12.
+
+**The line.** See below.
+
+### The start/finish line, corrected
+
+The demand carried across the line comes from whichever map was live when the
+driver last got back on the power -- not necessarily this lap's map. The opening
+is granted only if it asks for **strictly** less:
+
+| carried vs opening, laps with charge to spend | result |
+|---|---|
+| more: 300 vs 200, 350 vs 199, 350 vs 199 | granted, 1.36-1.44 MJ |
+| equal: 190 vs 190, 200 vs 200 | refused |
+| less: 0 vs 200, twice | refused |
+
+`min()` would have delivered the opening in full on the equal cases. This
+replaces the 1.1.0 change that simply zeroed the demand at the line, which was
+right for the common case (recharge lap, wheel turned at the line, nothing
+carried) for the wrong reason.
+
+**Two claims from the previous session were wrong.** "Seven of seven Austin laps
+deployed exactly zero before the first lift" used counter arithmetic the stale
+first samples defeat; lap02 of that run deployed 1.37 MJ, because the lap before
+ran a map asking 300 against its opening of 200 -- the rule, not an exception.
+And the laps that looked like exceptions to the rule (350 carried, 199 refused)
+each started with the battery at 0.6%, following a qualifying lap that had
+emptied it.
+
+### Replaying laps the way they were entered
+
+Both harnesses now reconstruct how each lap crossed the line: the previous lap
+is read, and the map that matters is the one live during the floor-hold window
+after the last time the throttle crossed the knee. Not the map just before the
+last switch -- turning the rotary from 3 to 1 passes through 2 for a moment,
+and taking that as the arrival credited five laps with 300 kW they never
+carried. Where no previous lap can be established the lap is taken to have
+carried nothing, which is what all seven such laps in the corpus did.
+
+### Result
+
+| | lap error | bias | energy, quali / race | map differences | pieces | direction |
+|---|---|---|---|---|---|---|
+| 1.1.0 | 0.72% | +0.21% | +0.69 / -0.15 MJ | 0.404 s | 0.137 s | 79% |
+| **now** | **0.70%** | **-0.53%** | **+0.28 / -0.06 MJ** | **0.213 s** | **0.081 s** | **89%** |
+
+The error in what the optimiser actually uses is halved, and energy is close to
+right for both kinds of map. One number moved the wrong way, and it is left
+visible rather than tuned away: the model now predicts laps half a percent
+**too fast**. Timed piece by piece at Austin, the gain is concentrated at the
+slow corner exits -- turn 1 -0.13 s, the 89 kph hairpin -0.12, the 86 kph
+corner before the long right -0.15, the last corner -0.10 -- while the back
+straight runs slightly slow. With delivery now matching the car's counter, the
+likely reading is traction: at 90-150 kph the car cannot put all of that power
+down and the model can. Sakhir, all super-clipping race maps, was already
+-0.70% before any of this and shows it most. That is the next thing to measure,
+and it is the slow-corner question from the other side.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
