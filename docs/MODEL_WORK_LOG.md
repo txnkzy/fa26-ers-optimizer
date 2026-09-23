@@ -1868,6 +1868,31 @@ down and the model can. Sakhir, all super-clipping race maps, was already
 -0.70% before any of this and shows it most. That is the next thing to measure,
 and it is the slow-corner question from the other side.
 
+## Rebalancing: mostly the model, not the search
+
+On the 1.1.0 model, nine exchanges of 50 kW between two splits made the model's
+own Austin lap quicker, the best by 0.098 s -- evidence that the climb stopped
+before levelling its own rates. A lap that ends on an empty battery is
+energy-limited, so neither raising one split nor lowering one pays on its own,
+and the climb's paired moves only ever traded harvesting for deployment.
+
+A final pass now offers the missing trade -- one power step off one split, one
+onto another, every pair simulated at once, the best kept, repeated until none
+improves. Measured on the corrected model, qualifying solves:
+
+| circuit | without | with | free exchanges left | solve time |
+|---|---|---|---|---|
+| Austin | 97.596 | 97.596 | 0 -> 0 | 33 s -> 33 s |
+| Albert Park | 79.400 | 79.400 | 0 -> 0 | 21 s -> 22 s |
+| Monza | 83.884 | 83.884 | 0 -> 0 | 30 s -> 29 s |
+| Suzuka | 89.143 | 89.132 | 1 -> 0 | 27 s -> 30 s |
+| Spa | 105.695 | 105.695 | 0 -> 0 | 126 s -> 123 s |
+
+So the nine free moves were the model, not the search: with power delivered
+where the car delivers it, the climb already levels its own rates at four
+circuits of five. The pass is kept as the guarantee that nothing is left, at a
+cost of a few seconds, and is not claimed as a gain it has not shown.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded
