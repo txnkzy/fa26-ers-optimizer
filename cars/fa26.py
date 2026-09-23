@@ -242,38 +242,80 @@ def harvest_kw_at(speed_ms: float) -> float:
     span = HARVEST_RAMP_KPH - HARVEST_CUTOFF_KPH
     return HARVEST_OFF_THROTTLE_KW * (kph - HARVEST_CUTOFF_KPH) / span
 
-# Speed at which deploy power starts tapering and where it reaches zero, in kph.
-# The manual gives a base curve and a raised overtake curve; overtake is always
-# active in Practice and Qualifying. Neither knee has been measured yet -- the
-# recorded laps top out around 333 kph and the authored maps never command more
-# than 250 kW, so the taper is never the binding limit in the data. This is the
-# one input still taken from the manual rather than telemetry.
-TAPER_BASE = (290.0, 345.0)
-TAPER_OVERTAKE = (337.0, 355.0)
+# Maximum ERS-K DC power against car speed, Article C5.2.8, as (kph, kW) points
+# joined by straight lines, flat before the first point and zero after the last.
+#
+# Read from the FIA's own chart in the Baku Power Unit Information notice
+# (Document 5, 23 September 2026). The chart is vector graphics, so these are
+# its plotted coordinates rather than readings off a picture:
+#
+#   Base - Standard  350 kW to 290 kph, falling 5 kW per kph to 100 kW at 340,
+#                    then 20 kW per kph to nothing at 345
+#   Base - Overtake  350 kW to 337.5 kph, then 20 kW per kph to nothing at 355
+#   Alt 1            250 kW to 310 kph, then the same as Base - Standard
+#
+# Standard had been modelled as one straight line from 350 at 290 to zero at
+# 345. The real curve has a knee: at 320 kph it allows 200 kW where the line
+# gave 159, and at 340 it allows 100 where the line gave 32. What that is worth
+# is small where it has been measured: a Baku race map planned on the old line,
+# the true curve, or the true curve with Alt 1's sectors lands within 0.012 s,
+# because a race lap is energy-limited and the curve mostly moves where the
+# fixed energy goes. It is here because a model that does not know where power
+# will be refused cannot be trusted to place it.
+#
+# These cannot be checked against the corpus. The car picks its curve by
+# session, not by strat -- practice and qualifying run Override whatever is
+# selected -- and every recorded lap is a practice lap, which is why the race
+# strat was once measured holding 299 kW at 325 kph. So this is still the one
+# input taken from the rules rather than the telemetry, but now from the rules
+# as drawn.
+TAPER_BASE = ((290.0, 350.0), (340.0, 100.0), (345.0, 0.0))
+TAPER_OVERTAKE = ((337.5, 350.0), (355.0, 0.0))
+TAPER_ALT1 = ((310.0, 250.0), (340.0, 100.0), (345.0, 0.0))
 
-#: The event notice names which ERS-K power curve applies, in Article C5.2.8:
-#: one for normal running and one with Override active. Only the Base pair is
-#: known numerically -- it matches the chart the FIA publishes, flat to 290 kph
-#: and zero by 345 for Standard, flat to 337 and zero by 355 for Overtake.
-#: Monaco runs a "Rev 1" pair and several events name an "Alt 1" curve for
-#: specific sectors; neither has published numbers, so they fall back to Base
-#: rather than being invented.
+#: The curves the event notices name, by the names the car's
+#: `setup_ers_power_curve.lut` gives them. Monaco's "Rev 1" pair has never
+#: been published numerically, so it falls back to Base rather than being
+#: invented.
 TAPER_CURVES = {
     "Base - Standard": TAPER_BASE,
     "Base - Overtake": TAPER_OVERTAKE,
+    "Alt 1": TAPER_ALT1,
 }
 
 
-def taper_for(curve: str | None,
-              fallback: tuple = TAPER_OVERTAKE) -> tuple[float, float]:
-    """Speed taper for a named FIA power curve.
+def _curve_points(taper) -> tuple:
+    """A curve as (kph, kW) points, accepting the old (start, end) form too.
 
-    The fallback is the caller's to choose, and it matters. Ten circuits in
-    the table name no curve for normal running -- Bahrain, Baku, Jeddah,
-    Austin, Las Vegas, Lusail, Mexico, Singapore, Interlagos, Yas Marina --
-    and every circuit that does name one names a Standard variant. Falling
-    back to Overtake for all of them handed the race car 350 kW at 320 km/h,
-    where Standard allows 175: Override power, in a strategy that never runs
+    A pair of plain numbers is the straight-line taper this module used to
+    use -- full power to `start`, nothing by `end` -- and still means that.
+    """
+    if (len(taper) == 2 and not isinstance(taper[0], (tuple, list))):
+        start, end = taper
+        return ((float(start), MAX_DEPLOY_KW), (float(end), 0.0))
+    return tuple((float(k), float(p)) for k, p in taper)
+
+
+def curve_kw(taper, kph: float) -> float:
+    """The most a curve allows at this speed."""
+    points = _curve_points(taper)
+    if kph <= points[0][0]:
+        return points[0][1]
+    for (k0, p0), (k1, p1) in zip(points, points[1:]):
+        if kph <= k1:
+            return p0 + (p1 - p0) * (kph - k0) / (k1 - k0)
+    return points[-1][1]
+
+
+def taper_for(curve: str | None, fallback: tuple = TAPER_OVERTAKE) -> tuple:
+    """Speed taper for a named FIA power curve, as (kph, kW) points.
+
+    The fallback is the caller's to choose, and it matters. Nine circuits in
+    the table name no curve for normal running -- Bahrain, Jeddah, Austin, Las
+    Vegas, Lusail, Mexico, Singapore, Interlagos, Yas Marina -- and every
+    circuit that does name one names a Standard variant. Falling back to
+    Overtake for all of them handed the race car 350 kW at 320 km/h, where
+    Standard allows 200: Override power, in a strategy that never runs
     Override.
 
     Measured on a Bahrain lap, full throttle above 300 km/h delivered at most
@@ -309,7 +351,13 @@ class Powertrain:
     """
 
     floor_kw: float = FLOOR_KW
-    taper: tuple[float, float] = TAPER_OVERTAKE
+    taper: tuple = TAPER_OVERTAKE
+    #: Article C5.2.8iii: an alternative curve and the lap-distance windows it
+    #: applies in, for a race or sprint. Baku caps T1-T2, T3-T12 and T15-T16 at
+    #: Alt 1's 250 kW while the straights keep the Base curve. Empty means none,
+    #: which is what every practice or qualifying session is.
+    alt_taper: tuple = ()
+    alt_zones: tuple = ()
     #: How long the 200 kW floor is held after the throttle crosses the knee.
     #: Measured from the car's own deployment counter at full throttle, with
     #: the command unchanged since the throttle came on: a split asking for
@@ -327,17 +375,16 @@ class Powertrain:
     #: the model made a Monza replay 0.36% slow for no reason the car shows.
     ramp_down_kw_s: float = 100.0
 
-    def taper_limit_kw(self, speed_ms: float) -> float:
-        start, end = self.taper
-        kph = speed_ms * 3.6
-        if kph <= start:
-            return MAX_DEPLOY_KW
-        if kph >= end:
-            return 0.0
-        return MAX_DEPLOY_KW * (end - kph) / (end - start)
+    def taper_limit_kw(self, speed_ms: float, distance_m: float | None = None) -> float:
+        taper = self.taper
+        if (self.alt_taper and distance_m is not None
+                and any(a <= distance_m < b for a, b in self.alt_zones)):
+            taper = self.alt_taper
+        return curve_kw(taper, speed_ms * 3.6)
 
     def deploy_kw(self, commanded_kw: float, speed_ms: float,
-                  full_throttle: bool = True) -> float:
+                  full_throttle: bool = True,
+                  distance_m: float | None = None) -> float:
         """Delivered deployment power.
 
         Measured behaviour from the Barcelona reference map: a split commanding
@@ -346,7 +393,7 @@ class Powertrain:
         cut power instantly. Commanding below the floor therefore does not save
         the energy a naive model would predict.
         """
-        limit = self.taper_limit_kw(speed_ms)
+        limit = self.taper_limit_kw(speed_ms, distance_m)
         wanted = min(commanded_kw, MAX_DEPLOY_KW)
         if full_throttle and wanted < self.floor_kw:
             wanted = self.floor_kw

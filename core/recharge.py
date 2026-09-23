@@ -76,9 +76,10 @@ class Allocation:
     #: the safe default -- it reproduces the behaviour of not modelling them.
     #: Each entry is (start_m, end_m, scope), scope "q" where the notice
     #: brackets the sector as SQ and Q only. Read them through
-    #: `reset_zones_for`, which applies the scope -- every reset zone published
-    #: so far is qualifying-only, so a race map that assumed otherwise was
-    #: being allowed a power increase the race car will refuse.
+    #: `reset_zones_for`, which applies the scope. Most published zones are
+    #: qualifying-only, and a race map that assumed otherwise was being allowed
+    #: a power increase the race car will refuse -- but not all of them: Baku's
+    #: exit of T19, 4650-5600 m, is unbracketed and applies in the race too.
     reset_zones: tuple = ()
     #: Article C5.12.7 -- sectors with a higher speed threshold for cutting
     #: ERS-K power instantly, as (start_m, end_m, kph). Unlike the C5.12.4 and
@@ -89,6 +90,14 @@ class Allocation:
     #: Article C5.2.8iii -- the alternative ERS-K power curve named for
     #: declared sectors in Sprint and Race.
     curve_alternative: str | None = None
+    #: Article C5.2.8iii -- the lap-distance windows where that alternative
+    #: curve applies, as (start_m, end_m). Race and Sprint only; qualifying and
+    #: practice run the Override curve everywhere. Baku's notice names three --
+    #: T1-T2, T3-T12 and T15-T16 -- and caps deployment there at Alt 1's
+    #: 250 kW, while the straights between them keep the Base curve. Earlier
+    #: notices named Alt 1 without these windows being entered, so there the
+    #: curve was written to the car but the model never applied it.
+    alt_zones: tuple = ()
     #: The notice's centreline length in metres. Sector windows are quoted
     #: against it, and an AC track's spline rarely measures the same -- Madrid
     #: is 5416 m on the notice and 5340 m in telemetry, Monza 5793 against
@@ -120,6 +129,19 @@ class Allocation:
         return tuple((int(round(z[0] * k)), int(round(z[1] * k)))
                      for z in (self.reset_zones or ())
                      if len(z) < 3 or z[2] != "q" or quali)
+
+    def alt_zones_for(self, session: str = "race",
+                      length_m: float | None = None) -> tuple:
+        """Article C5.2.8iii windows, as (start, end), for a race or sprint.
+
+        Empty in any other session: practice and qualifying run the Override
+        curve everywhere, and the car picks its curve by session.
+        """
+        if session not in ("race", "race_overtake", "sprint") or not self.alt_zones:
+            return ()
+        k = self._scale(length_m)
+        return tuple((int(round(z[0] * k)), int(round(z[1] * k)))
+                     for z in self.alt_zones)
 
     def speed_zones_for(self, length_m: float | None = None) -> tuple:
         """Article C5.12.7 windows, as (start, end, kph). Not session-scoped."""

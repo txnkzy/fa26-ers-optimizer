@@ -1261,6 +1261,30 @@ class Engine:
         taper_for = lambda strat: fa26.taper_for(
             alloc.curve_override if strat == 1 else alloc.curve_standard)
 
+        # Article C5.2.8iii: in a race, declared sectors run an alternative
+        # curve instead of the Base one -- Baku caps T1-T2, T3-T12 and T15-T16
+        # at Alt 1's 250 kW and leaves the straights between them on Base. The
+        # race and recharge strategies are raced, so they get it; qualifying
+        # does not. A curve the notices have never published numbers for is
+        # not guessed at.
+        alt_zones = alloc.alt_zones_for("race", lap.length_m)
+        alt_known = fa26.taper_is_known(alloc.curve_alternative)
+        if alt_zones and alt_known:
+            self.detail("Race curve     %s in %d sector%s: %s"
+                        % (alloc.curve_alternative, len(alt_zones),
+                           "" if len(alt_zones) == 1 else "s",
+                           ", ".join("%d-%d m" % z for z in alt_zones)))
+        elif alt_zones:
+            self.detail("               %s has no published numbers, so its "
+                        "sectors keep the Base curve." % alloc.curve_alternative)
+
+        def powertrain_for(strat: int):
+            if strat == 1 or not alt_zones or not alt_known:
+                return fa26.Powertrain(taper=taper_for(strat))
+            return fa26.Powertrain(taper=taper_for(strat),
+                                   alt_taper=fa26.taper_for(alloc.curve_alternative),
+                                   alt_zones=alt_zones)
+
         deployed, harvested = lap.totals()
         self.detail("As driven      deploy %.2f MJ, harvest %.2f MJ"
                     % (deployed, harvested))
@@ -1313,7 +1337,7 @@ class Engine:
                 # tuned only for full falls apart faster than one that was not
                 # -- so it is scored at three-quarters charge too.
                 charge_fractions=(0.75,) if one_shot else ())
-            powertrain = fa26.Powertrain(taper=taper_for(strat_no))
+            powertrain = powertrain_for(strat_no)
             start_store = optimise26.starting_store_kj(lap, kind)
             if strat_no == 3:
                 # Built, not searched -- see optimise26.recharge_map.
@@ -1394,7 +1418,7 @@ class Engine:
             # one of them not being read.
             self._when_to_switch(
                 by_strat[1], by_strat[2], car, cal, profile,
-                fa26.Powertrain(taper=taper_for(1)), alloc, lap.length_m)
+                powertrain_for(1), alloc, lap.length_m)
 
         self.lap = lap
         try:

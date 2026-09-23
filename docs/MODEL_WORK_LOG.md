@@ -1893,6 +1893,66 @@ where the car delivers it, the climb already levels its own rates at four
 circuits of five. The pass is kept as the guarantee that nothing is left, at a
 cost of a few seconds, and is not claimed as a gain it has not shown.
 
+## The Baku Power Unit Information notice
+
+FIA Document 5, 2026 Azerbaijan Grand Prix, 23 September 2026. The table held a
+placeholder for Baku from before the notice, three of its figures wrong. Now:
+
+| | before | notice |
+|---|---|---|
+| recharge, race | 8.0 MJ | **8.5 MJ** |
+| recharge, race with Overtake | 8.5 MJ | **9.0 MJ** |
+| recharge, qualifying / practice / out laps | 8.5 / 9.0 / 9.0 | unchanged |
+| reduction rate, power-limited distance | none | 50 kW/s, 3796 m |
+| curves | none | Base - Standard, Base - Overtake, Alt 1 |
+| Alt 1 sectors (race) | none | T1-T2 300-600, T3-T12 1500-2870, T15-T16 3700-4050 |
+| reset zones | none | exit T19 4650-5600 (**race too**), [exit T20 5600-6000] (Q) |
+| higher speed-threshold sectors | none | none |
+
+Exit of T19 is the first reset zone any notice has declared for the race.
+
+### The curves, as drawn
+
+The notice's chart is vector graphics, so the curves were read from its plotted
+coordinates rather than off a picture:
+
+| curve | shape |
+|---|---|
+| Base - Standard | 350 kW to 290 kph; -5 kW/kph to 100 kW at 340; -20 kW/kph to 0 at 345 |
+| Base - Overtake | 350 kW to 337.5 kph; -20 kW/kph to 0 at 355 |
+| Alt 1 | 250 kW to 310 kph; then as Base - Standard |
+
+Overtake was already right to half a kph. **Standard was not**: it was modelled
+as one straight line from 350 at 290 to nothing at 345, which allows 159 kW at
+320 kph where the rules allow 200, and 32 at 340 where they allow 100. Alt 1 had
+no numbers at all and fell back to Base.
+
+The model now takes curves as points, and a `Powertrain` can carry an
+alternative curve with the windows it applies in, so a race map at Baku is
+capped at 250 kW through the three twisty sectors and runs the Base curve down
+the straights. The app gives it to the race and recharge strategies and not to
+qualifying.
+
+### What it is worth, and what cannot be checked
+
+A Baku race map planned on the old straight line, on the true curve, and on the
+true curve with the sectors lands within **0.012 s**, scored under the rules as
+they apply. A race lap is energy-limited at 8.5 MJ, so the curve mostly moves
+where the fixed energy is spent rather than how much. Kept because a model that
+does not know where power will be refused cannot place it.
+
+None of this can be checked against the corpus. The car picks its curve by
+*session*, not by strat -- practice and qualifying run Override whatever is
+selected -- and every recorded lap is a practice lap. That is also why a race
+strat was once measured holding 299 kW at 325 kph, far above Standard, and why
+Standard was reverted for replay then: the laps were never on it.
+
+Not modelled, recorded for completeness: Article C5.12.4, sectors where the power
+reduction at the start of a Power Limited Pending period may exceed 150 kW
+(T1-T2, T3-T12, T15-T16, and exit of T16 4050-5300 in Q, all 350 kW); and the
+Overtake detection line at 4177 m (L20) and activation line at 4270 m (L21,
+TBC) with a 1.0 s gap.
+
 ## Where the model stands
 
 With the driver's Albert Park and Austin sessions added, and their maps recorded

@@ -303,7 +303,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
         prev_level_kw = powertrain.deploy_kw(
             demand_kw, profile.measured_speed_at(d),
             full_throttle=(throttle_time <= powertrain.floor_hold_s
-                           and clip <= 0.0))
+                           and clip <= 0.0), distance_m=d)
     # Without an `entry` the lap arrives on its own map -- the driver was on it
     # when they got back on the power for the final corner, either because it
     # is a race stint or because they switched before the corner, which is
@@ -448,7 +448,8 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                 # put 0.54 MJ a lap into regions meant to be generating -- and
                 # netted it straight back off the commanded harvest.
                 floor_applies = just_applied and cmd_clip <= 0.0
-                level = deploy_limit(demand_kw, v, full_throttle=floor_applies)
+                level = deploy_limit(demand_kw, v, full_throttle=floor_applies,
+                                     distance_m=d)
 
                 # Article C5.12.7: a track may declare sectors with a
                 # higher threshold than the usual 210 kph, inside which power

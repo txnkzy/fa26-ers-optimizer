@@ -23,10 +23,41 @@
   "baku": {
     "practice": 90,
     "qualify": 85,
-    "race": 80,
-    "race_overtake": 85,
+    "race": 85,
+    "race_overtake": 90,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:15",
+    "rate_kw_s": 50,
+    "power_limited_m": 3796,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        300,
+        600
+      ],
+      [
+        1500,
+        2870
+      ],
+      [
+        3700,
+        4050
+      ]
+    ],
+    "reset_zones": [
+      [
+        4650,
+        5600
+      ],
+      [
+        5600,
+        6000,
+        "q"
+      ]
+    ],
+    "centreline_m": 6003
   },
   "barcelona": {
     "practice": 90,

@@ -901,6 +901,47 @@ _ok, _why = _line_rule_holds()
 check("the opening is granted only below what was carried", _ok, _why)
 
 
+# --- the power curves are the ones the FIA draws ------------------------------
+# Read from the vector data of the chart in the Baku Power Unit Information
+# notice. Base - Standard has a knee at 100 kW and 340 kph; it was modelled as
+# one straight line, which gave race maps 159 kW at 320 kph where the rules
+# allow 200. And in a race, Baku's declared sectors run Alt 1's 250 kW while the
+# straights keep the Base curve.
+def _curves_match_the_notice() -> tuple[bool, str]:
+    import fa26 as _fa26
+    import recharge as _rc
+    points = {"Base - Standard": [(290, 350), (320, 200), (340, 100), (345, 0)],
+              "Base - Overtake": [(337.5, 350), (345, 200), (355, 0)],
+              "Alt 1": [(250, 250), (310, 250), (340, 100), (345, 0)]}
+    for name, pts in points.items():
+        for kph, want in pts:
+            got = _fa26.curve_kw(_fa26.taper_for(name), kph)
+            if abs(got - want) > 0.5:
+                return False, "%s gives %.0f kW at %s kph, the notice %s" % (
+                    name, got, kph, want)
+    baku = _rc.lookup("baku_2022")
+    if baku.mj("race") != 8.5 or baku.mj("race_overtake") != 9.0:
+        return False, "Baku's race recharge is not the notice's 8.5 / 9.0 MJ"
+    if baku.alt_zones_for("qualify"):
+        return False, "Alt 1 sectors applied to qualifying"
+    zones = baku.alt_zones_for("race")
+    if zones != ((300, 600), (1500, 2870), (3700, 4050)):
+        return False, "Baku's Alt 1 sectors read %s" % (zones,)
+    race_resets = baku.reset_zones_for("race")
+    if race_resets != ((4650, 5600),):
+        return False, "Baku's race reset zones read %s" % (race_resets,)
+    pt = _fa26.Powertrain(taper=_fa26.taper_for("Base - Standard"),
+                          alt_taper=_fa26.taper_for("Alt 1"), alt_zones=zones)
+    inside, outside = pt.taper_limit_kw(250 / 3.6, 2000), pt.taper_limit_kw(250 / 3.6, 1000)
+    if (inside, outside) != (250.0, 350.0):
+        return False, "at 250 kph a race sector allows %.0f, a straight %.0f" % (inside, outside)
+    return True, "three curves to the chart; Baku's sectors 250 kW inside, 350 outside"
+
+
+_ok, _why = _curves_match_the_notice()
+check("the power curves and Baku's sectors match the FIA notice", _ok, _why)
+
+
 # --- the driver is told a landmark, not a distance -------------------------
 # "about 340 m before the line, roughly 4.2s out" is a number to read after
 # the session. The two things a driver can actually do are flip it at the
