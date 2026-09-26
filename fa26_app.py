@@ -205,6 +205,79 @@ def baseline_dir() -> Path:
     return docs_dir() / "fa26_baseline"
 
 
+# ------------------------------------------------------------ blocked writes
+# Windows Security's ransomware protection (Controlled folder access) turns
+# away any program it does not know from Documents, without an error anyone
+# sees. The game is one of those programs, and this app is another. A driver
+# whose logger read "Laps saved: 2" over an empty folder had allowed acs.exe
+# and Content Manager and still had to switch the protection off to get a lap.
+
+#: What the driver is told when a write into Documents is refused.
+BLOCKED_ADVICE = (
+    "The usual cause is Windows Security's ransomware protection (Controlled "
+    "folder access). Open Windows Security, then Virus & threat protection, "
+    "then Protection history: it names the program it blocked. Allow that "
+    "program under Ransomware protection, then Allow an app through "
+    "Controlled folder access.")
+
+
+def controlled_folder_access() -> str:
+    """"on", "off" or "unknown", as Windows Defender records it.
+
+    Best effort: Defender keeps it in the registry, readable without admin,
+    as 1 when blocking. Another antivirus can block writes with this "off",
+    so it is a hint to show beside an empty folder, never a verdict.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return "unknown"
+    found = "off"
+    for key in (r"SOFTWARE\Policies\Microsoft\Windows Defender\Windows Defender "
+                r"Exploit Guard\Controlled Folder Access",
+                r"SOFTWARE\Microsoft\Windows Defender\Windows Defender Exploit "
+                r"Guard\Controlled Folder Access"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as handle:
+                value, _kind = winreg.QueryValueEx(
+                    handle, "EnableControlledFolderAccess")
+        except FileNotFoundError:
+            continue
+        except OSError:
+            found = "unknown"
+            continue
+        # A policy value, where there is one, is the one Windows applies.
+        return "on" if value == 1 else "off"
+    return found
+
+
+_WRITABLE: dict[str, bool] = {}
+
+
+def can_write(folder: Path) -> bool | None:
+    """Whether this program may create a file in `folder`. None if it is absent.
+
+    Found by trying, once per folder per run -- readiness is polled every few
+    seconds, and a blocked write raises a Windows notification each time.
+    """
+    if not folder.is_dir():
+        return None
+    key = str(folder)
+    if key not in _WRITABLE:
+        probe = folder / ("fa26_write_check_%d.tmp" % os.getpid())
+        try:
+            probe.write_bytes(b"fa26")
+        except OSError:
+            _WRITABLE[key] = False
+        else:
+            _WRITABLE[key] = True
+            try:
+                probe.unlink()
+            except OSError:
+                pass
+    return _WRITABLE[key]
+
+
 # --------------------------------------------------------------------- limits
 _CAR_LIMITS: dict | None = None
 
@@ -484,9 +557,12 @@ def readiness() -> dict:
            # whole answer, and it used to be invisible.
            "app_dir": str(install.app_dir()),
            "live_search": install.live_search_enabled(),
+           "protection": controlled_folder_access(),
+           "blocked_advice": BLOCKED_ADVICE,
            "documents": {
                "folder": str(docs_dir()),
                "exists": docs_dir().is_dir(),
+               "writable": can_write(docs_dir()),
                "setups": len(list((docs_dir() / "setups" / CAR_ID).iterdir()))
                          if (docs_dir() / "setups" / CAR_ID).is_dir() else 0,
                "chosen_by_hand": install.saved_documents() is not None,
@@ -2066,6 +2142,12 @@ class Handler(BaseHTTPRequestHandler):
                                  daemon=True).start()
             else:
                 self.send_error(404)
+        except PermissionError as exc:
+            # "[WinError 5] Access is denied" says nothing a driver can act on.
+            where = Path(exc.filename).name if exc.filename else "the setup"
+            self._json({"error": "Windows would not let this app save %s. %s"
+                                 % (where, BLOCKED_ADVICE),
+                        "trace": traceback.format_exc()}, code=500)
         except Exception as exc:
             self._json({"error": str(exc),
                         "trace": traceback.format_exc()}, code=500)

@@ -327,6 +327,66 @@ def _limits_page_is_the_notice() -> tuple[bool, str]:
 
 _ok, _why = _limits_page_is_the_notice()
 check("apply sets the Power & Energy Limits page to the FIA notice", _ok, _why)
+
+
+# --- a refused write is explained, in the app and in the game ------------------
+# Windows' ransomware protection turns programs it does not know away from
+# Documents, and nobody sees an error. A driver's logger read "Laps saved: 2"
+# over an empty folder. A read-only setup is refused the same way, so it
+# stands in for the protection here.
+def _refused_apply_is_explained() -> tuple[bool, str]:
+    import os
+    import stat
+    locked = SCRATCH / "locked_setup.ini"
+    for leftover in (locked, locked.with_suffix(".ini.bak")):
+        if leftover.exists():
+            os.chmod(leftover, stat.S_IWRITE | stat.S_IREAD)
+            leftover.unlink()
+    shutil.copy(src, locked)
+    os.chmod(locked, stat.S_IREAD)
+    try:
+        req = urllib.request.Request(
+            BASE + "/api/apply",
+            data=json.dumps({"path": str(locked), "write_alloc": True}).encode(),
+            headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req).read()
+            return False, "a read-only setup was written without complaint"
+        except urllib.error.HTTPError as exc:
+            error = json.loads(exc.read()).get("error", "")
+    finally:
+        for leftover in (locked, locked.with_suffix(".ini.bak")):
+            if leftover.exists():
+                os.chmod(leftover, stat.S_IWRITE | stat.S_IREAD)
+    if "ransomware protection" not in error or "Protection history" not in error:
+        return False, "the refusal reads: " + error[:90]
+    return True, error[:58] + "..."
+
+
+_ok, _why = _refused_apply_is_explained()
+check("a refused save names the ransomware protection", _ok, _why)
+
+
+def _logger_counts_only_written_laps() -> tuple[bool, str]:
+    source = (Path(A.__file__).resolve().parent / "logger" / "fa26_baseline"
+              / "fa26_baseline.lua").read_text(encoding="utf-8")
+    start = source.index("local function saveLap(")
+    body = source[start:source.index("\nend\n", start)]
+    if "io.save(" in body:
+        return False, "saveLap writes the lap with a bare io.save nobody checks"
+    if "if not writeFile(" not in body:
+        return False, "saveLap no longer checks the lap reached the disk"
+    if body.index("if not writeFile(") > body.index("lapsSaved = lapsSaved + 1"):
+        return False, "the lap is counted before the write is checked"
+    if "pcall(checkWritable)" not in source:
+        return False, "the folder is no longer tried before the first lap"
+    if "LAPS ARE NOT BEING SAVED" not in source[source.index("function windowMain"):]:
+        return False, "the window no longer says when laps are not being saved"
+    return True, "counted only once on disk; the folder is tried before the first lap"
+
+
+_ok, _why = _logger_counts_only_written_laps()
+check("the logger never counts a lap it could not write", _ok, _why)
 check("apply reports what it set", len(res.get("limits") or []) >= 6
       and res.get("limits_from") in ("notice", "yours", "default"),
       "%d rows, from %s" % (len(res.get("limits") or []), res.get("limits_from")))

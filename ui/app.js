@@ -210,6 +210,11 @@ function showDocuments(info) {
         + " for this car in here"
         + (info.chosen_by_hand ? ", chosen by you." : ", found automatically.")
       : "The folder is there, but no setups for this car in it yet.";
+  if (info.writable === false) {
+    $("doc-hint").textContent += " Windows would not let this app write here, "
+      + "so saving a map into a setup will fail. "
+      + (state.ready ? state.ready.blocked_advice : "");
+  }
 }
 
 async function saveDocuments(folder) {
@@ -240,7 +245,20 @@ function showTelemetry(info) {
     : info.laps
       ? info.laps + (info.laps === 1 ? " lap file" : " lap files") + " in here"
         + (info.chosen_by_hand ? ", chosen by you." : ", found automatically.")
-      : "The folder is there, but no lap files in it yet.";
+      : "The folder is there, but no lap files in it yet."
+        + (lapsMayBeBlocked()
+          ? " Windows ransomware protection is on, and it stops the game "
+            + "writing here unless the game is allowed. "
+            + state.ready.blocked_advice
+          : "");
+}
+
+/* An empty laps folder with Windows' ransomware protection on. The logger
+ * can be counting laps it was never allowed to write, and the protection is
+ * the usual reason -- worth saying beside the empty folder, not a verdict. */
+function lapsMayBeBlocked() {
+  const r = state.ready;
+  return !!(r && r.protection === "on" && r.telemetry && !r.telemetry.laps);
 }
 
 async function saveTelemetry(folder) {
@@ -570,7 +588,12 @@ function showWaiting(game, session) {
   if (game && game.running) {
     $("waiting-title").textContent = "Waiting for laps";
     $("waiting-text").textContent =
-      "Assetto Corsa is running. Laps appear here as you finish them.";
+      "Assetto Corsa is running. Laps appear here as you finish them."
+      + (lapsMayBeBlocked()
+        ? " Windows ransomware protection is on, and it can stop the game "
+          + "saving them. If the logger window says LAPS ARE NOT BEING SAVED, "
+          + "see “Laps not showing up?” below."
+        : "");
     setStatus("Waiting for laps", "wait");
   } else {
     $("waiting-title").textContent = "Assetto Corsa is not running";
@@ -655,6 +678,13 @@ function renderSession(grew) {
   if (state.ready && !state.ready.logger) {
     showNotice("The logger is not installed",
                "No new laps will be recorded until it is.");
+  }
+  if (state.ready && state.ready.documents
+      && state.ready.documents.writable === false) {
+    showNotice("This app can’t save your setup",
+               "Windows refused a test write into your Assetto Corsa folder, "
+               + "so saving these maps will fail. "
+               + state.ready.blocked_advice);
   }
 
   renderLimits();
@@ -1106,7 +1136,12 @@ function diagnostics() {
   if (state.ready && state.ready.documents) {
     const d = state.ready.documents;
     out.push("documents: " + d.folder + (d.chosen_by_hand ? " (set by hand)" : ""));
-    out.push("  folder exists: " + d.exists + ", setup folders: " + d.setups);
+    out.push("  folder exists: " + d.exists + ", setup folders: " + d.setups
+             + ", this app can write there: " + d.writable);
+  }
+  if (state.ready) {
+    out.push("ransomware protection (Controlled folder access): "
+             + (state.ready.protection || "unknown"));
   }
   if (state.ready && state.ready.telemetry) {
     const w = state.ready.telemetry;

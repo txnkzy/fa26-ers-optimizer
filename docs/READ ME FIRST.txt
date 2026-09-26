@@ -93,6 +93,20 @@ instead:
 
     %LOCALAPPDATA%\FA26 Optimizer\error.log
 
+LAPS NOT SAVED, OR A SETUP THAT WILL NOT SAVE. Windows Security's
+ransomware protection (Controlled folder access) stops programs it does not
+know from writing into Documents, and says nothing about it. If the logger
+window reads "LAPS ARE NOT BEING SAVED", or the app cannot save a setup:
+
+  1. Open Windows Security > Virus & threat protection > Protection history.
+     The "Protected folder access blocked" entries name the exact program.
+  2. Allow that program under Ransomware protection > Allow an app through
+     Controlled folder access. The game is acs.exe; this app is
+     FA26 Optimizer.exe. Allow both.
+
+Adding acs.exe by hand is not always enough; the one Protection history names
+is the one that counts.
+
 
 WORTH SENDING BACK
 ------------------

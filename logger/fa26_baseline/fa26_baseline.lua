@@ -90,6 +90,14 @@ local lapsSaved = 0
 local lastSavedName = ""
 local lastSavedTime = 0
 local lastSkipReason = ""
+--: Laps finished but refused by the disk, and why. `io.save` does not raise
+--: when Windows says no -- ransomware protection turning the game away from
+--: Documents, most often -- so the count above went on rising over a folder
+--: with nothing in it, and a driver with two laps "saved" had none.
+local lapsLost = 0
+local writeProblem = ""
+local writeChecked = false
+local savingTo = ""
 --: A finished lap, held for one frame so the game can publish its time.
 local pendingSave = nil
 
@@ -166,7 +174,40 @@ end
 local function baseDir()
     local dir = ac.getFolder(ac.FolderID.ACDocuments) .. "/fa26_baseline"
     io.createDir(dir)
+    savingTo = dir
     return dir
+end
+
+--- Write a file and say whether it is really there. Neither half is trusted
+--- alone: `io.save` answers false, or nothing, when the write is refused, and
+--- asking for the file afterwards is the answer that means it. A call this CSP
+--- build does not have counts as no evidence rather than as a failure.
+local function writeFile(path, data)
+    local ok, result = pcall(io.save, path, data)
+    if not ok or result == false then return false end
+    local asked, exists = pcall(io.fileExists, path)
+    if asked and exists == false then return false end
+    return true
+end
+
+--- What the driver is told when the folder will not take a file.
+local function refused(dir)
+    return "Windows would not let the game write to " .. dir .. ". The usual "
+        .. "cause is Windows Security's ransomware protection (Controlled "
+        .. "folder access). Its Protection history names the program it "
+        .. "blocked: allow that one, then drive another lap."
+end
+
+--- Once, before any lap, so a blocked folder shows while the driver is still
+--- in the pits rather than after a session of laps that went nowhere.
+local function checkWritable()
+    local dir = baseDir()
+    local probe = dir .. "/write_check.tmp"
+    if writeFile(probe, "fa26") then
+        pcall(io.deleteFile, probe)
+    else
+        writeProblem = refused(dir)
+    end
 end
 
 local function formatLapTime(seconds)
@@ -349,10 +390,18 @@ local function saveLap(lap, officialTime)
     local name = string.format("%s__%s__%s__lap%02d_%s.csv",
         trackTag(), ac.getCarID(0), sessionStamp, lapsSaved + 1,
         formatLapTime(shown) .. (lap.sawPitlane and "_pit" or ""))
-    io.save(baseDir() .. "/" .. name, header() .. "\n" .. table.concat(lap.rows, "\n") .. "\n")
+    local dir = baseDir()
+    if not writeFile(dir .. "/" .. name,
+            header() .. "\n" .. table.concat(lap.rows, "\n") .. "\n") then
+        lapsLost = lapsLost + 1
+        writeProblem = refused(dir)
+        lastSkipReason = ""
+        return
+    end
+    writeProblem = ""
     -- Beside the lap, the maps it was driven on. Same name, different
     -- suffix, so nothing looking for laps picks it up.
-    pcall(saveMaps, baseDir() .. "/" .. name:gsub("%.csv$", ".map"), lap)
+    pcall(saveMaps, dir .. "/" .. name:gsub("%.csv$", ".map"), lap)
 
     lapsSaved = lapsSaved + 1
     lastSavedName = name
@@ -363,6 +412,11 @@ end
 function script.update(dt)
     local car = ac.getCar(0)
     if car == nil or dt <= 0 then return end
+
+    if not writeChecked then
+        writeChecked = true
+        pcall(checkWritable)
+    end
 
     -- Keep the probe display alive even when not recording, so channels can be
     -- checked in the pits without driving a full lap.
@@ -442,6 +496,13 @@ function windowMain()
     ui.text(string.format("Length: %.1f m", trackLength()))
     ui.separator()
 
+    -- First, above everything: a logger that cannot save is not a logger.
+    if writeProblem ~= "" then
+        ui.textColored("LAPS ARE NOT BEING SAVED", rgbm(1, 0.35, 0.3, 1))
+        ui.textWrapped(writeProblem)
+        ui.separator()
+    end
+
     if ui.button(autoRecord and "Auto-record: ON" or "Auto-record: OFF", vec2(330, 26)) then
         autoRecord = not autoRecord
         if not autoRecord then resetLap() end
@@ -481,6 +542,10 @@ function windowMain()
 
     ui.separator()
     ui.text(string.format("Laps saved: %d", lapsSaved))
+    if lapsLost > 0 then
+        ui.textColored(string.format("Laps not saved: %d", lapsLost), rgbm(1, 0.35, 0.3, 1))
+    end
+    if savingTo ~= "" then ui.textWrapped("Saving to " .. savingTo) end
     if lastSavedTime > 0 then ui.text("Last lap: " .. formatLapTime(lastSavedTime)) end
     if lastSavedName ~= "" then ui.textWrapped(lastSavedName) end
     if lastSkipReason ~= "" then
