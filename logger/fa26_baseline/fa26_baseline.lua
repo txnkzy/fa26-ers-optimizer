@@ -80,6 +80,15 @@ local rows = {}
 local elapsed = 0
 local lastSpline = 0
 local started = false
+--: The game's own lap counter, when this CSP build exposes it. A lap is cut
+--: where the game cuts it, so the file and the timing screen agree.
+local lastLapCount = nil
+--: A move along the track bigger than this in one frame is the car being put
+--: somewhere, not driven there. A lap is a few thousandths per frame.
+local MOVED = 0.02
+--: The most the logger's own time may differ from the game's before the lap
+--: is refused as not the lap the game timed.
+local TIME_MISMATCH_S = 0.5
 local sawPitlane = false
 local sawInvalid = 0
 --: Every strategy slot the wheel sat on during this lap, as a set. The driver
@@ -283,6 +292,9 @@ local function saveMaps(path, lap)
         "INVALID_SAMPLES=" .. tostring(lap.sawInvalid or 0),
         "SETUP_FILE=" .. tostring(lap.setupFile or ""),
         "SETUP_PROBE=" .. tostring(lap.setupProbe or ""),
+        -- Which line cut this lap: the game's lap counter, or the spline's
+        -- wrap on a build without one.
+        "LAP_BOUNDARY=" .. tostring(lap.boundary or ""),
     }
     for _, slot in ipairs(seen) do
         if slot >= 1 and slot <= MAPS then
@@ -301,6 +313,10 @@ end
 --- `update()` on the session that first ran it.
 local function readDelivery(car)
     return car.mgukDelivery
+end
+
+local function readLapCount(car)
+    return car.lapCount
 end
 
 --- Everything the sidecar wants that is not the lap itself, behind one call.
@@ -378,12 +394,20 @@ local function saveLap(lap, officialTime)
     -- fact, where the decision can be seen and undone. The recording end does
     -- not get to make that call.
 
-    -- The game's own time when there is one and it agrees with ours to within
-    -- a tenth. Ours is one frame short by construction, so a bigger gap than
-    -- that means the value belongs to a different lap and is no use here.
+    -- The game's own time, so the file is named what the timing screen says.
+    -- Laps are cut where the game cuts them, so the two agree to a frame; one
+    -- that disagrees by more than half a second is not the lap the game timed
+    -- -- pieces of two laps, or a lap the game never counted -- and saving it
+    -- is how a 0:51.9 reached the optimizer at a circuit whose best was 1:07.1
+    -- and was modelled as the best lap of the session.
     local shown = lap.elapsed
-    if officialTime and officialTime > 0
-       and math.abs(officialTime - lap.elapsed) < 0.1 then
+    if officialTime and officialTime > 0 then
+        if math.abs(officialTime - lap.elapsed) > TIME_MISMATCH_S then
+            lastSkipReason = string.format(
+                "the game timed this lap at %s, the logger at %s -- not saved",
+                formatLapTime(officialTime), formatLapTime(lap.elapsed))
+            return
+        end
         shown = officialTime
     end
 
@@ -429,12 +453,46 @@ function script.update(dt)
         end
     end
 
+    -- Where a lap ends is where the game says it ends: its lap counter going
+    -- up. The spline's wrap is only the fallback for a build without the
+    -- counter. On nearly every circuit they are the same point; where a track
+    -- puts its spline's zero elsewhere -- a Johor mod does, before the last
+    -- sector -- cutting at the wrap gave laps the timing screen had never
+    -- heard of. Distance is still written from the spline, which is what the
+    -- car's maps measure from; the optimizer turns such a lap to start at
+    -- zero when it reads it.
     local spline = car.splinePosition
-    local crossedLine = spline < 0.1 and lastSpline > 0.9
+    local wrapped = spline < 0.1 and lastSpline > 0.9
+    local okCount, lapCount = pcall(readLapCount, car)
+    if not okCount or type(lapCount) ~= "number" then lapCount = nil end
+    local crossedLine
+    if lapCount ~= nil then
+        crossedLine = lastLapCount ~= nil and lapCount > lastLapCount
+    else
+        crossedLine = wrapped
+    end
+    -- The car put somewhere rather than driven there: a hotlap restart, a
+    -- reset to the pits, a new session. Nothing recorded so far belongs to a
+    -- lap any more, and recording starts again at the next line.
+    local moved = (not wrapped and math.abs(spline - lastSpline) > MOVED)
+        or (lapCount ~= nil and lastLapCount ~= nil and lapCount < lastLapCount)
+    local wasStarted = started
     lastSpline = spline
+    lastLapCount = lapCount
 
     if not autoRecord then
         started = false
+        return
+    end
+
+    if moved and not crossedLine then
+        local dropped = wasStarted and #rows > 0
+        started = false
+        resetLap()
+        if dropped then
+            lastSkipReason = "the car was moved (a restart or a reset to the "
+                .. "pits) -- that lap was dropped"
+        end
         return
     end
 
@@ -475,7 +533,8 @@ function script.update(dt)
                             sawPitlane = sawPitlane, sawInvalid = sawInvalid,
                             strats = strats, dominant = dominant,
                             setupFile = ok and file or setupFile,
-                            setupProbe = ok and probe or "raised" }
+                            setupProbe = ok and probe or "raised",
+                            boundary = lapCount ~= nil and "game" or "spline" }
         end
         started = true
         resetLap()

@@ -387,6 +387,48 @@ def _logger_counts_only_written_laps() -> tuple[bool, str]:
 
 _ok, _why = _logger_counts_only_written_laps()
 check("the logger never counts a lap it could not write", _ok, _why)
+
+
+# --- laps are the game's laps --------------------------------------------------
+# A Johor mod puts its spline's zero before the last sector, and a hotlap
+# restart moved the car without the logger noticing: a 0:51.9 at a circuit whose
+# best was 1:07.1 reached the optimizer as the best lap of the session. The
+# logger now cuts where the game does and refuses a lap the game timed
+# differently; the optimizer turns a line-to-line lap to start at the spline's
+# zero, and refuses one with a jump in it.
+def _laps_are_the_games() -> tuple[bool, str]:
+    import lap as _lap
+    def rows(splines):
+        return [{"t": repr(i / 120.0), "spline": repr(s)} for i, s in enumerate(splines)]
+    n = 1200
+    offset = rows([(0.8 + i / n) % 1.0 for i in range(n)])
+    turned, moved = _lap._from_zero(offset)
+    first = float(turned[0]["spline"])
+    times = [float(r["t"]) for r in turned]
+    if moved or first > 0.01:
+        return False, "a line-to-line lap starts at spline %.3f, moved %d" % (first, moved)
+    if times[0] != 0.0 or any(b <= a for a, b in zip(times, times[1:])):
+        return False, "a turned lap's clock does not run 0 upwards"
+    if abs(times[-1] - float(offset[-1]["t"])) > 0.02:
+        return False, "turning the lap changed its length in time"
+    stitched = rows([i / n for i in range(600)] + [0.85 + i / n for i in range(180)])
+    if _lap._from_zero(stitched)[1] != 1:
+        return False, "a lap with the car moved partway through was not noticed"
+    plain = rows([i / n for i in range(n)])
+    if _lap._from_zero(plain) != (plain, 0):
+        return False, "an ordinary lap was changed"
+    source = (Path(A.__file__).resolve().parent / "logger" / "fa26_baseline"
+              / "fa26_baseline.lua").read_text(encoding="utf-8")
+    for needle, why in (("pcall(readLapCount, car)", "laps are not cut at the game's line"),
+                        ("TIME_MISMATCH_S then", "a lap the game timed differently is saved"),
+                        ("if moved and not crossedLine then", "a moved car's lap is kept")):
+        if needle not in source:
+            return False, why
+    return True, "cut at the game's line; offset laps turned to zero; moved laps refused"
+
+
+_ok, _why = _laps_are_the_games()
+check("a lap is the lap the game timed", _ok, _why)
 check("apply reports what it set", len(res.get("limits") or []) >= 6
       and res.get("limits_from") in ("notice", "yours", "default"),
       "%d rows, from %s" % (len(res.get("limits") or []), res.get("limits_from")))

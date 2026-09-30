@@ -42,6 +42,9 @@ class Lap:
     #: deployment maps it was driven on into a file beside it, and a lap that
     #: has forgotten its own path cannot find them.
     path: str = ""
+    #: Times the car jumped along the track mid-lap -- a restart or a reset
+    #: to the pits. Anything above zero means the lap is not one lap.
+    moved: int = 0
 
     # Derived, filled by `differentiate`
     deploy_kw: list[float] = field(default_factory=list)
@@ -74,10 +77,62 @@ def _smooth(values: list[float], window: int) -> list[float]:
     return out
 
 
+#: A fall in spline position larger than this from one sample to the next is
+#: the car crossing the spline's zero; any other step bigger than `MOVED` is
+#: the car being put somewhere else. At 120 samples a second a car covers a few
+#: thousandths of a lap per sample, so neither is ever mistaken for driving.
+WRAP_DROP = 0.5
+MOVED = 0.02
+
+
+def _from_zero(rows: list[dict]) -> tuple[list[dict], int]:
+    """The lap's rows starting at spline zero, and how often the car was moved.
+
+    The logger cuts laps where the game does, at the timing line, and records
+    distance the way the car's own maps measure it, from the spline's zero.
+    On nearly every circuit those are one point. Where a track puts them apart
+    -- a Johor mod among them -- a lap runs line to line and crosses the
+    spline's zero on the way, so its distance wraps partway through. Every
+    zone and every profile is built along distance, so the lap is turned to
+    start at zero, the second half first: a loop of the circuit, joined at the
+    line, where two flying laps run at the same speed anyway.
+
+    A lap with a jump in it is two pieces of different laps, which is what a
+    hotlap restart or a reset to the pits leaves when nothing notices -- a
+    0:51.9 at a circuit whose real best was 1:07.1, which the pooling rule took
+    for the best lap of the session and modelled alone. Those are counted, not
+    repaired, and `problem` refuses the lap.
+    """
+    if not rows or "spline" not in rows[0]:
+        return rows, 0
+    spline = [float(r.get("spline") or 0.0) for r in rows]
+    wraps, moved = [], 0
+    for i in range(1, len(spline)):
+        step = spline[i] - spline[i - 1]
+        if step < -WRAP_DROP:
+            wraps.append(i)
+        elif abs(step) > MOVED:
+            moved += 1
+    moved += max(0, len(wraps) - 1)
+    if moved or len(wraps) != 1:
+        return rows, moved
+    w = wraps[0]
+    t = [float(r.get("t") or 0.0) for r in rows]
+    step_s = (t[-1] - t[0]) / max(1, len(t) - 1)
+    out = []
+    for r in rows[w:]:
+        out.append({**r, "t": repr(float(r["t"]) - t[w])})
+    offset = (t[-1] - t[w]) + step_s - t[0]
+    for r in rows[:w]:
+        out.append({**r, "t": repr(float(r["t"]) + offset)})
+    return out, 0
+
+
 def load(path: str | Path) -> Lap:
     rows = list(csv.DictReader(Path(path).open(encoding="utf-8")))
     if not rows:
         raise ValueError("empty telemetry file")
+    rows, moved = _from_zero(rows)
     col = lambda k, d=0.0: [float(r.get(k, d) or d) for r in rows]
 
     lap = Lap(
@@ -106,6 +161,7 @@ def load(path: str | Path) -> Lap:
                        * (lap.speed[i] + lap.speed[i + 1]) / 2.0
                        for i in range(len(lap.t) - 1))
     lap.path = str(path)
+    lap.moved = moved
     differentiate(lap)
     return lap
 
@@ -132,6 +188,9 @@ def problem(lap: "Lap") -> str:
     """
     if lap.length_m <= 0:
         return "no distance was recorded"
+    if lap.moved:
+        return ("the car was moved partway through this lap -- a restart or a "
+                "reset to the pits -- so it is pieces of two different laps")
     if lap.spline_span < MIN_SPAN:
         return ("only %.0f%% of the circuit was recorded, so this is part of "
                 "a lap rather than a whole one" % (lap.spline_span * 100))
