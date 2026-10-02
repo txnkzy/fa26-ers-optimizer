@@ -1014,7 +1014,13 @@ def _line_rule_holds() -> tuple[bool, str]:
         # lift, which is a fine lap and no test of what the opening delivers.
         at = lambda d: cand.speed[min(range(len(cand.dist)),
                                       key=lambda k: abs(cand.dist[k] - d))]
-        if cand_lift >= 300 and at(cand_lift * 0.9) > at(0) + 15 / 3.6:
+        # And slow enough that the power curve never touches it. This tests
+        # the line, not the curve: a Sepang push lap crosses at 294 kph and
+        # reaches 326 before lifting, where the curve already cuts power.
+        top = max((v for d, v in zip(cand.dist, cand.speed) if d <= cand_lift),
+                  default=0.0)
+        if (cand_lift >= 300 and at(cand_lift * 0.9) > at(0) + 15 / 3.6
+                and top * 3.6 < 285.0):
             one, shape, lift = cand, cand_shape, cand_lift
             break
     if one is None:
