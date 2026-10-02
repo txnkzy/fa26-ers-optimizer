@@ -2083,3 +2083,34 @@ expectation from full was 0.233.
 
 **29 of the 77 carry the map the logger recorded, or a setup file unchanged
 since the lap.** The rest are matched by behaviour against the snapshots.
+
+## Sepang (R16, the Bahrain Grand Prix in Malaysia)
+
+FIA Document 4, 1 October 2026. Added to the table as `sepang`:
+
+| | notice |
+|---|---|
+| recharge, race / with Overtake | 8.5 / 9.0 MJ |
+| recharge, qualifying / practice / out laps | 7.5 / 9.0 / 9.0 MJ |
+| reduction rate, power-limited distance | 100 kW/s, 3365 m |
+| curves | Base - Standard, Base - Overtake, Alt 1 (race, other parts of the lap) |
+| Alt 1 sectors (race) | T4-T7 1550-2500, T9-T14 3100-4100 |
+| reset zones | exit T5 1950-2100, exit T6 2150-2350, [exit T15 5200-5500] (Q) |
+| higher speed threshold | T5-T6 1750-2200, T12-T13 3700-3900, both 270 km/h |
+| centreline | 5543 m |
+
+The curves are the same three as Baku's chart. Not modelled, recorded:
+C5.12.4 sectors (T1-T2 600-750, T5-T7 1900-2500, T9-T11 3100-3400, T12-T13
+3750-4000, [exit T15 5050-5300], all 350 kW); Overtake detection 5110 m (L18),
+activation 5160 m (L19), gap 1.0 s.
+
+The event's name points at the wrong circuit: "bahrain" maps to Sakhir. "Malaysia"
+and the full event name map to Sepang; "bahrain" alone stays Sakhir's. Folder
+names `chq_sepang`, `rt_sepang_2026` and `sepang_international_circuit` all
+resolve by the contained-name rule.
+
+The first Sepang laps also broke a check that had nothing to do with them. The
+line-rule check took the first lap alphabetically with a run to the first
+corner, and `chq_sepang` now sorts before Austin. Its lap01 is a recharge lap
+that falls from 286 to 252 kph at full throttle. The check now wants a car that
+gains speed through the opening, and finds Austin again.

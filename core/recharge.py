@@ -247,6 +247,10 @@ ALIASES = {
     "marinabay": "singapore",
     "cota": "austin", "americas": "austin", "circuitoftheamericas": "austin",
     "mexicocity": "mexico", "rodriguez": "mexico", "hermanosrodriguez": "mexico",
+    # Round 16 of 2026 is the "Bahrain Grand Prix in Malaysia", run at Sepang.
+    # Named whole, it is Sepang's; "bahrain" alone stays Sakhir's.
+    "malaysia": "sepang", "malaysian": "sepang",
+    "bahraininmalaysia": "sepang", "bahraingrandprixinmalaysia": "sepang",
 }
 
 

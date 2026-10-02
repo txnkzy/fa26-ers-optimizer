@@ -291,6 +291,57 @@
     "outlap": 90,
     "source": "published:2026"
   },
+  "sepang": {
+    "practice": 90,
+    "qualify": 75,
+    "race": 85,
+    "race_overtake": 90,
+    "outlap": 90,
+    "source": "fia:16",
+    "rate_kw_s": 100,
+    "power_limited_m": 3365,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        1550,
+        2500
+      ],
+      [
+        3100,
+        4100
+      ]
+    ],
+    "speed_zones": [
+      [
+        1750,
+        2200,
+        270
+      ],
+      [
+        3700,
+        3900,
+        270
+      ]
+    ],
+    "reset_zones": [
+      [
+        1950,
+        2100
+      ],
+      [
+        2150,
+        2350
+      ],
+      [
+        5200,
+        5500,
+        "q"
+      ]
+    ],
+    "centreline_m": 5543
+  },
   "shanghai": {
     "practice": 90,
     "qualify": 90,

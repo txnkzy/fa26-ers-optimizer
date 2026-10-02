@@ -1009,7 +1009,12 @@ def _line_rule_holds() -> tuple[bool, str]:
             continue
         cand_shape = _prof.Profile([cand])
         cand_lift = A.first_lift_m(cand_shape)
-        if cand_lift >= 300:          # a real run to the first corner
+        # And a car that gains speed along it. A recharge lap harvests at full
+        # throttle: a Sepang one fell from 286 to 252 kph before its first
+        # lift, which is a fine lap and no test of what the opening delivers.
+        at = lambda d: cand.speed[min(range(len(cand.dist)),
+                                      key=lambda k: abs(cand.dist[k] - d))]
+        if cand_lift >= 300 and at(cand_lift * 0.9) > at(0) + 15 / 3.6:
             one, shape, lift = cand, cand_shape, cand_lift
             break
     if one is None:
@@ -1083,6 +1088,39 @@ def _curves_match_the_notice() -> tuple[bool, str]:
 
 _ok, _why = _curves_match_the_notice()
 check("the power curves and Baku's sectors match the FIA notice", _ok, _why)
+
+
+# --- Sepang, from the R16 notice -----------------------------------------------
+# Officially the "Bahrain Grand Prix in Malaysia". Its name must not send a
+# Sepang folder to Sakhir's figures, and Sakhir's own folders must stay there.
+def _sepang_matches_the_notice() -> tuple[bool, str]:
+    import recharge as _rc
+    for name, want in (("chq_sepang", "sepang"), ("rt_sepang_2026", "sepang"),
+                       ("Bahrain in Malaysia.ini", "sepang"), ("Malaysia.ini", "sepang"),
+                       ("fn_bahrain", "sakhir"), ("bahrain", "sakhir")):
+        if _rc.normalise(name) != want:
+            return False, "%s reads as %s, not %s" % (name, _rc.normalise(name), want)
+    a = _rc.lookup("chq_sepang")
+    got = (a.mj("race"), a.mj("race_overtake"), a.mj("qualify"), a.mj("practice"),
+           a.mj("outlap"), a.rate_kw_s, a.power_limited_m)
+    if got != (8.5, 9.0, 7.5, 9.0, 9.0, 100, 3365):
+        return False, "Sepang's limits read %s" % (got,)
+    if (a.curve_standard, a.curve_override, a.curve_alternative) != (
+            "Base - Standard", "Base - Overtake", "Alt 1"):
+        return False, "Sepang's curves are not the notice's"
+    if a.alt_zones_for("race") != ((1550, 2500), (3100, 4100)) or a.alt_zones_for("qualify"):
+        return False, "Sepang's Alt 1 sectors read %s" % (a.alt_zones_for("race"),)
+    if a.reset_zones_for("race") != ((1950, 2100), (2150, 2350)):
+        return False, "Sepang's race resets read %s" % (a.reset_zones_for("race"),)
+    if a.reset_zones_for("qualify")[-1] != (5200, 5500):
+        return False, "Sepang's qualifying reset at exit T15 is missing"
+    if a.speed_zones_for() != ((1750, 2200, 270.0), (3700, 3900, 270.0)):
+        return False, "Sepang's higher-threshold sectors read %s" % (a.speed_zones_for(),)
+    return True, "8.5 / 9.0 / 7.5 / 9.0 / 9.0 MJ, 100 kW/s; sectors to the notice"
+
+
+_ok, _why = _sepang_matches_the_notice()
+check("Sepang matches its FIA notice and is not taken for Sakhir", _ok, _why)
 
 
 # --- the driver is told a landmark, not a distance -------------------------
