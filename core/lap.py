@@ -83,6 +83,9 @@ def _smooth(values: list[float], window: int) -> list[float]:
 #: thousandths of a lap per sample, so neither is ever mistaken for driving.
 WRAP_DROP = 0.5
 MOVED = 0.02
+#: How close to the spline's zero a crossing has to be to count as the car
+#: being at the line rather than the line being somewhere else.
+AT_THE_LINE = 0.02
 
 
 def _from_zero(rows: list[dict]) -> tuple[list[dict], int]:
@@ -117,6 +120,26 @@ def _from_zero(rows: list[dict]) -> tuple[list[dict], int]:
     if moved or len(wraps) != 1:
         return rows, moved
     w = wraps[0]
+    # The game counts the lap about 20 ms after the spline's zero goes by, so
+    # a lap cut at its line ends with five or six samples just past zero.
+    # Those are the car at the line, not a lap that starts somewhere else, and
+    # turning the lap on them made its first sample its last: a recharge lap
+    # that went 1% to 94% read 94% to 94%, on every lap the 1.1.1 logger
+    # wrote. Within `AT_THE_LINE` of zero they are pinned to the line instead,
+    # end or start; only a crossing well inside the lap means the track's
+    # line really is elsewhere.
+    after = max(spline[w:])
+    before = min(spline[:w])
+    if after < AT_THE_LINE or before > 1.0 - AT_THE_LINE:
+        out = [dict(r) for r in rows]
+        if after < AT_THE_LINE:
+            line = max(float(r.get("dist_m") or 0.0) for r in rows[:w])
+            for r in out[w:]:
+                r["dist_m"], r["spline"] = repr(line), "1.0"
+        else:
+            for r in out[:w]:
+                r["dist_m"], r["spline"] = "0.0", "0.0"
+        return out, 0
     t = [float(r.get("t") or 0.0) for r in rows]
     step_s = (t[-1] - t[0]) / max(1, len(t) - 1)
     out = []

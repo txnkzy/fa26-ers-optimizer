@@ -417,6 +417,14 @@ def _laps_are_the_games() -> tuple[bool, str]:
     plain = rows([i / n for i in range(n)])
     if _lap._from_zero(plain) != (plain, 0):
         return False, "an ordinary lap was changed"
+    # The game counts the lap ~20 ms after the spline's zero: five samples
+    # past it at the end are the car at the line, not a lap to turn round.
+    tail = rows([i / n for i in range(n)] + [0.0001 * k for k in range(1, 6)])
+    for r in tail:
+        r["dist_m"] = repr(float(r["spline"]) * 5000.0)
+    pinned, moved = _lap._from_zero(tail)
+    if moved or pinned[0]["t"] != tail[0]["t"] or float(pinned[-1]["dist_m"]) < 4990:
+        return False, "a lap ending just past the line was turned round"
     source = (Path(A.__file__).resolve().parent / "logger" / "fa26_baseline"
               / "fa26_baseline.lua").read_text(encoding="utf-8")
     for needle, why in (("pcall(readLapCount, car)", "laps are not cut at the game's line"),
@@ -1000,7 +1008,11 @@ def _line_rule_holds() -> tuple[bool, str]:
         return False, "the curve still pays out below the knee"
     one = shape = None
     lift = 0.0
-    for path in sorted(A.baseline_dir().glob("*.csv")):
+    # Austin first: the check was written against it, and laps landing at
+    # other circuits kept changing which lap it found -- three times in a
+    # week, each one a lap the opening could not be measured on.
+    every = sorted(A.baseline_dir().glob("*.csv"))
+    for path in [p for p in every if p.name.startswith("cota")] + every:
         try:
             cand = _laplib.load(path)
         except Exception:
@@ -1020,7 +1032,7 @@ def _line_rule_holds() -> tuple[bool, str]:
         top = max((v for d, v in zip(cand.dist, cand.speed) if d <= cand_lift),
                   default=0.0)
         if (cand_lift >= 300 and at(cand_lift * 0.9) > at(0) + 15 / 3.6
-                and top * 3.6 < 285.0):
+                and at(100) > at(0) + 3 / 3.6 and top * 3.6 < 285.0):
             one, shape, lift = cand, cand_shape, cand_lift
             break
     if one is None:
