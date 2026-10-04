@@ -207,8 +207,14 @@ def simulate(splits, car, longitudinal, profile, powertrain,
              store_capacity_kj: float = 4000.0, ds: float = 2.5,
              settle: bool = True, reset_zones: "tuple" = (),
              speed_zones: "tuple" = (), entry: "Carry | None" = None,
-             window: "tuple[float, float] | None" = None) -> Result:
+             window: "tuple[float, float] | None" = None,
+             trace: "list | None" = None) -> Result:
     """Integrate one lap.
+
+    `trace`, when given a list, receives one row per measured step: distance,
+    time, speed, power delivered and harvested, charge, and what limited the
+    car there ("ceiling", "grip" or "power"). For diagnosis; a solve never
+    asks for it.
 
     `settle` runs a throwaway lap first and measures the second, which is right
     for a lap that repeats: the store ends where it began and the plan is
@@ -551,6 +557,11 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             if store < store_min:
                 store_min = store
 
+            if trace is not None and measuring:
+                trace.append((d, time_s, v, used / dt if dt > 0 else 0.0,
+                              gained / dt if dt > 0 else 0.0, store,
+                              "ceiling" if v_free >= limit else
+                              "grip" if drive >= grip_limit else "power"))
             v = v_next
             time_s += dt
             if measuring:

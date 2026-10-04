@@ -2140,3 +2140,32 @@ sessions of 23-28 September, and from 0.214 to 0.436 s. The original ten
 moved by under 0.005 s. Of the new four, 28/09 compares race-map laps
 (1:47.6-1:52.7) with one qualifying-map lap (1:44.6): measured 4.22 s apart,
 predicted 1.07. Open.
+
+## Sepang: a model error that was a lap on the wrong map
+
+A community setup's qualifying map (their strat 1) against ours on strat 8,
+same session, two laps each. Measured: ours 0.12 s quicker. Model: ours 0.68 s
+slower. An error of 0.8 s, four times the benchmark's.
+
+It was the data. Replayed piece by piece with a new `trace` option on
+`sim26.simulate`, the car's delivered power on lap 18 followed their map step
+for step: 300 kW to 253 m, 250 kW from 3467 to 3749, 350 kW from 4144 to
+4543, where ours asks 250. `map_fit` agrees: 0.72 against their map, 0.30
+against ours. The wheel read strat 8 the whole lap. The setup had been
+rewritten at 19:03:41 and the first stint did not run it; the second (after a
+refuel) did. Regrouped as three laps on theirs and one on ours:
+
+| | measured ours - theirs | model |
+|---|---|---|
+| whole lap | +0.468 s | +0.681 s |
+| 4500-5000 (T14 to T15) | +0.542 | +0.565 |
+
+Inside the benchmark's usual error. Ours lost because it was written by 1.1.0
+for a full battery at the wrong qualifying limit (7.0 MJ, the notice says 7.5)
+and the community recharge mode only reached 54%: it spends early and is empty
+from T14. What remains of the model's error is in the sweepers it deploys
+through, T5-T6 and T12-T13, each overvalued by 0.12-0.15 s.
+
+Lessons kept: laps are classified by the power they show, not by the wheel;
+a setup written mid-session needs the session restarted, and nothing on the
+car's side says whether it has been.
