@@ -357,6 +357,17 @@ def apply_limits(alloc, qualify: int, race: int, unlimited: bool):
 
 
 # -------------------------------------------------------------------- reading
+def _finite(value):
+    """`value` with every NaN or infinite float replaced by None."""
+    if isinstance(value, float):
+        return value if value == value and value not in (float("inf"), float("-inf")) else None
+    if isinstance(value, dict):
+        return {k: _finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite(v) for v in value]
+    return value
+
+
 def scan_lap(path) -> dict:
     """Fuel and starting charge without paying for a full load.
 
@@ -368,10 +379,16 @@ def scan_lap(path) -> dict:
     try:
         with open(path, encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
+                # A channel the game had no value for can come through as
+                # "nan"; it is a missing reading, not a number to average.
                 if row.get("fuel"):
-                    fuel.append(float(row["fuel"]))
+                    value = float(row["fuel"])
+                    if value == value:
+                        fuel.append(value)
                 if charge is None and row.get("kers_charge"):
-                    charge = float(row["kers_charge"])
+                    value = float(row["kers_charge"])
+                    if value == value:
+                        charge = value
     except (OSError, KeyError, ValueError):
         pass
     return {"fuel_l": sum(fuel) / len(fuel) if fuel else None, "charge": charge}
@@ -1995,7 +2012,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # ----------------------------------------------------------------- send
     def _json(self, payload, code: int = 200) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        # Never NaN or Infinity: Python writes them, no browser reads them,
+        # and the whole response is lost. One bad number in a player's lap
+        # file made the page say "Cannot reach the optimizer" while the
+        # optimizer sat there answering.
+        body = json.dumps(_finite(payload), allow_nan=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

@@ -41,7 +41,15 @@ const state = {
 async function get(path) {
   const res = await fetch(path);
   const data = await res.json();
-  if (data && data.error) throw new Error(data.error);
+  if (data && data.error) {
+    // The optimizer answered, with an error. Kept whole, trace and all, for
+    // the diagnostics -- it used to be thrown away, and the page called it
+    // "Cannot reach the optimizer".
+    const err = new Error(data.error);
+    err.answered = true;
+    err.trace = data.trace || "";
+    throw err;
+  }
   return data;
 }
 
@@ -533,11 +541,19 @@ async function load(force) {
   try {
     data = await get("/api/current");
   } catch (err) {
-    state.unreachable = true;
-    setStatus("Cannot reach the optimizer", "bad");
+    // Three different things, and only one of them is "cannot reach": a
+    // refused connection. An error the optimizer reported, or an answer the
+    // page could not read, means it is running and something in reading the
+    // laps went wrong -- which is what a player's report needs to say.
+    state.unreachable = err instanceof TypeError;
+    state.loadError = state.unreachable ? null
+      : { message: String(err.message || err), trace: err.trace || "" };
+    setStatus(state.unreachable ? "Cannot reach the optimizer"
+                                : "Could not read your laps", "bad");
     return;
   }
   state.unreachable = false;
+  state.loadError = null;
   $("car-id").textContent = data.car;
   $("version").textContent = data.version ? "v" + data.version : "";
   state.version = data.version || "";
@@ -1165,6 +1181,11 @@ function diagnostics() {
   // who was on track, and the report pointed at the wrong bug.
   if (state.unreachable) {
     out.push("optimizer reachable: NO -- the page lost the program behind it");
+  }
+  if (state.loadError) {
+    out.push("reading the laps failed: " + state.loadError.message);
+    const trace = state.loadError.trace.trim().split("\n").slice(-14);
+    for (const line of trace) if (line.trim()) out.push("  | " + line);
   }
   out.push("game running: " + (state.game ? !!g.running
     : "unknown (the page never heard from the optimizer)"));

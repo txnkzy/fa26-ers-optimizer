@@ -1125,6 +1125,32 @@ def _sepang_matches_the_notice() -> tuple[bool, str]:
     return True, "8.5 / 9.0 / 7.5 / 9.0 / 9.0 MJ, 100 kW/s; sectors to the notice"
 
 
+def _answers_are_always_json() -> tuple[bool, str]:
+    """A "nan" in a lap file must never make the page unreadable."""
+    import csv as _csv
+    import tempfile as _tf
+    bad = {"fuel_l": float("nan"), "charge": float("inf"), "laps": [1.0, float("-inf")]}
+    try:
+        json.dumps(A._finite(bad), allow_nan=False)
+    except ValueError:
+        return False, "a non-finite number still reaches the page"
+    path = Path(_tf.mkdtemp()) / "nan_lap.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = _csv.writer(handle)
+        writer.writerow(["t", "fuel", "kers_charge"])
+        writer.writerow(["0.0", "nan", "nan"])
+        writer.writerow(["0.1", "nan", "0.5"])
+    scanned = A.scan_lap(path)
+    shutil.rmtree(path.parent, ignore_errors=True)
+    if scanned != {"fuel_l": None, "charge": 0.5}:
+        return False, "a lap of nan fuel scans as %s" % scanned
+    return True, "NaN and infinity become null; nan readings are skipped"
+
+
+_ok, _why = _answers_are_always_json()
+check("one bad number in a lap cannot blank the page", _ok, _why)
+
+
 _ok, _why = _sepang_matches_the_notice()
 check("Sepang matches its FIA notice and is not taken for Sakhir", _ok, _why)
 
