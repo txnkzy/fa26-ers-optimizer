@@ -533,9 +533,11 @@ async function load(force) {
   try {
     data = await get("/api/current");
   } catch (err) {
+    state.unreachable = true;
     setStatus("Cannot reach the optimizer", "bad");
     return;
   }
+  state.unreachable = false;
   $("car-id").textContent = data.car;
   $("version").textContent = data.version ? "v" + data.version : "";
   state.version = data.version || "";
@@ -1158,7 +1160,14 @@ function diagnostics() {
                                                 : " (set by hand)"));
     out.push("logger installed: " + state.ready.logger);
   }
-  out.push("game running: " + !!g.running);
+  // Unknown is not "no". A page whose optimizer had already shut down -- the
+  // Edge window that lost it -- reported "game running: false" to a player
+  // who was on track, and the report pointed at the wrong bug.
+  if (state.unreachable) {
+    out.push("optimizer reachable: NO -- the page lost the program behind it");
+  }
+  out.push("game running: " + (state.game ? !!g.running
+    : "unknown (the page never heard from the optimizer)"));
   out.push("");
   out.push("SESSION");
   out.push("  circuit: " + (d.name || "-") + "   (" + (d.circuit || "-") + ")");
