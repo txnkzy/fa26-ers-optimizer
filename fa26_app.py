@@ -1951,7 +1951,40 @@ MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
 #: Whether the page has ever actually been handed to a window. The launcher
 #: has no other way to tell a window that was used and closed from one that
 #: was never really ours -- see the end of `main`.
-SERVED = {"pages": 0}
+SERVED = {"pages": 0, "last": 0.0}
+
+#: An Edge process that exits sooner than this held no window anyone used: it
+#: handed the window to another Edge process and left. Two players saw it --
+#: one a "127.0.0.1 refused to connect" page, one the app reading "Cannot reach
+#: the optimizer" -- because the launcher took the exit for the window closing
+#: and shut the server down under a window that was still open.
+HANDOFF_S = 15.0
+#: How long to wait for the window to load the page at all.
+FIRST_PAGE_S = 30.0
+#: How long the page may go quiet before it is taken to be closed. It asks
+#: every 4 s, but Chromium throttles a minimised window's timers to once a
+#: minute, so this has to be well clear of 60 s.
+IDLE_S = 150.0
+
+
+def wait_while_watched(first_page_s: float = FIRST_PAGE_S,
+                       idle_s: float = IDLE_S) -> bool:
+    """Keep serving while a page keeps asking. False if none ever loaded.
+
+    The page is the only thing that knows whether the window is still open:
+    which process Edge keeps it in is Edge's business, and changes with an
+    update pending, Startup boost, or nothing anyone can see.
+    """
+    start = time.monotonic()
+    while True:
+        time.sleep(1.0)
+        now = time.monotonic()
+        if not SERVED["pages"]:
+            if now - start > first_page_s:
+                return False
+            continue
+        if now - SERVED["last"] > idle_s:
+            return True
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -2021,6 +2054,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local_only():
             self.send_error(403)
             return
+        SERVED["last"] = time.monotonic()
         url = urlparse(self.path)
         query = parse_qs(url.query)
         route = url.path
@@ -2073,6 +2107,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local_only():
             self.send_error(403)
             return
+        SERVED["last"] = time.monotonic()
         route = urlparse(self.path).path
         try:
             body = self._body()
@@ -2411,10 +2446,11 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
             ]).wait()
             return
 
+    # A tab says nothing when it closes; `main` keeps serving while the page
+    # keeps asking, and stops a couple of minutes after it goes quiet.
     webbrowser.open(url)
     print("No app window was available, so this opened in your browser.")
-    print("Close this console window when you are done.")
-    threading.Event().wait()
+    print("It closes by itself a couple of minutes after you close the tab.")
 
 
 def server_answers(url: str, seconds: float = 8.0) -> bool:
@@ -2506,17 +2542,23 @@ def main(argv=None) -> int:
                       "Security software blocking a local connection is the "
                       "usual cause." % url)
                 return 1
+            opened = time.monotonic()
             open_window(url, prefer_browser="--browser" in args)
-            # Nothing served means the window never reached us -- the browser
-            # passed our command line to another of its own processes and
-            # quit. The profile above is meant to make that impossible; if it
-            # happens anyway, say so rather than vanish without a word.
-            if not SERVED["pages"]:
+            # Back this soon, the process that returned held no window anyone
+            # used: Edge passed it to another of its processes, or this is a
+            # browser tab, which never reports closing at all. Either way the
+            # window may well still be open, so it is the page that says when
+            # to stop -- it asks every few seconds while it is there.
+            if time.monotonic() - opened < HANDOFF_S:
+                if not wait_while_watched():
+                    fatal("The window never loaded the page.\n\n"
+                          "Close any window titled \"FA26 ERS Deployment "
+                          "Optimizer\" and start the application again.")
+                    return 1
+            elif not SERVED["pages"]:
                 fatal("The window closed without ever showing the page.\n\n"
-                      "This usually means another copy of the browser took "
-                      "the window over. Close any window titled \"FA26 ERS "
-                      "Deployment Optimizer\" and start the application "
-                      "again.")
+                      "Close any window titled \"FA26 ERS Deployment "
+                      "Optimizer\" and start the application again.")
                 return 1
     except KeyboardInterrupt:
         pass
