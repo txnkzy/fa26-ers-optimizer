@@ -295,6 +295,13 @@ def replay(case: Case, data_dir: Path, in_sample: bool) -> dict | None:
                 loaded.append(other)
         if not loaded:
             return None                    # nothing to fit on but itself
+        # And nothing the app would pool with this lap. Madrid on 30/09 was a
+        # 1:48 out lap and a 1:37 push lap: fitted on the out lap alone the
+        # push lap replays 10% slow, which measures the harness, not the
+        # model -- the app would never build a car from a lap eleven seconds
+        # slower than the one it is planning for.
+        if min(l.lap_time_s for l in loaded) > case.actual_s * lapsession.TOLERANCE:
+            return None
         fit_laps = loaded
 
     car = carphysics.load(data_dir)

@@ -2114,3 +2114,29 @@ line-rule check took the first lap alphabetically with a run to the first
 corner, and `chq_sepang` now sorts before Austin. Its lap01 is a recharge lap
 that falls from 286 to 252 kph at full throttle. The check now wants a car that
 gains speed through the opening, and finds Austin again.
+
+## Two-lap sessions, and a player whose page could not read their laps
+
+A player's diagnostics said "Cannot reach the optimizer" with the optimizer
+running: the request that reads the session failed and the page threw the
+reason away. Their two Red Bull Ring laps showed a second, unrelated fault.
+`lap02` was 3:48.703 and 13.2 km long, three laps the 1.1.0 logger never cut.
+The fragment rule, measuring against the middle of a two-lap session (2:32),
+called the real 1:14.641 the fragment and kept the broken lap, which the
+solve then refused.
+
+* Below three laps the fragment test is not made. With two there is no middle.
+* `usable_session` loads what the pooling rule chose, and when every chosen
+  lap is refused, chooses again from the rest of the session.
+* The holdout no longer replays a lap against fit laps the app would not pool
+  with it: Madrid 30/09 fitted a 1:37.1 on a 1:48.0 out lap and came out 10%
+  slow. That dropped one Red Bull Ring case and the single Sepang case too.
+
+Holdout now **86 laps, 0.65%**, worst 3.02%. Every circuit present before is
+unchanged; Madrid enters with 2.11%.
+
+The benchmark of map differences grew from 10 to 14 comparisons with the Baku
+sessions of 23-28 September, and from 0.214 to 0.436 s. The original ten
+moved by under 0.005 s. Of the new four, 28/09 compares race-map laps
+(1:47.6-1:52.7) with one qualifying-map lap (1:44.6): measured 4.22 s apart,
+predicted 1.07. Open.

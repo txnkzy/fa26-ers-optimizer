@@ -147,11 +147,18 @@ def select(paths, tolerance: float = TOLERANCE,
     # nine percent out. Fragments are rare and fall below the quicker half's
     # middle all the same: seventeen Albert Park laps with a 35.525 s file
     # among them still put the line at 57 s.
-    quick = [t for t, _p in timed][:(len(timed) + 2) // 2]
-    middle = statistics.median(quick)
-    whole = [(t, p) for t, p in timed if t >= middle * FRAGMENT_SHARE]
-    if whole:
-        timed = whole
+    #
+    # With two laps there is no middle to speak of: a 1:14.641 at the Red Bull
+    # Ring beside a 3:48.703 that was three laps the logger never cut came out
+    # as the fragment, and the session was modelled -- refused, rather -- on
+    # the broken one. Below three laps the test is not made; a lap that really
+    # is a fragment is refused when it is loaded, and the caller moves on.
+    if len(timed) >= 3:
+        quick = [t for t, _p in timed][:(len(timed) + 2) // 2]
+        middle = statistics.median(quick)
+        whole = [(t, p) for t, p in timed if t >= middle * FRAGMENT_SHARE]
+        if whole:
+            timed = whole
     best = timed[0][0]
     kept = [p for t, p in timed if t <= best * tolerance]
     return kept if len(kept) >= minimum else [timed[0][1]]

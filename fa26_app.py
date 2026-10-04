@@ -446,6 +446,38 @@ def session_paths(key: str) -> list[Path]:
     return lapsession.select(groups[key])
 
 
+def usable_session(key: str, on_lap=None):
+    """(paths, laps, rejected) -- the laps to model, loaded and checked.
+
+    The pooling rule works from file names alone, so it can choose a lap that
+    turns out to be unusable once loaded -- three laps the logger never cut,
+    saved as one 3:48. When every lap it chose is refused, it chooses again
+    from the rest of the session rather than giving up with real laps still
+    on disk. `rejected` is (path, reason) for each lap that was refused.
+    """
+    candidates = session_files(key)
+    rejected: list = []
+    while candidates:
+        paths = lapsession.select(candidates)
+        laps = []
+        for i, path in enumerate(paths):
+            try:
+                lap = laplib.load(path)
+                why = laplib.problem(lap)
+            except Exception as exc:
+                lap, why = None, "unreadable (%s)" % exc
+            if why:
+                rejected.append((path, why))
+            else:
+                laps.append(lap)
+            if on_lap:
+                on_lap((i + 1) / len(paths))
+        if laps:
+            return [Path(l.path) for l in laps], laps, rejected
+        candidates = [p for p in candidates if p not in paths]
+    return [], [], rejected
+
+
 def session_files(key: str) -> list[Path]:
     """Every lap in the session, before the 3% filter."""
     groups = lapsession.group(baseline_dir().glob("*.csv"))
@@ -795,15 +827,7 @@ class LiveSearch:
             return mine != self.generation or ENGINE.running
 
     def _search(self, key: str, mine: int) -> dict | None:
-        paths = session_paths(key)
-        laps = []
-        for path in paths:
-            try:
-                candidate = laplib.load(path)
-            except Exception:
-                continue
-            if not laplib.problem(candidate):
-                laps.append(candidate)
+        paths, laps, _rejected = usable_session(key)
         if not laps:
             return None
         laps.sort(key=lambda l: l.lap_time_s)
@@ -1178,7 +1202,6 @@ class Engine:
     def _solve(self, key: str, qualify: int, race: int, unlimited: bool,
                write_alloc: bool) -> None:
         self.enter("read")
-        paths = session_paths(key)
         track = "__".join(key.split("__")[:-1])
         circuit = recharge.normalise(track)
 
@@ -1194,10 +1217,8 @@ class Engine:
         # the same session, and the lap time it claims is up to 1.9 s better
         # than what it then delivers. Pooling halves that gap and improves
         # out-of-sample accuracy from 0.57% to 0.44%.
-        laps = []
-        for i, path in enumerate(paths):
-            laps.append(laplib.load(path))
-            self.tick(0.2 + 0.8 * (i + 1) / len(paths))
+        paths, laps, rejected = usable_session(
+            key, on_lap=lambda f: self.tick(0.2 + 0.8 * f))
         # A map is written in metres along the lap, so a wrong lap length is
         # not a small error -- every zone lands in the wrong place, and
         # `Split.clamped` folds the whole map onto a single point. A Bahrain
@@ -1213,19 +1234,15 @@ class Engine:
         self.read_best = min((lapsession.parse(f)[2] for f in session_files(key)
                               if lapsession.parse(f)), default=0.0)
 
-        usable, rejected = [], []
-        for candidate in laps:
-            why = laplib.problem(candidate)
-            (rejected if why else usable).append((candidate, why))
-        if not usable:
+        if not laps:
             raise RuntimeError(
                 "These laps cannot be used: %s. The in-game logger records "
                 "distance from the track length it read when it started, so "
                 "restarting the session with the logger already enabled "
-                "usually fixes it." % rejected[0][1])
-        for candidate, why in rejected:
+                "usually fixes it." % (rejected[0][1] if rejected
+                                       else "none could be read"))
+        for _path, why in rejected:
             self.note("Left out a lap: %s." % why)
-        laps = [candidate for candidate, _ in usable]
 
         laps.sort(key=lambda l: l.lap_time_s)
         lap = laps[0]
