@@ -2390,27 +2390,104 @@ def find_browser():
     return None
 
 
-def open_window(url: str, prefer_browser: bool = False) -> None:
+#: Chromium switches that turn off everything that talks to anything: cast
+#: discovery, component updates, crash reporting, reachability pings,
+#: phishing lookups and translation. Measured on a real run, an unhardened
+#: Edge window opened connections to four devices on the local network on
+#: port 8009 -- Chromecast discovery, and not something a tool that reads your
+#: lap times has any business doing. Nothing here changes how the page renders.
+QUIET_SWITCHES = [
+    "--disable-background-networking",
+    "--disable-sync",
+    "--disable-features=MediaRouter,Translate,OptimizationHints",
+    "--disable-component-update",
+    "--disable-domain-reliability",
+    "--disable-breakpad",
+    "--disable-client-side-phishing-detection",
+    "--no-pings",
+    "--no-service-autorun",
+]
+
+#: The WebView2 runtime's registry keys, stable, beta, dev and canary -- the
+#: ones pywebview reads. Without one pywebview falls back to the Internet
+#: Explorer engine, which cannot run this page at all, so it is checked here
+#: first rather than discovered as a blank window.
+_WEBVIEW2_KEYS = ("{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+                  "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}",
+                  "{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}",
+                  "{65C35B14-6C1D-4122-AC46-7148CC9D6497}")
+
+
+def webview2_version() -> str:
+    """The installed WebView2 runtime's version, or "" if there is none."""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    for hive, prefix in ((winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node"),
+                         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE"),
+                         (winreg.HKEY_CURRENT_USER, r"SOFTWARE")):
+        for key in _WEBVIEW2_KEYS:
+            try:
+                with winreg.OpenKey(hive, prefix + r"\Microsoft\EdgeUpdate"
+                                    r"\Clients\%s" % key) as handle:
+                    version = str(winreg.QueryValueEx(handle, "pv")[0])
+            except OSError:
+                continue
+            try:
+                if int(version.split(".")[0]) >= 86:     # pywebview's minimum
+                    return version
+            except ValueError:
+                continue
+    return ""
+
+
+def native_window(url: str) -> bool:
+    """The UI in a window of its own. False if this machine cannot show one.
+
+    Spotify, Discord and Claude carry a copy of Chromium inside them, which is
+    why nobody sees a browser. Windows ships one for exactly this -- WebView2,
+    part of Windows 11 and of Windows 10 through its updates -- and pywebview
+    puts it in a real window: this program's title, icon and taskbar button,
+    and no Edge processes to hand the window between. The Edge window it
+    replaces closed under two players when Edge did just that.
+    """
+    if not webview2_version():
+        return False
+    try:
+        import webview
+    except ImportError:
+        return False
+    os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                          " ".join(QUIET_SWITCHES))
+    webview.create_window("FA26 ERS Deployment Optimizer", url,
+                          width=1440, height=940, min_size=(900, 620),
+                          background_color="#0b0e14")
+    webview.start(gui="edgechromium")
+    return True
+
+
+def open_window(url: str, prefer_browser: bool = False) -> bool:
     """Show the UI in its own window and block until that window is closed.
 
-    Three ways down, best first. pywebview embeds the page in a genuine native
-    window; it is neither required nor shipped, but it is used when it happens
-    to be installed. Otherwise a Chromium browser in app mode, which behaves
-    like a window even though it is not one -- own taskbar button, own icon,
-    no address bar and no tabs. Only if neither exists does this fall back to
-    a tab, where nothing tells us the user has finished, so the process has to
-    be stopped by hand.
+    True when the return means the window really is closed -- a native window
+    cannot be handed anywhere. False when it may not: an Edge process that
+    exits can have passed its window on, and a tab never says at all.
+
+    Three ways down, best first. A native window on WebView2, shipped with the
+    build since 1.1.1. Without WebView2, a Chromium browser in app mode, which
+    behaves like a window even though it is not one -- own taskbar button, no
+    address bar and no tabs. Only if neither exists does this fall back to a
+    tab, which `main` keeps serving for as long as the page keeps asking.
     """
     if not prefer_browser:
         try:
-            import webview
-        except ImportError:
-            webview = None
-        if webview is not None:
-            webview.create_window("FA26 ERS Deployment Optimizer", url,
-                                  width=1440, height=940, min_size=(900, 620))
-            webview.start()
-            return
+            if native_window(url):
+                return True
+        except Exception:
+            # A window that would not start leaves the app mode one to try,
+            # which is better than a program that appears to do nothing.
+            pass
 
         found = find_browser()
         if found:
@@ -2418,15 +2495,8 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
             profile = window_profile()
             profile.mkdir(parents=True, exist_ok=True)
             # The window is Edge, so Edge's own habits become this program's
-            # behaviour as far as anyone watching the machine is concerned.
-            # Measured on a real run, an unhardened window opened connections
-            # to four devices on the local network on port 8009 -- Chromecast
-            # discovery, nothing to do with this tool, and not something a
-            # tool that reads your lap times has any business doing. These
-            # switches turn off everything that talks to anything: cast
-            # discovery, component updates, crash reporting, reachability
-            # pings, phishing lookups and translation. Nothing here changes
-            # how the page renders.
+            # behaviour as far as anyone watching the machine is concerned --
+            # hence the same quiet switches the native window gets.
             subprocess.Popen([
                 exe,
                 "--app=" + url,
@@ -2434,23 +2504,15 @@ def open_window(url: str, prefer_browser: bool = False) -> None:
                 "--window-size=1440,940",
                 "--no-first-run",
                 "--no-default-browser-check",
-                "--disable-background-networking",
-                "--disable-sync",
-                "--disable-features=MediaRouter,Translate,OptimizationHints",
-                "--disable-component-update",
-                "--disable-domain-reliability",
-                "--disable-breakpad",
-                "--disable-client-side-phishing-detection",
-                "--no-pings",
-                "--no-service-autorun",
-            ]).wait()
-            return
+            ] + QUIET_SWITCHES).wait()
+            return False
 
     # A tab says nothing when it closes; `main` keeps serving while the page
     # keeps asking, and stops a couple of minutes after it goes quiet.
     webbrowser.open(url)
     print("No app window was available, so this opened in your browser.")
     print("It closes by itself a couple of minutes after you close the tab.")
+    return False
 
 
 def server_answers(url: str, seconds: float = 8.0) -> bool:
@@ -2543,13 +2605,16 @@ def main(argv=None) -> int:
                       "usual cause." % url)
                 return 1
             opened = time.monotonic()
-            open_window(url, prefer_browser="--browser" in args)
-            # Back this soon, the process that returned held no window anyone
-            # used: Edge passed it to another of its processes, or this is a
-            # browser tab, which never reports closing at all. Either way the
+            closed = open_window(url, prefer_browser="--browser" in args)
+            # Back this soon from Edge or a tab, the process that returned
+            # held no window anyone used: Edge passed it to another of its
+            # processes, or a tab never reports closing at all. Either way the
             # window may well still be open, so it is the page that says when
-            # to stop -- it asks every few seconds while it is there.
-            if time.monotonic() - opened < HANDOFF_S:
+            # to stop -- it asks every few seconds while it is there. A native
+            # window that has returned is closed, however soon.
+            if closed:
+                pass
+            elif time.monotonic() - opened < HANDOFF_S:
                 if not wait_while_watched():
                     fatal("The window never loaded the page.\n\n"
                           "Close any window titled \"FA26 ERS Deployment "
