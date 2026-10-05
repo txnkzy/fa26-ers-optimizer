@@ -110,6 +110,22 @@ def read_map(setup_text: str, mapping: dict[str, int], map_index: int) -> list[S
     return splits
 
 
+def strat_map(setup_text: str, mapping: dict[str, int], strat: int) -> list[Split]:
+    """The deployment map a strategy points at, which need not share its number.
+
+    This tool always points strat n at map n, so reading map n for strat n was
+    right for every setup it wrote and wrong for anyone else's: a community
+    Sepang setup runs strat 1 on map 2 and strat 5 on map 1, and its
+    qualifying laps were replayed on its race map.
+    """
+    values = setupfile.read_values(setup_text)
+    item = mapping.get(f"STRAT_{strat}_DEPLOYMENT_MAP")
+    index = values.get(item, strat) if item is not None else strat
+    if not 1 <= int(index) <= MAPS:
+        index = strat
+    return read_map(setup_text, mapping, int(index))
+
+
 def write_map(setup_path, mapping: dict[str, int], map_index: int,
               splits: list[Split], track_length_m: float, backup: bool = True):
     """Write one deployment map, blanking the splits it does not use."""

@@ -21,6 +21,29 @@ from paths import resource_root
 
 TABLE_PATH = resource_root() / "data" / "fa26_recharge.json"
 
+#: Whether a declared C5.12.5 zone lets the power demand rise under full
+#: throttle. The notice's words are "a reset of MGU-K power *reduction* is
+#: permitted", and the model took that for a reset of the demand latch. The
+#: car does not do it. Every step up a map asked for inside a declared zone,
+#: with the driver already past the knee so that only the zone could allow it:
+#: 0 of 9 delivered -- seven at Baku's exit of T19, two at Sepang's exit of T6,
+#: with up to 2.5 MJ in the store. Outside the zones the same events are
+#: refused 0 of 8, as the latch says. Granting them gave a Sepang map 0.77 MJ
+#: through T6 that the car kept back and spent at the end of the lap, and an
+#: A/B the model called 0.18 s one way came out 0.10 s the other.
+#:
+#: Every lap measured is a practice session. A real qualifying session might
+#: behave differently, and this is the switch if it is ever shown to.
+RESET_ZONES_RAISE_DEMAND = False
+
+#: Whether power is cut at once, rather than ramped, below a declared C5.12.7
+#: sector's speed. The model did so on the regulation's word. Every split end
+#: measured inside such a sector, below its speed, with the driver flat: 8 of
+#: 8 ramped -- 220 kW to 150 half a second later, 318 to 250 -- exactly as
+#: the car does everywhere else. Cutting at once took about 0.3 MJ a pass off
+#: both Sepang maps through T5-T6 and T12-T13 that the car delivered.
+SPEED_ZONES_CUT_INSTANTLY = False
+
 SESSION_ITEMS = {
     "practice": "ERS_REGEN_MAX_MJ_P",
     "qualify": "ERS_REGEN_MAX_MJ_Q",
@@ -118,12 +141,20 @@ class Allocation:
         return float(length_m) / float(self.centreline_m)
 
     def reset_zones_for(self, session: str = "qualify",
-                        length_m: float | None = None) -> tuple:
+                        length_m: float | None = None,
+                        as_published: bool = False) -> tuple:
         """Article C5.12.5 windows applying in this session, as (start, end).
 
         Pass the lap's own length to map the notice's centreline distances onto
         the track as the game measures it.
+
+        Empty unless `RESET_ZONES_RAISE_DEMAND`: the model reads these as places
+        the demand may rise under full throttle, and the car does not honour
+        that -- see the constant. `as_published` returns them regardless, for
+        anything that wants the notice rather than the car.
         """
+        if not (RESET_ZONES_RAISE_DEMAND or as_published):
+            return ()
         quali = session in ("qualify", "qualifying", "practice", "outlap")
         k = self._scale(length_m)
         return tuple((int(round(z[0] * k)), int(round(z[1] * k)))
@@ -143,8 +174,16 @@ class Allocation:
         return tuple((int(round(z[0] * k)), int(round(z[1] * k)))
                      for z in self.alt_zones)
 
-    def speed_zones_for(self, length_m: float | None = None) -> tuple:
-        """Article C5.12.7 windows, as (start, end, kph). Not session-scoped."""
+    def speed_zones_for(self, length_m: float | None = None,
+                        as_published: bool = False) -> tuple:
+        """Article C5.12.7 windows, as (start, end, kph). Not session-scoped.
+
+        Empty unless `SPEED_ZONES_CUT_INSTANTLY`, for the same reason as the
+        reset zones: the model uses these for one rule the car does not
+        follow. `as_published` returns them regardless.
+        """
+        if not (SPEED_ZONES_CUT_INSTANTLY or as_published):
+            return ()
         k = self._scale(length_m)
         return tuple((int(round(z[0] * k)), int(round(z[1] * k)), float(z[2]))
                      for z in (self.speed_zones or ()))

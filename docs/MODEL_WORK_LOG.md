@@ -2169,3 +2169,45 @@ through, T5-T6 and T12-T13, each overvalued by 0.12-0.15 s.
 Lessons kept: laps are classified by the power they show, not by the wheel;
 a setup written mid-session needs the session restarted, and nothing on the
 car's side says whether it has been.
+
+## Two zone rules the car does not follow
+
+The Sepang A/B (their map A against a new B, A B B A, every lap identified by
+its power) came out A by 0.10 s; the model had B by 0.18. Replayed with the
+new trace, the model gave A 768 kJ through T6 that the car refused: A's
+300 kW split at 2142 m sits in the notice's exit-of-T6 reset zone, and the
+model let the demand rise there under full throttle. The driver was flat on
+both A laps, and the car delivered nothing.
+
+Tested across every lap, the same way: each step up a map asked for, with the
+driver already past the knee.
+
+| | steps up | delivered |
+|---|---|---|
+| inside a declared C5.12.5 reset zone | 9 (Baku 7, Sepang 2) | **0** |
+| outside any zone | 8 | 0 |
+
+And every split end inside a declared C5.12.7 sector, below its speed, where
+the model cut power at once: **8 of 8 ramped**, as the car does everywhere.
+
+Both rules are now off (`RESET_ZONES_RAISE_DEMAND`,
+`SPEED_ZONES_CUT_INSTANTLY` in `recharge.py`); the published windows are kept
+and reachable with `as_published=True`. Every lap measured is practice, so a
+real qualifying session could still differ.
+
+| | zone rules on | off |
+|---|---|---|
+| holdout, 96 laps | 0.62%, worst 3.02% | **0.59%, worst 2.89%** |
+| Baku | 0.80% | **0.60%** |
+| differences between maps | 0.446 s | **0.420 s** (with the strat pointer fix) |
+| the Sepang A/B, measured +0.097 | -0.184 | **+0.038** |
+
+Also: a strat's map is now read through its `STRAT_n_DEPLOYMENT_MAP` pointer
+(`fa26.strat_map`). A community setup runs strat 1 on map 2, and its laps had
+been replayed on its race map.
+
+And the car's 4 October update put a standard section straight after an ERS
+item in `setup.ini`; `item_attributes` only knew custom headers, read the
+qualifying limit as "Toe LR, 0 to 2.8", and the app could not open a session.
+Any section header now ends an item; 54 attributes were mislabelled, and the
+item map and every saved setup's values are unchanged.

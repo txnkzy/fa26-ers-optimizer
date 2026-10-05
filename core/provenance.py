@@ -226,7 +226,7 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
                                      getattr(lap, "path", None))):
         named = Path(recorded["setup_file"])
         try:
-            splits = fa26.read_map(
+            splits = fa26.strat_map(
                 named.read_text(encoding="utf-8", errors="replace"),
                 item_map, strat)
         except Exception:
@@ -242,7 +242,7 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
     for snap in snapshots:
         try:
             text = Path(snap).read_text(encoding="utf-8", errors="replace")
-            splits = fa26.read_map(text, item_map, strat)
+            splits = fa26.strat_map(text, item_map, strat)
         except Exception:
             continue
         if not splits:

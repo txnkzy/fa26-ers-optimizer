@@ -1093,7 +1093,7 @@ def _curves_match_the_notice() -> tuple[bool, str]:
     zones = baku.alt_zones_for("race")
     if zones != ((300, 600), (1500, 2870), (3700, 4050)):
         return False, "Baku's Alt 1 sectors read %s" % (zones,)
-    race_resets = baku.reset_zones_for("race")
+    race_resets = baku.reset_zones_for("race", as_published=True)
     if race_resets != ((4650, 5600),):
         return False, "Baku's race reset zones read %s" % (race_resets,)
     pt = _fa26.Powertrain(taper=_fa26.taper_for("Base - Standard"),
@@ -1128,12 +1128,12 @@ def _sepang_matches_the_notice() -> tuple[bool, str]:
         return False, "Sepang's curves are not the notice's"
     if a.alt_zones_for("race") != ((1550, 2500), (3100, 4100)) or a.alt_zones_for("qualify"):
         return False, "Sepang's Alt 1 sectors read %s" % (a.alt_zones_for("race"),)
-    if a.reset_zones_for("race") != ((1950, 2100), (2150, 2350)):
-        return False, "Sepang's race resets read %s" % (a.reset_zones_for("race"),)
-    if a.reset_zones_for("qualify")[-1] != (5200, 5500):
+    if a.reset_zones_for("race", as_published=True) != ((1950, 2100), (2150, 2350)):
+        return False, "Sepang's race resets read %s" % (a.reset_zones_for("race", as_published=True),)
+    if a.reset_zones_for("qualify", as_published=True)[-1] != (5200, 5500):
         return False, "Sepang's qualifying reset at exit T15 is missing"
-    if a.speed_zones_for() != ((1750, 2200, 270.0), (3700, 3900, 270.0)):
-        return False, "Sepang's higher-threshold sectors read %s" % (a.speed_zones_for(),)
+    if a.speed_zones_for(as_published=True) != ((1750, 2200, 270.0), (3700, 3900, 270.0)):
+        return False, "Sepang's higher-threshold sectors read %s" % (a.speed_zones_for(as_published=True),)
     return True, "8.5 / 9.0 / 7.5 / 9.0 / 9.0 MJ, 100 kW/s; sectors to the notice"
 
 

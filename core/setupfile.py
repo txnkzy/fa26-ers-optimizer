@@ -18,6 +18,12 @@ from pathlib import Path
 
 SECTION_RE = re.compile(r"^\[CUSTOM_SCRIPT_ITEM_(\d+)\]\s*$")
 VALUE_RE = re.compile(r"^VALUE\s*=", re.IGNORECASE)
+#: Any section at all. A custom item ends where the next section begins,
+#: custom or not: the car version of 4 October put the rear-left toe,
+#: [STEER_JOINT_0_LENGTH_OFFSET_LR], straight after ERS_REGEN_MAX_MJ_Q, the
+#: qualifying recharge limit read as "Toe LR", 0 to 2.8, and the app could
+#: not open a session at all.
+ANY_SECTION_RE = re.compile(r"^\[[^\]]+\]\s*$")
 
 
 def item_index_map(car_setup_ini_text: str) -> dict[str, int]:
@@ -30,6 +36,9 @@ def item_index_map(car_setup_ini_text: str) -> dict[str, int]:
         if match:
             index = int(match.group(1))
             continue
+        if ANY_SECTION_RE.match(stripped):
+            index = None
+            continue
         if index is not None and stripped.startswith("ID="):
             mapping[stripped[3:].strip()] = index
     return mapping
@@ -41,7 +50,7 @@ def item_attributes(car_setup_ini_text: str) -> dict[str, dict[str, str]]:
     current: dict[str, str] = {}
     for line in car_setup_ini_text.replace("\r", "").split("\n"):
         stripped = line.strip()
-        if SECTION_RE.match(stripped):
+        if ANY_SECTION_RE.match(stripped):
             current = {}
             continue
         if "=" in stripped:
@@ -61,6 +70,9 @@ def read_values(setup_text: str) -> dict[int, int]:
         match = SECTION_RE.match(stripped)
         if match:
             index = int(match.group(1))
+            continue
+        if ANY_SECTION_RE.match(stripped):
+            index = None
             continue
         if index is not None and VALUE_RE.match(stripped):
             try:
@@ -107,6 +119,9 @@ def write_values(setup_path: str | Path, updates: dict[int, int],
         match = SECTION_RE.match(stripped)
         if match:
             index = int(match.group(1))
+            continue
+        if ANY_SECTION_RE.match(stripped):
+            index = None
             continue
         if index is not None and VALUE_RE.match(stripped):
             if index in updates:

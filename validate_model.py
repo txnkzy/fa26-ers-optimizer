@@ -231,7 +231,7 @@ def arrival(entry: dict, item_map):
         return entry["found"].splits, 0.0
     try:
         text = Path(sidecar["setup_file"]).read_text(encoding="utf-8", errors="replace")
-        came = fa26.read_map(text, item_map, established)
+        came = fa26.strat_map(text, item_map, established)
     except Exception:
         return nothing
     return came, 0.0
