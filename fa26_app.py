@@ -857,12 +857,24 @@ class LiveSearch:
                 raise Cancelled()
 
         started = time.time()
+        seed = optimise26.seed_splits(laps[0], shape)
+        zones = dict(reset_zones=alloc.reset_zones_for("qualify", shape.length_m),
+                     speed_zones=alloc.speed_zones_for(shape.length_m))
+        # Scored as driven, off a recharge lap, as the full solve does -- or
+        # the estimate given between laps and the map written afterwards
+        # would be planned for two different laps.
+        lead, _built = optimise26.build_recharge(
+            seed, car, cal, shape, powertrain,
+            start_store_kj=optimise26.starting_store_kj(laps[0], "recharge"),
+            harvest_cap_kj=alloc.mj("race") * 1000, **zones)
+        corner_m = final_corner_m(shape, shape.length_m)
+        approach = optimise26.Approach(
+            lead, (0.0,) if corner_m is None else (0.0, corner_m),
+            laplib.STORE_CAPACITY_KJ)
         _splits, result, _evals = optimise26.optimise(
-            optimise26.seed_splits(laps[0], shape), car, cal, shape, powertrain,
+            seed, car, cal, shape, powertrain,
             objective, optimise26.starting_store_kj(laps[0], "quali"),
-            reset_zones=alloc.reset_zones_for("qualify", shape.length_m),
-            speed_zones=alloc.speed_zones_for(shape.length_m),
-            on_progress=abandon)
+            on_progress=abandon, approach=approach, **zones)
         return {
             "ready": True,
             "laps": len(laps),
@@ -968,6 +980,16 @@ def braking_zones(profile, min_m: float = 25.0) -> list[list[float]]:
     if start is not None and profile.length_m - start >= min_m:
         zones.append([round(start), round(profile.length_m)])
     return zones
+
+
+def final_corner_m(profile, length_m: float) -> "float | None":
+    """How far before the line the last braking zone of the lap begins.
+
+    One of the two places a driver can flip the switch without reading a
+    number. None on a lap with no braking zone to speak of.
+    """
+    braking = [z for z in braking_zones(profile) if z[1] < length_m - 30.0]
+    return (length_m - braking[-1][0]) if braking else None
 
 
 def first_lift_m(profile) -> float:
@@ -1418,6 +1440,22 @@ class Engine:
                       "everything below rests on the one you set.")
         self.say()
 
+        # The recharge map first, though it is listed last: it is the lap a
+        # qualifying lap is entered from, so the qualifying search needs it to
+        # score each map as it will really start -- see optimise26.Approach.
+        # Built, not searched, so it costs a handful of simulations.
+        recharge_cap = 99.0 if unlimited else alloc.mj("race")
+        recharge_built = optimise26.build_recharge(
+            seed, car, cal, profile, powertrain_for(3),
+            start_store_kj=optimise26.starting_store_kj(lap, "recharge"),
+            harvest_cap_kj=recharge_cap * 1000,
+            reset_zones=zones_for(3), speed_zones=speed_zones)
+        corner_m = final_corner_m(profile, lap.length_m)
+        approach = optimise26.Approach(
+            recharge_built[0],
+            (0.0,) if corner_m is None else (0.0, corner_m),
+            laplib.STORE_CAPACITY_KJ)
+
         for label, strat_no, session, neutral, one_shot in STRATEGIES:
             kind = "quali" if strat_no == 1 else (
                 "race" if strat_no == 2 else "recharge")
@@ -1453,18 +1491,15 @@ class Engine:
             powertrain = powertrain_for(strat_no)
             start_store = optimise26.starting_store_kj(lap, kind)
             if strat_no == 3:
-                # Built, not searched -- see optimise26.recharge_map.
-                splits, result = optimise26.build_recharge(
-                    seed, car, cal, profile, powertrain,
-                    start_store_kj=start_store,
-                    harvest_cap_kj=objective.harvest_cap_mj * 1000,
-                    reset_zones=zones_for(strat_no), speed_zones=speed_zones)
+                # Built before the loop -- see above.
+                splits, result = recharge_built
             else:
                 splits, result, _ = optimise26.optimise(
                     seed, car, cal, profile, powertrain, objective,
                     start_store, extra_seeds=reference,
                     reset_zones=zones_for(strat_no), speed_zones=speed_zones,
-                    on_progress=self.tick)
+                    on_progress=self.tick,
+                    approach=approach if one_shot else None)
             self.tick(1.0)
             self.check()
 
@@ -1521,16 +1556,18 @@ class Engine:
                 })
 
         # Needs both maps, so it waits until all three are solved: the run
-        # down to the line is driven on the race map and finished on the
-        # qualifying one, and the whole question is where between them to
-        # change.
+        # down to the line is driven on the recharge map -- the lap a push lap
+        # follows -- and finished on the qualifying one, and the whole
+        # question is where between them to change. It was the race map; the
+        # qualifying search now plans against the recharge map, and the
+        # advice has to describe the lap that was planned.
         by_strat = {no: sp for _, no, sp, _ in self.results}
-        if 1 in by_strat and 2 in by_strat:
+        if 1 in by_strat and 3 in by_strat:
             # It used to be appended to STRAT 1's notes as well. It has its
             # own place above the maps now, and the same sentence in both is
             # one of them not being read.
             self._when_to_switch(
-                by_strat[1], by_strat[2], car, cal, profile,
+                by_strat[1], by_strat[3], car, cal, profile,
                 powertrain_for(1), alloc, lap.length_m)
 
         self.lap = lap
@@ -1626,7 +1663,7 @@ class Engine:
     #: the driver is on the previous lap's business.
 
 
-    def _when_to_switch(self, quali, race, car, cal, profile, powertrain,
+    def _when_to_switch(self, quali, lead, car, cal, profile, powertrain,
                         alloc, length_m) -> list[str]:
         """When to put STRAT 1 on, in the two places a driver can act on.
 
@@ -1661,7 +1698,7 @@ class Engine:
             # changes inside it, and a long run to the line -- Monza's, out of
             # Parabolica -- is further from it than the default window.
             state = sim26.run_to_line(
-                race, quali, switch_m, car, cal, profile, powertrain,
+                lead, quali, switch_m, car, cal, profile, powertrain,
                 start_store_kj=laplib.STORE_CAPACITY_KJ,
                 harvest_cap_kj=cap_kj,
                 approach_m=max(sim26.PRIME_M, switch_m + 50.0), **zones)
@@ -1678,8 +1715,7 @@ class Engine:
         # corner rather than where the track map says it is.
         # Not `zones`: that name is already the reset and speed zones every
         # simulation here is run with, and `lap_from` closes over it.
-        braking = [z for z in braking_zones(profile) if z[1] < length_m - 30.0]
-        corner_m = (length_m - braking[-1][0]) if braking else None
+        corner_m = final_corner_m(profile, length_m)
 
         try:
             at_line_state, at_line = lap_from(0.0)

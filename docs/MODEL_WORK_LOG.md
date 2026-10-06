@@ -2211,3 +2211,46 @@ item in `setup.ini`; `item_attributes` only knew custom headers, read the
 qualifying limit as "Toe LR, 0 to 2.8", and the app could not open a session.
 Any section header now ends an item; 54 attributes were mislabelled, and the
 item map and every saved setup's values are unchanged.
+
+## Qualifying maps planned for the charge they start with
+
+The qualifying search scored every map from a full battery, and the switch
+advice was worked out afterwards from the race map. The advice was often
+"before the final corner", which spends a third of the battery on the run to
+the line: at Sepang every push lap started at 53-56%, and a map planned for
+full spent early and was empty from T14.
+
+`optimise26.Approach` scores a map as driven: off the recharge map with a full
+store, run to the line under the candidate from each switch point the driver
+can act on (the line, the last braking zone), the better kept. The recharge map
+is built before the qualifying search to be the lead, the robustness charge
+becomes a recharge lap arriving at 75%, and the switch advice uses the
+recharge map too, so it describes the lap that was planned. Two switch points
+would double the search, so the point is chosen on the starting maps, held for
+the coarse search and chosen again before the fine one.
+
+Old search against new, both maps then scored as driven, 15 circuits:
+
+| | |
+|---|---|
+| better or level | 11, Barcelona -0.342 s, Sepang -0.258, Sakhir -0.161 (laps starting 51-68%) |
+| worse | Baku +0.105 as planned, but -0.034 on the robustness measure it optimises; Austin +0.018, Suzuka +0.010, Monaco +0.002 |
+| search time | about 30% longer |
+
+At Sepang the new search finds, unaided, a map as good as the one built by
+hand for 55% (C: 93.401 as driven; new 93.407; old-style 93.706, A 93.498).
+
+## Lifting is not where the cost is
+
+The plan was to charge a map for the lift a faster arrival forces. Measured
+first: every corner taken at speed where some laps of a session stayed flat
+and others lifted without braking, 250 corners in 52 sessions. Where the
+lifting laps arrived more than 5 kph faster (89 corners), they were quicker
+through the corner 63 times and slower 26, -0.046 s on average; deep lifts,
+below 50%, -0.039 s. Arriving faster and lifting still pays.
+
+So no penalty was built. The cost of spending into a sweeper is the energy
+that is then not there later, and the model already counts it: energy
+delivered while the car is held at the corner's speed is lost. Lifting laps
+are also the later and better laps of a session, so this is not a controlled
+test, but 63 to 26 is a direction.

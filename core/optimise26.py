@@ -712,19 +712,45 @@ def _key(splits):
                   s.deploy_kw, s.clip_kw) for s in splits)
 
 
+@dataclass
+class Approach:
+    """How a push lap is entered: off `lead`, switched `switches` metres out.
+
+    A qualifying map was scored from a full battery and the switch advice was
+    worked out afterwards -- and the advice was often "before the final
+    corner", which spends a third of the battery on the run to the line. At
+    Sepang that made every lap start at 53-56%, and a map planned for full
+    spent early and was empty from T14. Scored this way, the charge and the
+    speed at the line are consequences of the map, as they are on track.
+    """
+
+    lead: list
+    switches: tuple = (0.0,)
+    store_kj: float = 4000.0            # a full store: the recharge lap's job
+
+
 class Evaluator:
     """Simulates candidate maps, remembering ones it has already seen."""
 
     def __init__(self, car, longitudinal, profile, powertrain, ds,
                  start_store_kj, harvest_cap_kj, settle, reset_zones=(),
-                 speed_zones=(), charges=()):
+                 speed_zones=(), charges=(), approach: "Approach | None" = None):
         self._fixed = (car, longitudinal, profile, powertrain, ds,
                        start_store_kj, harvest_cap_kj, settle)
         self.reset_zones = tuple(tuple(z) for z in reset_zones)
         self.speed_zones = tuple(tuple(z) for z in speed_zones)
         self.charges = tuple(charges)
+        self.approach = approach
         self._cache = {}
         self.evaluations = 0
+
+    def use_switches(self, switches) -> None:
+        """Score from now on with only these switch points."""
+        if self.approach is None or tuple(switches) == self.approach.switches:
+            return
+        self.approach = Approach(self.approach.lead, tuple(switches),
+                                 self.approach.store_kj)
+        self._cache = {}
 
     def one(self, splits):
         return self.many([splits])[0]
@@ -745,6 +771,8 @@ class Evaluator:
 
     def _simulate(self, splits):
         car, longitudinal, profile, powertrain, ds, start, cap, settle = self._fixed
+        if self.approach is not None:
+            return self._as_driven(splits)
         run = lambda store: sim26.simulate(
             splits, car, longitudinal, profile, powertrain,
             start_store_kj=store, harvest_cap_kj=cap, ds=ds, settle=settle,
@@ -756,6 +784,39 @@ class Evaluator:
             times = [result.lap_time_s] + [run(c).lap_time_s for c in self.charges]
             result.robust_time_s = sum(times) / len(times)
         return result
+
+    def _entered(self, splits, switch_m: float, lead_store_kj: float):
+        """One push lap, run down to the line from the lead map first."""
+        car, longitudinal, profile, powertrain, ds, _start, cap, _settle = self._fixed
+        zones = dict(reset_zones=self.reset_zones, speed_zones=self.speed_zones)
+        state = sim26.run_to_line(
+            self.approach.lead, splits, switch_m, car, longitudinal, profile,
+            powertrain, start_store_kj=lead_store_kj, harvest_cap_kj=cap,
+            approach_m=max(sim26.PRIME_M, switch_m + 50.0), ds=ds, **zones)
+        result = sim26.simulate(splits, car, longitudinal, profile, powertrain,
+                                start_store_kj=state.store_kj, harvest_cap_kj=cap,
+                                ds=ds, settle=False, entry=state, **zones)
+        result.switch_m = switch_m
+        return result
+
+    def _as_driven(self, splits):
+        """The lap as driven: the better of the switch points on offer.
+
+        The robustness charges, when asked for, are what the lead lap arrives
+        with rather than what the push lap starts with -- a recharge lap that
+        did not quite fill the store -- and are taken at the chosen switch.
+        """
+        best = None
+        for switch_m in self.approach.switches:
+            result = self._entered(splits, switch_m, self.approach.store_kj)
+            if best is None or result.lap_time_s < best.lap_time_s:
+                best = result
+        if self.charges:
+            times = [best.lap_time_s] + [
+                self._entered(splits, best.switch_m, c).lap_time_s
+                for c in self.charges]
+            best.robust_time_s = sum(times) / len(times)
+        return best
 
 
 #: The blanket family, as (how much of the lap from the line, what power).
@@ -930,8 +991,14 @@ def screen(splits, car, longitudinal, profile, powertrain, objective: Objective,
 def optimise(splits, car, longitudinal, profile, powertrain, objective: Objective,
              start_store_kj: float, max_sweeps: int = 8, ds: float = 2.5,
              extra_seeds=(), reset_zones=(), speed_zones=(), on_progress=None,
-             coarse_ds: float = COARSE_DS):
+             coarse_ds: float = COARSE_DS, approach: "Approach | None" = None):
     """Solve coarse, subdivide the answer, then refine. Returns (splits, result, evals).
+
+    With an `approach`, every map is scored as it will be driven -- entered off
+    the lead map, at the better of its switch points -- and the result carries
+    `switch_m`. Scoring two switch points costs two laps a candidate, so the
+    point is chosen on the starting maps, held for the coarse search, and
+    chosen again on the coarse answer before the fine one.
 
     A hill climb only ever reaches what its starting point can deform into.
     Seeding from throttle transitions makes a long flat-out stretch one split
@@ -973,12 +1040,26 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         coarse_ds = ds
     fine = Evaluator(car, longitudinal, profile, powertrain, ds,
                      start_store_kj, cap_kj, settle, reset_zones,
-                     speed_zones, charges)
+                     speed_zones, charges, approach=approach)
     evaluator = (fine if coarse_ds <= ds else
                  Evaluator(car, longitudinal, profile, powertrain, coarse_ds,
                            start_store_kj, cap_kj, settle, reset_zones,
-                           speed_zones, charges))
+                           speed_zones, charges, approach=approach))
     authored = [list(extra) for extra in extra_seeds]
+
+    def choose_switch(evaluator_, candidates) -> None:
+        """Hold the switch point the best of these candidates wants."""
+        if approach is None or len(approach.switches) < 2:
+            return
+        evaluator_.use_switches(approach.switches)
+        ready = [make_executable(
+            [ensure_live_exit(sanitise(s, profile), profile) for s in c],
+            profile, evaluator_.reset_zones) for c in candidates]
+        results = evaluator_.many(ready)
+        best = min(results, key=lambda r: r.robust_time_s or r.lap_time_s)
+        evaluator_.use_switches((best.switch_m,))
+
+    choose_switch(evaluator, [splits] + authored)
 
     # Screen the systematic family with one simulation each and climb only the
     # best of it. A climb is tens to hundreds of simulations, so twelve screens
@@ -1051,6 +1132,10 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         coarse, result = _climb(
             splits, evaluator, profile, objective, start_store_kj, max_sweeps)
 
+    # The switch point the coarse answer wants, before it is refined.
+    if coarse is not None:
+        choose_switch(fine, [coarse])
+
     # Everything above ranked maps against each other at the coarse step, and
     # a map that wins on a 5 m grid is a lead, not a result. It is climbed
     # again at `ds` from where the coarse pass left it -- which is quick,
@@ -1074,7 +1159,11 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         coarse, result = _rebalance(coarse, fine, profile, objective,
                                     start_store_kj)
     coarse = open_the_lap(coarse, profile)
-    if objective.name:
+    if approach is not None:
+        # The finished map at every switch point, so the advice given with it
+        # is the one it was planned for.
+        fine.use_switches(approach.switches)
+    if objective.name or approach is not None:
         result = fine.one(coarse)
     return coarse, result, evaluator.evaluations + fine.evaluations
 
