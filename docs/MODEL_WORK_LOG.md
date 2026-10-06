@@ -2254,3 +2254,21 @@ that is then not there later, and the model already counts it: energy
 delivered while the car is held at the corner's speed is lost. Lifting laps
 are also the later and better laps of a session, so this is not a controlled
 test, but 63 to 26 is a direction.
+
+### On track: planned for full against planned as driven
+
+Sepang, `Sepang Final.ini`, O (the old search, planned for a full battery) on
+strat 8 and N (the new one) on strat 11, PU mode Q with its override off,
+recharge on SLO, switched at T15. O N N O; each lap's map confirmed by its
+power through T5 -- O holds 350 kW to 1970 m, N steps to 250 at 1880 m.
+
+| | laps | mean | started |
+|---|---|---|---|
+| O | 1:35.074, 1:35.106 | 1:35.090 | 58-59% |
+| N | 1:34.535, 1:34.617 | **1:34.576** | 64-66% |
+
+**N by 0.514 s**; predicted 0.30, with N starting at 67% and O at 61%. Fuel
+balanced, 15.6 L against 15.55. O was empty by 4000 m; N still had 200 kJ at
+4500 and spent it past T14, -0.21 s over 4000-5000 m. A further -0.28 s at the
+exit of T6 is mostly the driver: the two laps on each map differ by 0.2 s
+there. The mechanism is the one the change was made for.
