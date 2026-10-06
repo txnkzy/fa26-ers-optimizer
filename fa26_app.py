@@ -923,17 +923,28 @@ def setups_for(circuit: str) -> list[dict]:
         return []
     out = []
     for folder in root.iterdir():
-        if not folder.is_dir() or recharge.normalise(folder.name) != circuit:
+        if not folder.is_dir():
+            continue
+        # Setups saved for every track live in `generic`, and a driver's only
+        # setup can be one of them -- a Madrid one here was. They are offered
+        # after the circuit's own, marked, because a map written into one goes
+        # with it to every circuit. `last.ini` is the game's copy of whatever
+        # was loaded last, not a setup anyone saved.
+        generic = folder.name.lower() == "generic"
+        if not generic and recharge.normalise(folder.name) != circuit:
             continue
         for path in folder.glob("*.ini"):
+            if generic and path.name.lower() == "last.ini":
+                continue
             out.append({"path": str(path), "name": path.stem,
                         "folder": folder.name,
                         "when": time.strftime(
                             "%d/%m %H:%M",
                             time.localtime(path.stat().st_mtime)),
                         "mtime": path.stat().st_mtime,
+                        "generic": generic,
                         "ours": path.with_suffix(".ini.bak").exists()})
-    return sorted(out, key=lambda s: s["mtime"], reverse=True)
+    return sorted(out, key=lambda s: (s["generic"], -s["mtime"]))
 
 
 # ---------------------------------------------------------------------- solve

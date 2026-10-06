@@ -592,9 +592,11 @@ def write_strategies(setup_path, mapping: dict[str, int],
     # How a strategy actually gets selected, established on track:
     #
     #   the base STRAT_MAP item picks the deployment map, and that works.
-    #   the per-mode overrides (PU_MODE_n_STRAT_MAP + _ACTIVE) do not fire,
-    #   whatever they are set to -- four laps on three different wheel modes all
-    #   ran whichever map the base pointed at.
+    #   a PU mode whose override is switched on (PU_MODE_n_STRAT_MAP_ACTIVE)
+    #   forces its own strat whatever the STRAT rotary says. This once read
+    #   "the overrides do not fire, whatever they are set to"; they do. A
+    #   community Sepang setup forced strat 1 in mode Q and strat 2 in SLO,
+    #   and two A/B runs drove one map while the dash showed another.
     #
     # So the overrides are explicitly disabled rather than left half-configured:
     # with every ACTIVE flag off, the base item is the only thing that decides,

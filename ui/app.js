@@ -38,8 +38,27 @@ const state = {
 };
 
 /* --------------------------------------------------------------- plumbing */
+/* No request waits forever. A fetch with no limit, against an optimizer that
+ * had stopped answering, left a player's progress bar on 7% and 0 s for a
+ * quarter of an hour with nothing to say why. Thirty seconds is far longer
+ * than anything here takes, a session's first read of its laps included. */
+const GET_TIMEOUT_MS = 30000;
+
 async function get(path) {
-  const res = await fetch(path);
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), GET_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(path, { signal: abort.signal });
+  } catch (err) {
+    // Refused or timed out: either way the optimizer did not answer.
+    const lost = new TypeError(err.name === "AbortError"
+      ? "the optimizer did not answer within 30 seconds" : String(err.message || err));
+    lost.timedOut = err.name === "AbortError";
+    throw lost;
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await res.json();
   if (data && data.error) {
     // The optimizer answered, with an error. Kept whole, trace and all, for
@@ -852,9 +871,19 @@ async function poll(id) {
     data = await get("/api/poll?since=" + state.since
                      + "&have=" + state.summary.length);
   } catch (err) {
+    // Keep trying -- a busy moment is not a lost optimizer -- but say so
+    // after a few misses instead of leaving the bar where it stopped.
+    state.pollMisses = (state.pollMisses || 0) + 1;
+    if (state.pollMisses >= 3 && err instanceof TypeError) {
+      state.unreachable = true;
+      setStatus("The optimizer is not responding", "bad");
+      $("phase").textContent = "Not responding — close the optimizer and "
+        + "start it again, then Copy diagnostics if it happens twice";
+    }
     setTimeout(() => poll(id), 800);
     return;
   }
+  state.pollMisses = 0;
   if (id !== state.pollId) return;
   if (data.reset) { state.log = []; state.since = 0; }
   state.since = data.since;
@@ -1272,6 +1301,26 @@ function closeApply() {
   $("apply-panel").hidden = true;
   $("apply-back").hidden = true;
   document.removeEventListener("keydown", applyKeys, true);
+  clearInterval(state.setupWatch);
+  window.removeEventListener("focus", refreshSetups);
+}
+
+/* The note says "save one in Assetto Corsa, then come back" -- so coming back
+ * has to find it. The list used to be read once, when the panel opened, and a
+ * setup saved while it was open never appeared until it was closed and opened
+ * again. It is re-read every few seconds and whenever the window regains focus,
+ * and redrawn only when something on disk changed. */
+async function refreshSetups() {
+  if ($("apply-panel").hidden || !state.detail) return;
+  let setups = [];
+  try {
+    setups = (await get("/api/setups?circuit="
+      + encodeURIComponent(state.detail.circuit))).setups;
+  } catch (err) { return; }
+  const stamp = setups.map((s) => s.path + "@" + s.mtime).join("|");
+  if (stamp === state.setupStamp) return;
+  state.setupStamp = stamp;
+  renderSetups(setups);
 }
 
 function applyKeys(e) {
@@ -1284,16 +1333,26 @@ async function openApply() {
   document.addEventListener("keydown", applyKeys, true);
   $("applied").hidden = true;
   state.setup = null;
+  state.setupStamp = null;
   $("apply-go").disabled = true;
   $("apply-go").textContent = "Save maps";
+  $("setup-list").innerHTML = "";
+  await refreshSetups();
+  if (state.setupStamp === null) renderSetups([]);
+  clearInterval(state.setupWatch);
+  state.setupWatch = setInterval(refreshSetups, 3000);
+  window.addEventListener("focus", refreshSetups);
+}
 
+function renderSetups(setups) {
   const list = $("setup-list");
   list.innerHTML = "";
-  let setups = [];
-  try {
-    setups = (await get("/api/setups?circuit="
-      + encodeURIComponent(state.detail.circuit))).setups;
-  } catch (err) { /* fall through to the empty case */ }
+  // A setup chosen before the list was redrawn stays chosen if it is still
+  // there; one that has gone is let go of.
+  const kept = state.setup && setups.find((s) => s.path === state.setup.path);
+  state.setup = kept || null;
+  $("apply-go").disabled = !kept;
+  if (!kept) $("apply-go").textContent = "Save maps";
 
   if (!setups.length) {
     $("apply-note").textContent =
@@ -1303,26 +1362,44 @@ async function openApply() {
       + "created from nothing.";
     return;
   }
+  const onlyGeneric = setups.every((s) => s.generic);
   $("apply-note").textContent =
-    "Only deployment maps 1 to 3 are replaced. Nothing else in your setup is "
+    (onlyGeneric
+      ? "There is no setup saved for this circuit, only ones saved for all "
+        + "tracks. Maps saved into one of those go with it to every circuit — "
+        + "save a setup for this circuit in Assetto Corsa if you would rather "
+        + "keep them here. "
+      : "")
+    + "Only deployment maps 1 to 3 are replaced. Nothing else in your setup is "
     + "touched, and a backup copy is made first.";
 
+  let headed = false;
   for (const s of setups) {
+    if (s.generic && !headed && !onlyGeneric) {
+      list.append(el("p", "setup-heading", "Saved for all tracks"));
+      headed = true;
+    }
     const b = el("button", "setup");
     b.type = "button";
-    b.setAttribute("aria-pressed", "false");
+    b.setAttribute("aria-pressed", String(!!(state.setup && state.setup.path === s.path)));
     b.append(el("span", "setup-name", s.name));
+    if (s.generic) b.append(el("span", "tag", "all tracks"));
     if (s.ours) b.append(el("span", "tag", "saved by this tool"));
     b.append(el("span", "setup-meta", s.folder + "  ·  " + s.when));
     b.onclick = () => {
       state.setup = s;
-      for (const other of list.children) {
+      for (const other of list.querySelectorAll("button.setup")) {
         other.setAttribute("aria-pressed", String(other === b));
       }
       $("apply-go").disabled = false;
-      $("apply-go").textContent = "Save into " + s.name;
+      $("apply-go").textContent = "Save into " + s.name
+        + (s.generic ? " (all tracks)" : "");
     };
     list.append(b);
+  }
+  if (state.setup) {
+    $("apply-go").textContent = "Save into " + state.setup.name
+      + (state.setup.generic ? " (all tracks)" : "");
   }
 }
 
@@ -1344,6 +1421,8 @@ async function applyGo() {
   }
   setStatus("Saved", "ready");
   $("apply-panel").hidden = true;
+  clearInterval(state.setupWatch);
+  window.removeEventListener("focus", refreshSetups);
   renderApplied(res);
 }
 
