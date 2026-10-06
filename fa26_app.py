@@ -2527,6 +2527,10 @@ def webview2_version() -> str:
     return ""
 
 
+#: How long the program may outlive its closed window before ending itself.
+CLOSE_GRACE_S = 5.0
+
+
 def native_window(url: str) -> bool:
     """The UI in a window of its own. False if this machine cannot show one.
 
@@ -2545,9 +2549,20 @@ def native_window(url: str) -> bool:
         return False
     os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
                           " ".join(QUIET_SWITCHES))
-    webview.create_window("FA26 ERS Deployment Optimizer", url,
-                          width=1440, height=940, min_size=(900, 620),
-                          background_color="#0b0e14")
+    window = webview.create_window("FA26 ERS Deployment Optimizer", url,
+                                   width=1440, height=940, min_size=(900, 620),
+                                   background_color="#0b0e14")
+
+    def closed() -> None:
+        # Once in about ten closes on a fresh build, the program outlived its
+        # window: no window, no WebView2, and still running a minute later --
+        # stuck tearing down, which nobody can see or close. A normal close
+        # is over in two seconds, so this only ever ends one that is stuck.
+        timer = threading.Timer(CLOSE_GRACE_S, lambda: os._exit(0))
+        timer.daemon = True
+        timer.start()
+
+    window.events.closed += closed
     webview.start(gui="edgechromium")
     return True
 
