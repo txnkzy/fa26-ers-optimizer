@@ -2554,17 +2554,58 @@ def native_window(url: str) -> bool:
                                    background_color="#0b0e14")
 
     def closed() -> None:
-        # Once in about ten closes on a fresh build, the program outlived its
-        # window: no window, no WebView2, and still running a minute later --
-        # stuck tearing down, which nobody can see or close. A normal close
-        # is over in two seconds, so this only ever ends one that is stuck.
+        # A normal close is over in two seconds, so this only ever ends one
+        # that is stuck tearing down.
         timer = threading.Timer(CLOSE_GRACE_S, lambda: os._exit(0))
         timer.daemon = True
         timer.start()
 
     window.events.closed += closed
+    threading.Thread(target=_end_when_windowless, daemon=True).start()
     webview.start(gui="edgechromium")
     return True
+
+
+def _visible_windows() -> int:
+    """How many visible top-level windows this process owns."""
+    user32 = ctypes.windll.user32
+    pid = os.getpid()
+    count = [0]
+    owner = ctypes.c_ulong()
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def each(hwnd, _param):
+        user32.GetWindowThreadProcessId(ctypes.c_void_p(hwnd), ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(ctypes.c_void_p(hwnd)):
+            count[0] += 1
+        return True
+
+    user32.EnumWindows(each, None)
+    return count[0]
+
+
+def _end_when_windowless() -> None:
+    """End the program once its window has been gone for CLOSE_GRACE_S.
+
+    Twice, both on the first launch of a fresh build and both with the window
+    closed in its first seconds -- while WebView2 was still starting -- the
+    program outlived its window: nothing on screen, nothing to close, still
+    running a minute later. The window never reported itself closed, so the
+    timer above never started. This watches the result instead of waiting to
+    be told: once the program has had a window and then has none, it ends.
+    """
+    try:
+        seen, gone = False, 0
+        while True:
+            time.sleep(1.0)
+            if _visible_windows():
+                seen, gone = True, 0
+            elif seen:
+                gone += 1
+                if gone >= CLOSE_GRACE_S:
+                    os._exit(0)
+    except Exception:
+        return                       # a check that cannot run must not end anything
 
 
 def open_window(url: str, prefer_browser: bool = False) -> bool:
