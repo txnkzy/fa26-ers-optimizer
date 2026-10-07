@@ -230,7 +230,10 @@ check("progress reached the end", seen_progress[-1] >= 0.999,
       "%.3f" % seen_progress[-1])
 # Not every stage: fitting the car and building the recharge map are each
 # faster than the poll interval, so a passing run need not observe them.
-check("the slow stages named themselves", len(phases) >= 3, " / ".join(phases))
+# Qualifying and race are searched together now, so they are one stage.
+check("the slow stages named themselves",
+      len(phases) >= 2 and any("qualifying and race" in p for p in phases),
+      " / ".join(phases))
 
 # The plain lines are the ones shown by default, so they are the ones that
 # have to read as English. The engineering vocabulary belongs behind the

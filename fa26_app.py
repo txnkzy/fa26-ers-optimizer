@@ -955,8 +955,7 @@ def setups_for(circuit: str) -> list[dict]:
 PHASES = {
     "read": ("Reading your laps", 0.00, 0.07),
     "learn": ("Learning how your car behaves", 0.07, 0.15),
-    "quali": ("Working out the qualifying map", 0.15, 0.57),
-    "race": ("Working out the race map", 0.57, 0.94),
+    "search": ("Working out the qualifying and race maps", 0.15, 0.94),
     "recharge": ("Working out the recharge map", 0.94, 1.00),
 }
 
@@ -1467,27 +1466,9 @@ class Engine:
             (0.0,) if corner_m is None else (0.0, corner_m),
             laplib.STORE_CAPACITY_KJ)
 
-        for label, strat_no, session, neutral, one_shot in STRATEGIES:
-            kind = "quali" if strat_no == 1 else (
-                "race" if strat_no == 2 else "recharge")
-            self.check()
-            self.enter(kind)
-            self.say("Working out the %s map…" % label.lower())
-
-            # The car's Power and Energy Limits item (ERS_SESSION_LIMITS)
-            # defaults to "Current Session", so the cap actually enforced is
-            # whichever session is loaded -- practice allows 9.0 MJ where
-            # qualifying allows 8.0. Apply writes the notice's figures and
-            # leaves that item as the driver set it, so a lap that
-            # demonstrably harvested more than the table allows is taken as
-            # proof of the real limit.
+        def objective_for(label, strat_no, session, neutral, one_shot):
             cap = 99.0 if unlimited else alloc.mj(session)
-            if not unlimited and harvested > cap + 0.2 and strat_no == 1:
-                self.note("These laps recovered more than qualifying allows. "
-                          "Practice is more generous — set Power and Energy "
-                          "Limits to Qualify in the setup, or drive in a "
-                          "Qualify session, to match this plan.")
-            objective = optimise26.Objective(
+            return optimise26.Objective(
                 name=label, harvest_cap_mj=cap,
                 energy_neutral=neutral, one_shot=one_shot,
                 # No floor. A quarter of the battery held back every lap
@@ -1499,19 +1480,63 @@ class Engine:
                 # tuned only for full falls apart faster than one that was not
                 # -- so it is scored at three-quarters charge too.
                 charge_fractions=(0.75,) if one_shot else ())
+
+        def kind_of(strat_no):
+            return "quali" if strat_no == 1 else (
+                "race" if strat_no == 2 else "recharge")
+
+        # Qualifying and race are searched together, each on its own cores --
+        # neither needs the other, only the recharge map built above. One
+        # after the other on a single core, the wait was the sum of them.
+        searched = [entry for entry in STRATEGIES if entry[1] != 3]
+        self.check()
+        self.enter("search")
+        self.say("Working out the %s maps…"
+                 % " and ".join(e[0].lower() for e in searched))
+        answers = dict(zip([e[1] for e in searched], optimise26.optimise_many(
+            [dict(splits=seed, car=car, longitudinal=cal, profile=profile,
+                  powertrain=powertrain_for(strat_no),
+                  objective=objective_for(label, strat_no, session, neutral,
+                                          one_shot),
+                  start_store_kj=optimise26.starting_store_kj(
+                      lap, kind_of(strat_no)),
+                  extra_seeds=reference, reset_zones=zones_for(strat_no),
+                  speed_zones=speed_zones,
+                  approach=approach if one_shot else None)
+             for label, strat_no, session, neutral, one_shot in searched],
+            on_progress=self.tick)))
+        self.tick(1.0)
+
+        for label, strat_no, session, neutral, one_shot in STRATEGIES:
+            kind = kind_of(strat_no)
+            self.check()
+            if strat_no == 3:
+                self.enter(kind)
+                self.say("Working out the recharge map…")
+
+            # The car's Power and Energy Limits item (ERS_SESSION_LIMITS)
+            # defaults to "Current Session", so the cap actually enforced is
+            # whichever session is loaded -- practice allows 9.0 MJ where
+            # qualifying allows 8.0. Apply writes the notice's figures and
+            # leaves that item as the driver set it, so a lap that
+            # demonstrably harvested more than the table allows is taken as
+            # proof of the real limit.
+            objective = objective_for(label, strat_no, session, neutral, one_shot)
+            cap = objective.harvest_cap_mj
+            if not unlimited and harvested > cap + 0.2 and strat_no == 1:
+                self.note("These laps recovered more than qualifying allows. "
+                          "Practice is more generous — set Power and Energy "
+                          "Limits to Qualify in the setup, or drive in a "
+                          "Qualify session, to match this plan.")
             powertrain = powertrain_for(strat_no)
             start_store = optimise26.starting_store_kj(lap, kind)
             if strat_no == 3:
                 # Built before the loop -- see above.
                 splits, result = recharge_built
             else:
-                splits, result, _ = optimise26.optimise(
-                    seed, car, cal, profile, powertrain, objective,
-                    start_store, extra_seeds=reference,
-                    reset_zones=zones_for(strat_no), speed_zones=speed_zones,
-                    on_progress=self.tick,
-                    approach=approach if one_shot else None)
-            self.tick(1.0)
+                splits, result, _ = answers[strat_no]
+            if strat_no == 3:
+                self.tick(1.0)
             self.check()
 
             notes = self._describe(label, strat_no, result, splits, lap, cal,
@@ -2777,4 +2802,9 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    # The searches run on worker processes (optimise26.optimise_many). In the
+    # built program each worker is this same executable started again, and
+    # this is what sends it to its job instead of opening a second window.
+    import multiprocessing
+    multiprocessing.freeze_support()
     raise SystemExit(main())

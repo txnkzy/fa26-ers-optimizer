@@ -12,6 +12,7 @@ as well makes the search far larger for little gain.
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,35 @@ import sim26
 
 POWER_STEP = 50.0
 POWERS = [0.0, 50.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0]
+
+
+#: What a lift in a sweeper costs a map, in seconds per kph. Lifting into a
+#: fast corner because the map arrived faster than it can be taken flat is
+#: harder to drive and less repeatable: through Sepang T5-T6 the laps taken
+#: flat on the limit averaged 8.90 s within 0.08 s of each other, the laps that
+#: arrived fast and lifted 8.94-9.25 s with 0.15-0.23 s between laps on the
+#: same map. The search treats the lift as a cost it will pay for only when
+#: the gain is clearly larger, so energy goes where the car can stay flat.
+LIFT_S_PER_KPH = 0.01
+
+#: Lift the model sees in a sweeper even on a map the driver took flat: the
+#: speed ceiling comes from several laps and is never perfectly smooth. Map C
+#: at Sepang, flat through T5-T6 on every lap, reads as 12 kph.
+LIFT_TOLERANCE_KPH = 10.0
+
+
+def lift_cost_s(result, baseline: dict) -> float:
+    """Seconds charged for the lifts a map forces beyond those it cannot avoid.
+
+    `baseline` is the lift in each sweeper with no deployment at all: a corner
+    the engine alone arrives at too fast needs that lift whatever the map does.
+    """
+    over = 0.0
+    for corner, kph in result.lifts.items():
+        extra = kph - baseline.get(corner, 0.0) - LIFT_TOLERANCE_KPH
+        if extra > 0.0:
+            over += extra
+    return over * LIFT_S_PER_KPH
 
 
 @dataclass
@@ -70,6 +100,7 @@ class Objective:
 
     def score(self, result, start_store_kj: float) -> float | None:
         """Lower is better. None means the plan is not admissible."""
+        lift_s = getattr(result, "lift_s", 0.0)
         if result.harvested_mj > self.harvest_cap_mj + 1e-6:
             return None
         if self.min_store_fraction > 0.0 and                 result.store_min_kj < STORE_CAPACITY_KJ * self.min_store_fraction - 1e-6:
@@ -88,8 +119,8 @@ class Objective:
             # store dominates and lap time only separates plans that bank the
             # same amount. Weighting time against energy instead just invents an
             # exchange rate that has no basis.
-            return -result.store_end_kj * 1000.0 + result.lap_time_s
-        return result.robust_time_s or result.lap_time_s
+            return -result.store_end_kj * 1000.0 + result.lap_time_s + lift_s
+        return (result.robust_time_s or result.lap_time_s) + lift_s
 
 
 def seed_splits(lap, profile, min_length_m: float = 60.0) -> list[fa26.Split]:
@@ -743,6 +774,9 @@ class Evaluator:
         self.approach = approach
         self._cache = {}
         self.evaluations = 0
+        self._no_ers = None
+        #: Whether lifting in sweepers is charged. See `optimise`.
+        self.charge_lifts = True
 
     def use_switches(self, switches) -> None:
         """Score from now on with only these switch points."""
@@ -769,7 +803,30 @@ class Evaluator:
             self._cache[key] = self._simulate(candidate)
         return [self._cache[k] for k in keys]
 
+    def _baseline(self) -> dict:
+        """The lifts no map can avoid: the lap with no deployment at all."""
+        if self._no_ers is None:
+            car, longitudinal, profile, powertrain, ds, start, cap, _settle = self._fixed
+            self._no_ers = sim26.simulate(
+                [], car, longitudinal, profile, powertrain, start_store_kj=start,
+                harvest_cap_kj=cap, ds=ds, settle=False,
+                reset_zones=self.reset_zones, speed_zones=self.speed_zones).lifts
+        return self._no_ers
+
+    def charge_for_lifts(self, on: bool) -> None:
+        if on != self.charge_lifts:
+            self.charge_lifts = on
+            self._cache = {}
+
     def _simulate(self, splits):
+        result = self._simulate_lap(splits)
+        result.lift_s = self._lift_s(result)
+        return result
+
+    def _lift_s(self, result) -> float:
+        return lift_cost_s(result, self._baseline()) if self.charge_lifts else 0.0
+
+    def _simulate_lap(self, splits):
         car, longitudinal, profile, powertrain, ds, start, cap, settle = self._fixed
         if self.approach is not None:
             return self._as_driven(splits)
@@ -809,7 +866,9 @@ class Evaluator:
         best = None
         for switch_m in self.approach.switches:
             result = self._entered(splits, switch_m, self.approach.store_kj)
-            if best is None or result.lap_time_s < best.lap_time_s:
+            result.lift_s = self._lift_s(result)
+            if best is None or (result.lap_time_s + result.lift_s
+                                < best.lap_time_s + best.lift_s):
                 best = result
         if self.charges:
             times = [best.lap_time_s] + [
@@ -992,6 +1051,142 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
              start_store_kj: float, max_sweeps: int = 8, ds: float = 2.5,
              extra_seeds=(), reset_zones=(), speed_zones=(), on_progress=None,
              coarse_ds: float = COARSE_DS, approach: "Approach | None" = None):
+    """The search below run twice, keeping the better. Same return as it.
+
+    Lifting in sweepers (`lift_cost_s`) has to be charged somewhere, and
+    neither place works alone. Charged throughout, the cost walls off the
+    paths the climbs take through maps that lift on the way to ones that do
+    not: Bathurst qualifying came out 0.27 s slower than a map that never
+    lifted at all, and Spa's race 0.33 s for 0.02 s of lifting avoided.
+    Charged only in the refinement, it is safe but timid: taking the lift out
+    of Sepang T5 means moving the energy to another part of the lap, which a
+    local refinement cannot do, and the race map kept its 18 kph lift. So both
+    are run and scored the same way, lifts included -- never worse than the
+    search that ignores lifts by more than its lifts cost, and able to make
+    the bigger moves when they pay. The two run side by side; see
+    `optimise_many`.
+    """
+    task = dict(splits=splits, car=car, longitudinal=longitudinal,
+                profile=profile, powertrain=powertrain, objective=objective,
+                start_store_kj=start_store_kj, max_sweeps=max_sweeps, ds=ds,
+                extra_seeds=extra_seeds, reset_zones=reset_zones,
+                speed_zones=speed_zones, coarse_ds=coarse_ds,
+                approach=approach)
+    return optimise_many([task], on_progress=on_progress)[0]
+
+
+#: Searches run at once, at most. Each is one process on one core.
+MAX_WORKERS = 8
+
+_PROGRESS = None                    # shared fractions, one per job, in a worker
+
+
+def _worker_init(progress) -> None:
+    global _PROGRESS
+    _PROGRESS = progress
+
+
+def _job(args):
+    index, task, blind = args
+
+    def report(fraction: float) -> None:
+        _PROGRESS[index] = fraction
+
+    return _optimise_once(**task, on_progress=report, blind_coarse=blind)
+
+
+def optimise_many(tasks, on_progress=None, workers: int | None = None):
+    """Several `optimise` searches at once, each on its own core.
+
+    `tasks` are `optimise`'s arguments as dicts, less `on_progress`; the
+    answer is one `(splits, result, evaluations)` per task, in order.
+
+    The search was single-threaded: qualifying, then race, each now searched
+    twice, one after the other on one core of an eight-core machine. The four
+    are independent -- the recharge map they depend on is built before any of
+    them -- so they run side by side and the wait is the longest of them
+    rather than the sum. Processes rather than threads, because the work is
+    pure Python and threads would queue on the interpreter lock.
+
+    `on_progress` gets the mean fraction across all of them and may raise to
+    abandon the lot, as the stop button does; the workers are killed then,
+    and nothing they were doing touched the disk.
+
+    Anything that stops the pool starting -- a machine that refuses new
+    processes -- falls back to running the searches here, one at a time.
+    """
+    jobs = [(2 * t + k, task, blind) for t, task in enumerate(tasks)
+            for k, blind in enumerate((True, False))]
+    if workers is None:
+        workers = min(len(jobs), MAX_WORKERS, os.cpu_count() or 1)
+    runs = None
+    if workers > 1:
+        runs = _run_in_pool(jobs, workers, on_progress)
+    if runs is None:
+        runs = []
+        for n, (index, task, blind) in enumerate(jobs):
+            progress = (None if on_progress is None else
+                        (lambda f, n=n: on_progress((n + f) / len(jobs))))
+            runs.append(_optimise_once(**task, on_progress=progress,
+                                       blind_coarse=blind))
+    out = []
+    for t, task in enumerate(tasks):
+        pair = runs[2 * t:2 * t + 2]
+        scored = [(task["objective"].score(r[1], task["start_store_kj"]), r)
+                  for r in pair]
+        admissible = [x for x in scored if x[0] is not None]
+        best = min(admissible, key=lambda x: x[0])[1] if admissible else pair[0]
+        out.append((best[0], best[1], sum(r[2] for r in pair)))
+    return out
+
+
+def _run_in_pool(jobs, workers, on_progress):
+    """The jobs on a process pool, or None if one cannot be started."""
+    import multiprocessing as mp
+    context = mp.get_context("spawn")
+    # A worker started this way first re-runs the script that started the
+    # program, unless it carries the usual `if __name__ == "__main__"` guard.
+    # The app does; `check_app.py` and every one-off script does not, and
+    # there each worker set about a solve of its own. The workers need
+    # nothing from that script -- only this module, found on the path they
+    # are handed -- so it is kept from them while they start. The built
+    # program never takes this path; `freeze_support` routes its workers.
+    main = sys.modules.get("__main__")
+    hidden = getattr(main, "__file__", None)
+    if hidden is not None and getattr(main, "__spec__", None) is None:
+        del main.__file__
+    else:
+        hidden = None
+    try:
+        progress = context.Array("d", len(jobs), lock=False)
+        pool = context.Pool(workers, initializer=_worker_init,
+                            initargs=(progress,))
+    except Exception:
+        return None
+    finally:
+        if hidden is not None:
+            main.__file__ = hidden
+    try:
+        pending = pool.map_async(_job, jobs, chunksize=1)
+        while not pending.ready():
+            pending.wait(0.25)
+            if on_progress is not None:
+                on_progress(sum(progress) / len(jobs))
+        runs = pending.get()
+        pool.close()
+        return runs
+    finally:
+        pool.terminate()
+        pool.join()
+
+
+def _optimise_once(splits, car, longitudinal, profile, powertrain,
+                   objective: Objective, start_store_kj: float,
+                   max_sweeps: int = 8, ds: float = 2.5, extra_seeds=(),
+                   reset_zones=(), speed_zones=(), on_progress=None,
+                   coarse_ds: float = COARSE_DS,
+                   approach: "Approach | None" = None,
+                   blind_coarse: bool = True):
     """Solve coarse, subdivide the answer, then refine. Returns (splits, result, evals).
 
     With an `approach`, every map is scored as it will be driven -- entered off
@@ -1046,6 +1241,10 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
                            start_store_kj, cap_kj, settle, reset_zones,
                            speed_zones, charges, approach=approach))
     authored = [list(extra) for extra in extra_seeds]
+    # `blind_coarse` leaves lifting uncharged until there is an answer to
+    # refine; see `optimise` for why it is run both ways.
+    evaluator.charge_for_lifts(not blind_coarse)
+    fine.charge_for_lifts(not blind_coarse)
 
     def choose_switch(evaluator_, candidates) -> None:
         """Hold the switch point the best of these candidates wants."""
@@ -1056,7 +1255,8 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
             [ensure_live_exit(sanitise(s, profile), profile) for s in c],
             profile, evaluator_.reset_zones) for c in candidates]
         results = evaluator_.many(ready)
-        best = min(results, key=lambda r: r.robust_time_s or r.lap_time_s)
+        best = min(results, key=lambda r: (r.robust_time_s or r.lap_time_s)
+                   + getattr(r, "lift_s", 0.0))
         evaluator_.use_switches((best.switch_m,))
 
     choose_switch(evaluator, [splits] + authored)
@@ -1132,6 +1332,7 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
         coarse, result = _climb(
             splits, evaluator, profile, objective, start_store_kj, max_sweeps)
 
+    fine.charge_for_lifts(True)
     # The switch point the coarse answer wants, before it is refined.
     if coarse is not None:
         choose_switch(fine, [coarse])
