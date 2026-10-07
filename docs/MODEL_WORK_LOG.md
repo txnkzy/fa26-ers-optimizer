@@ -2374,3 +2374,23 @@ qualifying and race together. Same maps, one solve at a time on a 9850X3D:
 
 Each search alone is 70-75 s at Spa, so the wait is now the longest one plus
 reading the laps and fitting the car.
+
+### How much the search leaves, and shaking the answer
+
+Measured against restarts on the sixteen circuits (each restart one start
+taken through the full climb and refinement, scored as the app scores): the
+search was within 0.05 s on 25 maps of 32 and short by 0.06-0.46 s on seven,
+mean 0.046 s. The biggest -- Monza race 0.46 s, a super-clip zone after the
+first chicane paying for 1.3 MJ more deployment -- were several changes
+away from the answer, where a one-change climb cannot go.
+
+`optimise_many` now shakes the finished answer and climbs again on spare
+cores, keeping a shaken map only if it scores better. With 8 shakes per map:
+none worse, 5 better by more than 0.05 s (Spa race -0.12, Barcelona race
+-0.11, Hungaroring race -0.10, Monza race -0.08, Monaco race -0.05), mean
+-0.023 s, for 35-55 s more per solve. Monza's full 0.46 s and Austin's
+0.19 s were found from other starting points and are not reached this way;
+random restarts added about 0.1 s at Albert Park qualifying and nothing
+elsewhere, so they were not added. Shipped with 4 shakes (`SHAKES`), which
+fit both maps' shakes on eight cores in one round; the 4-shake figures are
+not separately measured.

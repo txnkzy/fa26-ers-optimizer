@@ -13,6 +13,7 @@ as well makes the search far larger for little gain.
 from __future__ import annotations
 
 import os
+import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -1075,8 +1076,14 @@ def optimise(splits, car, longitudinal, profile, powertrain, objective: Objectiv
     return optimise_many([task], on_progress=on_progress)[0]
 
 
-#: Searches run at once, at most. Each is one process on one core.
-MAX_WORKERS = 8
+#: Searches run at once, at most: every core the machine offers.
+MAX_WORKERS = os.cpu_count() or 1
+
+#: Restarts from the finished answer, shaken, per map -- see `optimise_many`.
+SHAKES = 4
+
+#: Share of a map's splits each shake disturbs.
+SHAKE_SHARE = 0.35
 
 _PROGRESS = None                    # shared fractions, one per job, in a worker
 
@@ -1087,12 +1094,37 @@ def _worker_init(progress) -> None:
 
 
 def _job(args):
-    index, task, blind = args
+    index, task, blind, restart = args
 
     def report(fraction: float) -> None:
         _PROGRESS[index] = fraction
 
-    return _optimise_once(**task, on_progress=report, blind_coarse=blind)
+    return _optimise_once(**task, on_progress=report, blind_coarse=blind,
+                          restart=restart)
+
+
+def _shaken(splits, rng, profile, reset_zones):
+    """The map with about a third of its splits disturbed: power a step or
+    two either way, the end of deployment moved by up to a fifth."""
+    out = []
+    for split in splits:
+        if rng.random() < SHAKE_SHARE:
+            span = max(split.end_m - split.start_m, 1)
+            level = min(range(len(POWERS)),
+                        key=lambda k: abs(POWERS[k] - split.deploy_kw))
+            level = max(0, min(len(POWERS) - 1,
+                               level + rng.choice((-2, -1, 1, 2))))
+            end = int(min(split.end_m, max(
+                split.start_m,
+                split.deploy_end_m + rng.uniform(-0.2, 0.2) * span)))
+            clip_start = (max(end, min(split.clip_start_m, split.end_m))
+                          if split.clip_kw else split.end_m)
+            split = fa26.Split(split.start_m, end, clip_start, split.end_m,
+                               int(POWERS[level]), split.clip_kw)
+        out.append(split)
+    return make_executable(
+        [ensure_live_exit(sanitise(s, profile), profile) for s in out],
+        profile, tuple(tuple(z) for z in reset_zones))
 
 
 def optimise_many(tasks, on_progress=None, workers: int | None = None):
@@ -1108,76 +1140,126 @@ def optimise_many(tasks, on_progress=None, workers: int | None = None):
     rather than the sum. Processes rather than threads, because the work is
     pure Python and threads would queue on the interpreter lock.
 
-    `on_progress` gets the mean fraction across all of them and may raise to
-    abandon the lot, as the stop button does; the workers are killed then,
-    and nothing they were doing touched the disk.
+    Then the answer is shaken. A hill climb stops at the first map no single
+    change improves, and some better maps are several changes away: Monza's
+    race map is 0.46 s quicker with a super-clip zone after the first chicane
+    that pays for 1.3 MJ more deployment, and no one step reaches it. Against
+    restarts on sixteen circuits the search was within 0.05 s on 25 maps of
+    32 and short by 0.08-0.46 s on the other seven, and most of that was
+    found by disturbing the finished map at random and climbing again --
+    which is what this does, `SHAKES` times per map on spare cores. The
+    answer only changes for one that scores better, so it cannot get worse,
+    and the shakes are seeded, so a solve gives the same answer twice.
+
+    `on_progress` gets the fraction done and may raise to abandon the lot,
+    as the stop button does; the workers are killed then, and nothing they
+    were doing touched the disk.
 
     Anything that stops the pool starting -- a machine that refuses new
-    processes -- falls back to running the searches here, one at a time.
+    processes -- falls back to running everything here, one at a time.
     """
-    jobs = [(2 * t + k, task, blind) for t, task in enumerate(tasks)
-            for k, blind in enumerate((True, False))]
+    first = [(2 * t + k, task, blind, False) for t, task in enumerate(tasks)
+             for k, blind in enumerate((True, False))]
+    size = len(tasks) * max(2, SHAKES)
     if workers is None:
-        workers = min(len(jobs), MAX_WORKERS, os.cpu_count() or 1)
-    runs = None
-    if workers > 1:
-        runs = _run_in_pool(jobs, workers, on_progress)
-    if runs is None:
-        runs = []
-        for n, (index, task, blind) in enumerate(jobs):
-            progress = (None if on_progress is None else
-                        (lambda f, n=n: on_progress((n + f) / len(jobs))))
-            runs.append(_optimise_once(**task, on_progress=progress,
-                                       blind_coarse=blind))
+        workers = min(size, MAX_WORKERS)
+    with _Runner(workers, size, on_progress) as runner:
+        runs = runner.run(first, 0.0, 0.7)
+        best = [_better(task, runs[2 * t:2 * t + 2])
+                for t, task in enumerate(tasks)]
+        second = []
+        for t, task in enumerate(tasks):
+            rng = random.Random(t)
+            for k in range(SHAKES):
+                start = _shaken(best[t][0], rng, task["profile"],
+                                task["reset_zones"])
+                second.append((t * SHAKES + k,
+                               dict(task, splits=start, extra_seeds=()),
+                               k % 2 == 0, True))
+        shaken = runner.run(second, 0.7, 1.0) if second else []
     out = []
     for t, task in enumerate(tasks):
-        pair = runs[2 * t:2 * t + 2]
-        scored = [(task["objective"].score(r[1], task["start_store_kj"]), r)
-                  for r in pair]
-        admissible = [x for x in scored if x[0] is not None]
-        best = min(admissible, key=lambda x: x[0])[1] if admissible else pair[0]
-        out.append((best[0], best[1], sum(r[2] for r in pair)))
+        mine = shaken[t * SHAKES:(t + 1) * SHAKES]
+        pick = _better(task, [best[t]] + mine)
+        out.append((pick[0], pick[1],
+                    sum(r[2] for r in runs[2 * t:2 * t + 2] + mine)))
     return out
 
 
-def _run_in_pool(jobs, workers, on_progress):
-    """The jobs on a process pool, or None if one cannot be started."""
-    import multiprocessing as mp
-    context = mp.get_context("spawn")
-    # A worker started this way first re-runs the script that started the
-    # program, unless it carries the usual `if __name__ == "__main__"` guard.
-    # The app does; `check_app.py` and every one-off script does not, and
-    # there each worker set about a solve of its own. The workers need
-    # nothing from that script -- only this module, found on the path they
-    # are handed -- so it is kept from them while they start. The built
-    # program never takes this path; `freeze_support` routes its workers.
-    main = sys.modules.get("__main__")
-    hidden = getattr(main, "__file__", None)
-    if hidden is not None and getattr(main, "__spec__", None) is None:
-        del main.__file__
-    else:
-        hidden = None
-    try:
-        progress = context.Array("d", len(jobs), lock=False)
-        pool = context.Pool(workers, initializer=_worker_init,
-                            initargs=(progress,))
-    except Exception:
-        return None
-    finally:
-        if hidden is not None:
-            main.__file__ = hidden
-    try:
-        pending = pool.map_async(_job, jobs, chunksize=1)
+def _better(task, runs):
+    """The best-scoring of these runs, the first if none is admissible."""
+    scored = [(task["objective"].score(r[1], task["start_store_kj"]), r)
+              for r in runs]
+    admissible = [x for x in scored if x[0] is not None]
+    return min(admissible, key=lambda x: x[0])[1] if admissible else runs[0]
+
+
+class _Runner:
+    """A process pool kept for both stages, or this process if none starts."""
+
+    def __init__(self, workers, size, on_progress):
+        self.on_progress = on_progress
+        self.pool = self.progress = None
+        if workers > 1:
+            self._start(workers, size)
+
+    def _start(self, workers, size):
+        import multiprocessing as mp
+        context = mp.get_context("spawn")
+        # A worker started this way first re-runs the script that started
+        # the program, unless it carries the usual `if __name__ ==
+        # "__main__"` guard. The app does; `check_app.py` and every one-off
+        # script does not, and there each worker set about a solve of its
+        # own. The workers need nothing from that script -- only this
+        # module, found on the path they are handed -- so it is kept from
+        # them while they start. The built program never takes this path;
+        # `freeze_support` routes its workers.
+        main = sys.modules.get("__main__")
+        hidden = getattr(main, "__file__", None)
+        if hidden is not None and getattr(main, "__spec__", None) is None:
+            del main.__file__
+        else:
+            hidden = None
+        try:
+            self.progress = context.Array("d", size, lock=False)
+            self.pool = context.Pool(workers, initializer=_worker_init,
+                                     initargs=(self.progress,))
+        except Exception:
+            self.pool = self.progress = None
+        finally:
+            if hidden is not None:
+                main.__file__ = hidden
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        if self.pool is not None:
+            self.pool.terminate()
+            self.pool.join()
+        return False
+
+    def _report(self, lo, hi, fraction):
+        if self.on_progress is not None:
+            self.on_progress(lo + (hi - lo) * fraction)
+
+    def run(self, jobs, lo, hi):
+        if self.pool is None:
+            out = []
+            for n, (_index, task, blind, restart) in enumerate(jobs):
+                out.append(_optimise_once(
+                    **task, blind_coarse=blind, restart=restart,
+                    on_progress=lambda f, n=n: self._report(
+                        lo, hi, (n + f) / len(jobs))))
+            return out
+        for i in range(len(self.progress)):
+            self.progress[i] = 0.0
+        pending = self.pool.map_async(_job, jobs, chunksize=1)
         while not pending.ready():
             pending.wait(0.25)
-            if on_progress is not None:
-                on_progress(sum(progress) / len(jobs))
-        runs = pending.get()
-        pool.close()
-        return runs
-    finally:
-        pool.terminate()
-        pool.join()
+            done = sum(self.progress[j[0]] for j in jobs) / len(jobs)
+            self._report(lo, hi, done)
+        return pending.get()
 
 
 def _optimise_once(splits, car, longitudinal, profile, powertrain,
@@ -1186,7 +1268,7 @@ def _optimise_once(splits, car, longitudinal, profile, powertrain,
                    reset_zones=(), speed_zones=(), on_progress=None,
                    coarse_ds: float = COARSE_DS,
                    approach: "Approach | None" = None,
-                   blind_coarse: bool = True):
+                   blind_coarse: bool = True, restart: bool = False):
     """Solve coarse, subdivide the answer, then refine. Returns (splits, result, evals).
 
     With an `approach`, every map is scored as it will be driven -- entered off
@@ -1266,7 +1348,8 @@ def _optimise_once(splits, car, longitudinal, profile, powertrain,
     # cost less than a tenth of one climb -- which is what makes it affordable
     # to enumerate shapes rather than name them as they are found.
     screened = []
-    family = _family(splits, profile)
+    # A restart climbs only the map it was handed; see `optimise_many`.
+    family = [] if restart else _family(splits, profile)
     if family:
         prepared = [make_executable(
             [ensure_live_exit(sanitise(s, profile), profile) for s in candidate],
@@ -1282,7 +1365,8 @@ def _optimise_once(splits, car, longitudinal, profile, powertrain,
     fixed = [make_executable(
         [ensure_live_exit(sanitise(s, profile), profile) for s in candidate],
         profile, evaluator.reset_zones)
-        for candidate in _always_climb(splits, profile, objective)]
+        for candidate in ([] if restart else
+                          _always_climb(splits, profile, objective))]
     seen = {_key(c) for c in screened}
     starts = ([splits] + authored + screened
               + [c for c in fixed if _key(c) not in seen])
