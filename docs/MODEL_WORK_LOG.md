@@ -2359,3 +2359,18 @@ The lifts left at most circuits are the driver's own line: the lap with no
 deployment has them too, so no map can take them out. Validation is
 unchanged by construction -- the simulated lap is the same -- and
 `check_app.py` passes.
+
+### Searching on every core
+
+The solve ran on one core: qualifying, then race, and with the lift cost
+each searched twice. The four searches are independent, so
+`optimise26.optimise_many` runs them on worker processes and the app starts
+qualifying and race together. Same maps, one solve at a time on a 9850X3D:
+
+| | before (one core, no lift cost) | now (four searches, in parallel) |
+|---|---|---|
+| Sepang | 81 s | 67 s |
+| Spa | 153 s | 101 s |
+
+Each search alone is 70-75 s at Spa, so the wait is now the longest one plus
+reading the laps and fitting the car.
