@@ -78,6 +78,10 @@ class Attribution:
         return bool(self.splits)
 
 
+#: Why a lap driven with SoC Adaptation on is not attributed to a map.
+ADAPTED = "SoC Adaptation was on, so the car was changing the map as it drove"
+
+
 def read_sidecar(lap_path) -> dict | None:
     """The maps the logger wrote beside this lap, or None if it wrote none.
 
@@ -199,6 +203,19 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
     # the logger recorded the map with the lap there is nothing to decide:
     # this is the map, and no snapshot is consulted at all.
     recorded = read_sidecar(getattr(lap, "path", None) or "")
+
+    # Unless the car was rewriting it. With SoC Adaptation on, the ECU moves
+    # the splits and the base regen as it drives, so the map in the file is
+    # where the car started, not what it drove. Such a lap says nothing about
+    # whether the model follows a map, and is left out.
+    if recorded and recorded["setup_file"] and item_map:
+        try:
+            text = Path(recorded["setup_file"]).read_text(
+                encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        if text and fa26.soc_adaptation_on(text, item_map, strat):
+            return Attribution([], strat, 0.0, "", ADAPTED)
     if recorded and recorded["maps"].get(strat):
         splits = recorded["maps"][strat]
         _fit, _null, skill = fa26.map_fit(lap, splits)
@@ -242,6 +259,8 @@ def attribute(lap, snapshots, item_map, strat: int | None = None) -> Attribution
     for snap in snapshots:
         try:
             text = Path(snap).read_text(encoding="utf-8", errors="replace")
+            if fa26.soc_adaptation_on(text, item_map, strat):
+                continue
             splits = fa26.strat_map(text, item_map, strat)
         except Exception:
             continue

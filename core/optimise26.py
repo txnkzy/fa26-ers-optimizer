@@ -98,6 +98,11 @@ class Objective:
     #: What it does cost is a lap arrived at with half the planned charge:
     #: +0.08 to +0.66 s, once, before the store settles again.
     min_store_fraction: float = 0.0
+    #: With `energy_neutral`, what the lap must end with relative to what it
+    #: started with, in kJ: negative spends that much of the battery a lap,
+    #: positive banks it. The attack, defend, push and save maps, each matched
+    #: to the car's own SoC Target for its strat.
+    store_delta_kj: float = 0.0
 
     def score(self, result, start_store_kj: float) -> float | None:
         """Lower is better. None means the plan is not admissible."""
@@ -106,7 +111,8 @@ class Objective:
             return None
         if self.min_store_fraction > 0.0 and                 result.store_min_kj < STORE_CAPACITY_KJ * self.min_store_fraction - 1e-6:
             return None
-        if self.energy_neutral and                 result.store_end_kj < result.store_start_kj - 1e-6:
+        if self.energy_neutral and (result.store_end_kj < result.store_start_kj
+                                    + self.store_delta_kj - 1e-6):
             # Neutrality must hold across the measured lap, not against the
             # charge the driver happened to be carrying. Anchoring it to the
             # recorded value pinned a Monza race lap at 99% full, where there
@@ -1127,7 +1133,32 @@ def _shaken(splits, rng, profile, reset_zones):
         profile, tuple(tuple(z) for z in reset_zones))
 
 
-def optimise_many(tasks, on_progress=None, workers: int | None = None):
+def _soften(splits, evaluator, profile, objective: Objective,
+            start_store_kj: float):
+    """A restart's map, with every deployment a step lower until it is allowed.
+
+    A climb handed a map its objective refuses strips it to nothing and starts
+    again, which is right for a guess and wrong for a map derived from the
+    race answer: the save map starts from a race map that ends the lap level
+    rather than ahead, and stripping it threw the race map's shape away.
+    Stepping the power down keeps the shape and finds the nearest map that
+    banks enough.
+    """
+    current = make_executable(
+        [ensure_live_exit(sanitise(s, profile), profile) for s in splits],
+        profile, evaluator.reset_zones)
+    for _ in range(len(POWERS)):
+        if objective.score(evaluator.one(current), start_store_kj) is not None:
+            return current
+        lower = [_less_deploy(s) or s for s in current]
+        if lower == current:
+            break
+        current = make_executable(lower, profile, evaluator.reset_zones)
+    return splits
+
+
+def optimise_many(tasks, on_progress=None, workers: int | None = None,
+                  derived=()):
     """Several `optimise` searches at once, each on its own core.
 
     `tasks` are `optimise`'s arguments as dicts, less `on_progress`; the
@@ -1155,12 +1186,19 @@ def optimise_many(tasks, on_progress=None, workers: int | None = None):
     as the stop button does; the workers are killed then, and nothing they
     were doing touched the disk.
 
+    `derived` are `(parent, task)` pairs: maps worked out from another
+    task's answer rather than searched from scratch -- the attack, defend,
+    push and save maps, which are the race map with a different energy
+    budget. Each is climbed twice from its parent's answer, once as it is and
+    once shaken, alongside the shakes and on the same cores, so they add
+    little to the wait. Their answers follow the tasks' in the result.
+
     Anything that stops the pool starting -- a machine that refuses new
     processes -- falls back to running everything here, one at a time.
     """
     first = [(2 * t + k, task, blind, False) for t, task in enumerate(tasks)
              for k, blind in enumerate((True, False))]
-    size = len(tasks) * max(2, SHAKES)
+    size = len(tasks) * max(2, SHAKES) + 3 * len(derived)
     if workers is None:
         workers = min(size, MAX_WORKERS)
     with _Runner(workers, size, on_progress) as runner:
@@ -1176,14 +1214,68 @@ def optimise_many(tasks, on_progress=None, workers: int | None = None):
                 second.append((t * SHAKES + k,
                                dict(task, splits=start, extra_seeds=()),
                                k % 2 == 0, True))
-        shaken = runner.run(second, 0.7, 1.0) if second else []
+        base = len(tasks) * SHAKES
+        for d, (parent, task) in enumerate(derived):
+            rng = random.Random(100 + d)
+            seed = best[parent][0]
+            for k, start in enumerate((
+                    seed, _shaken(seed, rng, task["profile"],
+                                  task["reset_zones"]))):
+                second.append((base + 2 * d + k,
+                               dict(task, splits=start, extra_seeds=()),
+                               k == 0, True))
+        shaken = runner.run(second, 0.7, 0.9) if second else []
+        # Each derived map against every other one, under its own rules. A
+        # neutral map is a legal defend map -- it simply leaves the extra
+        # 0.4 MJ unspent -- yet Sepang's defend climb finished 0.12 s behind
+        # it. Where another map scores better, it is climbed once more, so
+        # it can spend what its new budget allows.
+        base = len(tasks) * SHAKES
+        own = [_better(task, shaken[base + 2 * d:base + 2 * d + 2])
+               for d, (_parent, task) in enumerate(derived)]
+        third, borrowed = [], {}
+        for d, (_parent, task) in enumerate(derived):
+            judge = _judge(task)
+            mine = task["objective"].score(judge.one(own[d][0]),
+                                           task["start_store_kj"])
+            for e, other in enumerate(own):
+                if e == d:
+                    continue
+                result = judge.one(other[0])
+                theirs = task["objective"].score(result, task["start_store_kj"])
+                if theirs is not None and (mine is None or theirs < mine - 1e-4):
+                    # Kept as a candidate in its own right: a climb can
+                    # finish behind where it started, and did here.
+                    mine, borrowed[d] = theirs, (other[0], result, 0)
+            if d in borrowed:
+                third.append((len(third), dict(task, splits=borrowed[d][0],
+                                               extra_seeds=()), False, True))
+        polished = runner.run(third, 0.9, 1.0) if third else []
     out = []
     for t, task in enumerate(tasks):
         mine = shaken[t * SHAKES:(t + 1) * SHAKES]
         pick = _better(task, [best[t]] + mine)
         out.append((pick[0], pick[1],
                     sum(r[2] for r in runs[2 * t:2 * t + 2] + mine)))
+    extra = dict(zip(sorted(borrowed), polished))
+    for d, (_parent, task) in enumerate(derived):
+        mine = shaken[base + 2 * d:base + 2 * d + 2] + (
+            [borrowed[d], extra[d]] if d in extra else [])
+        pick = _better(task, mine)
+        out.append((pick[0], pick[1], sum(r[2] for r in mine)))
     return out
+
+
+def _judge(task):
+    """An evaluator scoring maps exactly as a finished search scores them."""
+    objective = task["objective"]
+    return Evaluator(
+        task["car"], task["longitudinal"], task["profile"], task["powertrain"],
+        task.get("ds", 2.5), task["start_store_kj"],
+        objective.harvest_cap_mj * 1000, not objective.one_shot,
+        task["reset_zones"], task["speed_zones"],
+        tuple(f * STORE_CAPACITY_KJ for f in objective.charge_fractions),
+        approach=task.get("approach"))
 
 
 def _better(task, runs):
@@ -1327,6 +1419,8 @@ def _optimise_once(splits, car, longitudinal, profile, powertrain,
     # refine; see `optimise` for why it is run both ways.
     evaluator.charge_for_lifts(not blind_coarse)
     fine.charge_for_lifts(not blind_coarse)
+    if restart:
+        splits = _soften(splits, evaluator, profile, objective, start_store_kj)
 
     def choose_switch(evaluator_, candidates) -> None:
         """Hold the switch point the best of these candidates wants."""

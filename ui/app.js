@@ -1005,7 +1005,10 @@ function card(s) {
   node.dataset.strat = s.strat;
 
   const head = el("div", "card-head");
-  head.append(el("span", "chip", "STRAT " + s.strat),
+  // The mode names are what the driver reaches for on the wheel; the strat
+  // number is what the setup screen shows.
+  const modes = (s.modes || []).join(" / ");
+  head.append(el("span", "chip", (modes ? modes + " · " : "") + "STRAT " + s.strat),
               el("span", "card-name", s.label),
               el("span", "card-time", s.lap));
   head.append(el("span", "card-delta " + (s.delta_s < 0 ? "gain" : "loss"),

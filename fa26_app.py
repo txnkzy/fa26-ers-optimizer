@@ -98,6 +98,35 @@ STRATEGIES = [
     ("Recharge", 3, "race", False, False),
 ]
 
+#: The race map again, for the other PU modes, with a different energy
+#: budget: label, strat, SoC Target (% of the battery per lap), and whether it
+#: is planned with Overtake active. The manual's own example of what modes
+#: are for (p.22) is a neutral race strat in RACE and, in AD, "a different
+#: strat with higher regen and more deployment to make use of Overtake".
+#: Attack has Overtake, being within a second of the car ahead; Defend does
+#: not, because the car behind has it. Each is planned for the same target
+#: the car is told to chase with SoC Adaptation.
+RACE_VARIANTS = [
+    ("Attack", 4, -10, True),
+    ("Defend", 5, -10, False),
+    ("Push", 6, -20, False),
+    ("Save", 7, 10, False),
+]
+
+#: Which strat each PU mode selects. SC, the safety car, recharges. Modes not
+#: named keep their override off, so the STRAT rotary decides there -- which
+#: is where a test of one map against another belongs.
+MODE_STRATS = {"Q": 1, "RACE": 2, "SLO": 3, "SC": 3,
+               "AD1": 4, "AD2": 5, "K2": 6, "ES": 7}
+
+#: SoC Target per strat for the ones that run SoC Adaptation: the race family.
+#: Qualifying and recharge keep it off, as VRC recommends for qualifying.
+SOC_TARGETS = {2: 0, **{strat: pct for _l, strat, pct, _o in RACE_VARIANTS}}
+
+
+def modes_for(strat: int) -> list[str]:
+    return [m for m, s in MODE_STRATS.items() if s == strat]
+
 #: Which map the written setup opens on. The picker for this was removed --
 #: it is an ordinary setup item, changeable in the pit screen, and anyone
 #: using this already knows 1 is qualifying. Qualifying is the one worth
@@ -1493,21 +1522,62 @@ class Engine:
         self.enter("search")
         self.say("Working out the %s maps…"
                  % " and ".join(e[0].lower() for e in searched))
-        answers = dict(zip([e[1] for e in searched], optimise26.optimise_many(
-            [dict(splits=seed, car=car, longitudinal=cal, profile=profile,
-                  powertrain=powertrain_for(strat_no),
-                  objective=objective_for(label, strat_no, session, neutral,
-                                          one_shot),
-                  start_store_kj=optimise26.starting_store_kj(
-                      lap, kind_of(strat_no)),
-                  extra_seeds=reference, reset_zones=zones_for(strat_no),
-                  speed_zones=speed_zones,
-                  approach=approach if one_shot else None)
-             for label, strat_no, session, neutral, one_shot in searched],
-            on_progress=self.tick)))
+        objectives = {strat_no: objective_for(label, strat_no, session,
+                                              neutral, one_shot)
+                      for label, strat_no, session, neutral, one_shot
+                      in STRATEGIES}
+        powertrains = {strat_no: powertrain_for(strat_no)
+                       for _l, strat_no, _s, _n, _o in STRATEGIES}
+        starts = {strat_no: optimise26.starting_store_kj(lap, kind_of(strat_no))
+                  for _l, strat_no, _s, _n, _o in STRATEGIES}
+        # The other modes' maps: the race map with another energy budget,
+        # climbed from the race answer rather than searched from scratch.
+        # Each is one lap from half charge, not a settled one. A lap that
+        # spends from the battery does not repeat, and settling first drained
+        # Sepang's attack map from 80% to 5% before the lap it was judged on.
+        # Half charge, not more: from 80% the battery filled part way round
+        # and threw recovery away, and the save map came out quicker than the
+        # attack map. And all of them from the same charge, plus a neutral
+        # map from it too, because the race map is not one to compare
+        # against: it is planned around an empty battery, which is what
+        # holds it to neutral -- given 3.2 MJ, it spends all of it in a lap.
+        # The neutral one is only the yardstick for "this much quicker a
+        # lap"; it is not written.
+        variants = RACE_VARIANTS + [("Neutral", 0, 0, False)]
+        for label, strat_no, pct, overtake in variants:
+            cap = 99.0 if unlimited else alloc.mj(
+                "race_overtake" if overtake else "race")
+            objectives[strat_no] = optimise26.Objective(
+                name=label, harvest_cap_mj=cap, energy_neutral=True,
+                one_shot=True,
+                store_delta_kj=pct / 100.0 * laplib.STORE_CAPACITY_KJ)
+            powertrains[strat_no] = (fa26.Powertrain(taper=taper_for(1))
+                                     if overtake else powertrain_for(2))
+            starts[strat_no] = laplib.STORE_CAPACITY_KJ * 0.5
+
+        def task_for(strat_no, splits_, seeds):
+            return dict(splits=splits_, car=car, longitudinal=cal,
+                        profile=profile, powertrain=powertrains[strat_no],
+                        objective=objectives[strat_no],
+                        start_store_kj=starts[strat_no], extra_seeds=seeds,
+                        reset_zones=zones_for(strat_no or 2),
+                        speed_zones=speed_zones,
+                        approach=approach if strat_no == 1 else None)
+
+        race_at = [e[1] for e in searched].index(2)
+        found = optimise26.optimise_many(
+            [task_for(e[1], seed, reference) for e in searched],
+            on_progress=self.tick,
+            derived=[(race_at, task_for(v[1], seed, ()))
+                     for v in variants])
+        answers = dict(zip([e[1] for e in searched]
+                           + [v[1] for v in variants], found))
+        self.neutral = answers.pop(0)[1]
         self.tick(1.0)
 
-        for label, strat_no, session, neutral, one_shot in STRATEGIES:
+        entries = STRATEGIES + [(label, strat_no, "race", True, False)
+                                for label, strat_no, _p, _o in RACE_VARIANTS]
+        for label, strat_no, session, neutral, one_shot in entries:
             kind = kind_of(strat_no)
             self.check()
             if strat_no == 3:
@@ -1521,15 +1591,14 @@ class Engine:
             # leaves that item as the driver set it, so a lap that
             # demonstrably harvested more than the table allows is taken as
             # proof of the real limit.
-            objective = objective_for(label, strat_no, session, neutral, one_shot)
+            objective = objectives[strat_no]
             cap = objective.harvest_cap_mj
             if not unlimited and harvested > cap + 0.2 and strat_no == 1:
                 self.note("These laps recovered more than qualifying allows. "
                           "Practice is more generous — set Power and Energy "
                           "Limits to Qualify in the setup, or drive in a "
                           "Qualify session, to match this plan.")
-            powertrain = powertrain_for(strat_no)
-            start_store = optimise26.starting_store_kj(lap, kind)
+            powertrain = powertrains[strat_no]
             if strat_no == 3:
                 # Built before the loop -- see above.
                 splits, result = recharge_built
@@ -1541,6 +1610,8 @@ class Engine:
 
             notes = self._describe(label, strat_no, result, splits, lap, cal,
                                    profile, zones_for(strat_no), cap)
+            if strat_no in SOC_TARGETS and strat_no != 2:
+                notes = self._budget_note(strat_no, result) + notes
             spread = optimise26.sensitivity(
                 splits, car, cal, profile, powertrain, objective)
             self.check()
@@ -1562,6 +1633,8 @@ class Engine:
                 self.summary.append({
                     "label": label,
                     "strat": strat_no,
+                    "modes": modes_for(strat_no),
+                    "soc_target": SOC_TARGETS.get(strat_no),
                     "lap": clock(result.lap_time_s),
                     "lap_s": result.lap_time_s,
                     "delta_s": result.lap_time_s - lap.lap_time_s,
@@ -1983,6 +2056,34 @@ class Engine:
         return found[: self.MAX_REFERENCE_SEEDS]
 
     # ---------------------------------------------------------------- apply
+    def _budget_note(self, strat_no: int, result) -> list[str]:
+        """What a mode's map does to the battery, and what it buys."""
+        pct = SOC_TARGETS[strat_no]
+        # What the map was found to do, which can fall short of the target:
+        # a map that spends less and is quicker beats one that spends it all.
+        # The car's SoC Adaptation closes the rest on track.
+        net = (result.store_end_kj - result.store_start_kj) / 1000.0
+        per_lap = max(abs(net), 0.05)
+        full = laplib.STORE_CAPACITY_KJ / 1000.0
+        modes = " or ".join(modes_for(strat_no)) or "STRAT %d" % strat_no
+        # Against a neutral map from the same charge, not the race map: see
+        # `_solve`. That one is planned around an empty battery.
+        gain = ""
+        neutral = getattr(self, "neutral", None)
+        if neutral is not None:
+            d = result.lap_time_s - neutral.lap_time_s
+            gain = (" %.2fs a lap %s than staying neutral."
+                    % (abs(d), "quicker" if d < 0 else "slower"))
+        target = "SoC Target %+d%%" % pct
+        if net < 0:
+            return ["%s: spends %.2f MJ of the battery a lap, so about %d "
+                    "laps from full (%s).%s" % (modes, per_lap,
+                                                int(full / per_lap), target,
+                                                gain)]
+        return ["%s: banks %.2f MJ a lap, so empty to full in about %d "
+                "laps (%s).%s" % (modes, per_lap, round(full / per_lap),
+                                  target, gain)]
+
     def apply(self, setup_path: str, write_alloc: bool) -> dict:
         if not self.results:
             raise RuntimeError("nothing to apply -- run the optimiser first")
@@ -1993,6 +2094,10 @@ class Engine:
             self.lap.length_m,
             allocation=self.alloc if write_alloc else None,
             active=DEFAULT_ACTIVE,
+            modes={m: n for m, n in MODE_STRATS.items()
+                   if any(n == r[1] for r in self.results)},
+            soc={n: t for n, t in SOC_TARGETS.items()
+                 if any(n == r[1] for r in self.results)},
             # Keep a dated copy of the written setup beside the telemetry.
             # Without one there is no way to tell afterwards which map a
             # recorded lap was driven on, because this overwrites the setup in

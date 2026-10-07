@@ -2394,3 +2394,48 @@ random restarts added about 0.1 s at Albert Park qualifying and nothing
 elsewhere, so they were not added. Shipped with 4 shakes (`SHAKES`), which
 fit both maps' shakes on eight cores in one round; the 4-shake figures are
 not separately measured.
+
+### PU modes and SoC Adaptation
+
+The manual (p.10, p.22-23): PU modes are presets that can each force a strat;
+each strat has an SoC Target, the lap-to-lap charge change, and SoC
+Adaptation, which lets the ECU move the splits and base regen as it drives
+to hit it (recommended for race stints, off for qualifying). In a race,
+Overtake comes with being within a second of the car ahead: the Overtake
+curve, and 0.5 MJ more recovery that lap.
+
+What the app writes now:
+
+| mode | strat | map | SoC Target | adaptation |
+|---|---|---|---|---|
+| Q | 1 | qualifying | 0 | off |
+| RACE | 2 | race | 0% | on |
+| SLO, SC | 3 | recharge | 0 | off |
+| AD1 | 4 | attack: Overtake curve, race+OT allowance | -10% | on |
+| AD2 | 5 | defend: no Overtake | -10% | on |
+| K2 | 6 | push | -20% | on |
+| ES | 7 | save | +10% | on |
+
+FS, FW, IN, K2+, T4 and RS keep their override off, so the STRAT rotary
+decides in them -- the place for testing one map against another.
+
+The four new maps are the race map with another budget, climbed from the
+race answer (`optimise_many(derived=...)`) on the cores the shakes leave
+free, each over one lap from half charge with a neutral map from the same
+charge as the yardstick. Three things had to be right for that:
+
+* **Not settled.** Settling drained the attack map from 80% to 5% before
+  the lap it was judged on.
+* **Not from the race map's charge.** The race map is planned around an
+  empty battery, which is what holds it to neutral; given 3.2 MJ it spends
+  it all in a lap. From 80% the battery also filled part way round and the
+  save map came out quicker than the attack map.
+* **Checked against each other.** Defend's climb finished 0.12 s behind the
+  neutral map, which is a legal defend map; each map is now scored against
+  every other under its own rules and the best kept.
+
+Sepang, from half charge: push -0.37 s a lap for 0.75 MJ, attack -0.24 s for
+0.36 MJ, defend -0.11 s for 0.26 MJ, save +0.27 s banking 0.40 MJ. Solve
+119 s against 80 s. Laps driven with adaptation on are left out of the
+model's checks (provenance.ADAPTED): five so far, all on setups that had it
+on; holdout 0.56% over the remaining 105.

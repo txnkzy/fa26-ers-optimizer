@@ -252,7 +252,7 @@ check("technical lines are still kept",
       sum(1 for l in every_line if l["kind"] == "detail") >= 8,
       "%d detail lines" % sum(1 for l in every_line if l["kind"] == "detail"))
 check("solve finished without error", not snap["error"], snap["error"] or "")
-check("three strategies produced", len(snap["summary"]) == 3,
+check("every strategy produced", len(snap["summary"]) == 7,
       "%.0f s" % (time.time() - t0))
 for s in snap["summary"]:
     check("  STRAT %d has a map" % s["strat"], len(s["map"]) >= 1,
@@ -288,10 +288,29 @@ check("unlimited mode written off",
       str(values.get(mapping["ERS_UNLIMITED_MODE"])))
 check("recharge written", values.get(mapping["ERS_REGEN_MAX_MJ_Q"]) == detail["qualify"],
       "%s vs %s" % (values.get(mapping["ERS_REGEN_MAX_MJ_Q"]), detail["qualify"]))
-for n in (1, 2, 3):
+for n in (1, 2, 3, 4, 5, 6, 7):
     splits = fa26.read_map(text, mapping, n)
     live = [s for s in splits if s.deploy_kw > 0 or s.clip_kw > 0]
     check("  map %d written" % n, len(live) >= 1, "%d live splits" % len(live))
+
+# Each PU mode on the wheel selects its strat, and the race family chases its
+# SoC Target with adaptation on; qualifying and recharge do not adapt.
+_modes_ok = all(
+    values.get(mapping["PU_MODE_%d_STRAT_MAP_ACTIVE" % fa26.pu_mode_index(m)]) == 1
+    and values.get(mapping["PU_MODE_%d_STRAT_MAP" % fa26.pu_mode_index(m)]) == n
+    for m, n in A.MODE_STRATS.items())
+_free = [m for m in fa26.PU_MODES if m not in A.MODE_STRATS
+         and values.get(mapping["PU_MODE_%d_STRAT_MAP_ACTIVE" % fa26.pu_mode_index(m)]) != 0]
+check("each PU mode selects its strat, the rest leave the rotary free",
+      _modes_ok and not _free,
+      ", ".join("%s->%d" % kv for kv in A.MODE_STRATS.items()) if _modes_ok
+      else "free modes overridden: %s" % _free)
+_soc = {n: (values.get(mapping["STRAT_%d_SOC_TARGET" % n]),
+            values.get(mapping["STRAT_%d_SOC_ADAPTATION" % n])) for n in range(1, 8)}
+check("SoC targets written, adaptation only on the race family",
+      all(_soc[n] == ((A.SOC_TARGETS[n], 1) if n in A.SOC_TARGETS else (0, 0))
+          for n in _soc),
+      ", ".join("%d:%+d%s" % (n, t, "" if a else " off") for n, (t, a) in _soc.items()))
 
 
 # --- the Power & Energy Limits page is the notice's ---------------------------

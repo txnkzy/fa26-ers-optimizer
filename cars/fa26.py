@@ -489,6 +489,22 @@ PU_MODE_STRATEGY = {
     PU_MODE_RECHARGE: 3,      # SLO -> recharge
 }
 
+#: The wheel's modes by name, numbered as the setup numbers them (1-14).
+PU_MODES = ("RACE", "AD1", "AD2", "FS", "FW", "IN", "ES", "Q", "K2", "K2+",
+            "SLO", "SC", "T4", "RS")
+
+
+def pu_mode_index(name: str) -> int:
+    return PU_MODES.index(name) + 1
+
+
+def soc_adaptation_on(setup_text: str, mapping: dict, strat: int) -> bool:
+    """Whether this setup lets the car rewrite strat `strat`'s map as it drives."""
+    item = mapping.get(f"STRAT_{strat}_SOC_ADAPTATION")
+    if item is None:
+        return False
+    return bool(setupfile.read_values(setup_text).get(item, 0))
+
 
 def _check_encoding(strat_number: int, splits, track_length_m: float) -> None:
     """Refuse to write a map the car will silently reject.
@@ -551,13 +567,21 @@ def write_strategies(setup_path, mapping: dict[str, int],
                      strategies: "list[tuple[int, list[Split]]]",
                      track_length_m: float, allocation=None,
                      backup: bool = True, active: int = 2,
-                     telemetry_dir=None):
+                     telemetry_dir=None, modes: "dict[str, int] | None" = None,
+                     soc: "dict[int, int] | None" = None):
     """Write several strategies at once, each into its own deployment map.
 
     `strategies` is a list of (strat number, splits). Strat n is pointed at
     deployment map n so the wheel switch selects them directly, and unused
     splits in each map are blanked. Optionally the per-lap recharge allocation
     is written too.
+
+    `modes` points PU modes, by name, at strats: the mode's override is
+    switched on, so selecting the mode on the wheel selects that strat. Every
+    other mode's override is switched off, which leaves the STRAT rotary in
+    charge there. `soc` is the SoC Target, in percent, for each strat that
+    should run SoC Adaptation; every strat not named has it off and a target
+    of 0.
     """
     updates: dict[int, int] = {}
 
@@ -607,16 +631,32 @@ def write_strategies(setup_path, mapping: dict[str, int],
     # a state-of-charge target. That is a good feature and a terrible one to
     # leave on while measuring whether the car follows the map it was given, so
     # every strat is pinned to a flat target with adaptation off.
+    #
+    # Adaptation is now on for the race family of strats, by request, and off
+    # everywhere else: VRC recommends it off for qualifying, and a recharge
+    # lap is a different job. The maps are planned for the same target the
+    # car is told to chase, so adaptation starts from a map that already
+    # meets it and only has to correct for the day. Laps driven with it on
+    # are left out of the model's checks; see provenance.attribute.
+    soc = soc or {}
     for strat_number in range(1, 13):
-        for item, value in ((f"STRAT_{strat_number}_SOC_TARGET", 0),
-                            (f"STRAT_{strat_number}_SOC_ADAPTATION", 0)):
+        target = soc.get(strat_number)
+        for item, value in ((f"STRAT_{strat_number}_SOC_TARGET",
+                             0 if target is None else int(target)),
+                            (f"STRAT_{strat_number}_SOC_ADAPTATION",
+                             0 if target is None else 1)):
             if item in mapping:
                 updates[mapping[item]] = value
 
+    modes = modes or {}
     for mode_index in range(1, 15):
         flag = f"PU_MODE_{mode_index}_STRAT_MAP_ACTIVE"
+        target = modes.get(PU_MODES[mode_index - 1])
         if flag in mapping:
-            updates[mapping[flag]] = 0
+            updates[mapping[flag]] = 0 if target is None else 1
+        item = f"PU_MODE_{mode_index}_STRAT_MAP"
+        if target is not None and item in mapping:
+            updates[mapping[item]] = int(target)
 
     written = {n for n, _ in strategies}
     if "STRAT_MAP" in mapping and active in written:
