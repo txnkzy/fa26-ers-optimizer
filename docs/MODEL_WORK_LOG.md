@@ -2272,3 +2272,90 @@ balanced, 15.6 L against 15.55. O was empty by 4000 m; N still had 200 kJ at
 4500 and spent it past T14, -0.21 s over 4000-5000 m. A further -0.28 s at the
 exit of T6 is mostly the driver: the two laps on each map differ by 0.2 s
 there. The mechanism is the one the change was made for.
+
+### The cost of lifting, tried in the model
+
+Built as a trial and measured on everything already recorded, without asking
+for track time. Two switches in `sim26`, both since removed:
+
+* **Lift cost**: wherever the driver was on the throttle without braking and
+  the simulated car was held to the corner's speed, the speed it had to shed
+  cost it more speed on top, `k` times over. Until now that scrub was free.
+* **Braking under load**: braking ahead of a corner shares the tyre with the
+  cornering load, as driving already does.
+
+| | map vs map, whole lap | 500 m pieces, rms | holdout, 110 laps | bias |
+|---|---|---|---|---|
+| as is | 0.420 s | 0.1430 s | 0.566% | -0.28% |
+| lift cost k = 0.25 | 0.420 | 0.1429 | 0.555% | -0.21% |
+| k = 0.5 | 0.421 | 0.1428 | 0.551% | -0.16% |
+| k = 1.0 | 0.423 | 0.1427 | 0.552% | -0.07% |
+| braking under load | 0.420 | 0.1430 | 0.563% | -0.26% |
+
+The lift cost removes most of the model's optimism over a whole lap, which is
+real: the car was throwing away overspeed for nothing. But it moves no
+map-against-map prediction by more than 0.04 s -- Sepang O against N stays
+0.19 s out at every `k` -- so it would not change which map the search picks,
+and Monza, Austin and Sepang replay slightly worse. Not adopted. Neither is
+braking under load, which changes nothing the search uses.
+
+Why it cannot reach O against N: the two maps arrive at T5 identically, and
+O's extra power is in the middle of a 4 g corner where the tyre has nothing
+left to put it down, so in the model it is simply lost. On track it bought
+1 kph. The 0.27 s through T5-T6 is lap 1, the first of the session, lifted
+to nothing and down to 209 kph; the other three laps were at 222-232.
+
+Every Sepang lap through T5-T6 (1880-2200 m, time to 300 m past):
+
+| how it was taken | corner + exit |
+|---|---|
+| arrived ~261, lifted (B, best laps) | 8.84-9.03 s |
+| arrived ~240, flat with power (C) | 8.87-8.94 s |
+| arrived ~245, flat without power (A) | 9.09-9.29 s |
+
+Arriving fast and lifting is not what costs time here; arriving with nothing
+to deploy is.
+
+The wider finding: the pieces score is 0.143 s against a floor of 0.139 s,
+the scatter between two laps on the *same* map. The model's map-against-map
+predictions are already about as good as these laps can show, so a change
+like this can be judged from the recorded laps alone -- and a two-lap A/B
+cannot settle anything smaller than about 0.15 s per corner either.
+
+### Sweepers taken flat: lifting is now a cost the search pays for
+
+Asked for by the driver, for driveability rather than lap time: a map that
+arrives at a fast corner quicker than it can be taken flat forces a lift in
+the middle of it, and that lift has to be judged afresh every lap. Through
+Sepang T5-T6 the laps taken flat on the limit (C) averaged 8.90 s within
+0.08 s of each other; the laps that arrived fast and lifted averaged
+8.94-9.25 s with 0.15-0.23 s between laps on the same map.
+
+* `sim26` finds the sweepers -- on the throttle, off the brake, 150 kph or
+  more, half the car's lateral grip or more, pieces within 75 m joined -- and
+  reports in `Result.lifts` the speed the car gives up in each to stay under
+  the ceiling. Nothing about the simulated lap changes.
+* `optimise26.lift_cost_s` charges 0.01 s per kph of lift beyond 10 kph
+  (the noise in the ceiling: map C, flat on every lap, reads 12 kph) and
+  beyond what the lap with no deployment lifts anyway.
+* Charged throughout the search it walled off good paths (Bathurst
+  qualifying +0.19 s, Spa race +0.33 s, both for no lift avoided); charged
+  only in the refinement it could not move Sepang's T5 energy elsewhere. So
+  `optimise` runs the search both ways and keeps the better, lifts counted.
+  Solve time about 1.75x.
+
+16 circuits, the app's own solve, old against new:
+
+| | qualifying | race |
+|---|---|---|
+| Sepang | level, 9 kph left (inside tolerance) | **T5 lift 18 kph -> none**, +0.015 s |
+| Austin 1140 m | 39 -> 34 kph, +0.006 s | 39 -> 34 kph, -0.287 s |
+| Suzuka | lifts 0.107 -> 0.041 s, +0.041 s | 3733 m 48 -> 15 kph, -0.045 s |
+| Spa | -0.012 s | level |
+| Singapore, Zandvoort, Madrid | within 0.014 s | within 0.014 s |
+| other 8 | identical | identical |
+
+The lifts left at most circuits are the driver's own line: the lap with no
+deployment has them too, so no map can take them out. Validation is
+unchanged by construction -- the simulated lap is the same -- and
+`check_app.py` passes.

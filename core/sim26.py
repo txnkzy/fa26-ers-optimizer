@@ -29,6 +29,15 @@ INSTANT_CUT_KPH = 210.0
 #: main straight, short enough to cost nothing.
 PRIME_M = 600.0
 
+#: A sweeper is a corner taken on the throttle, without braking, at this speed
+#: or more and under at least this share of the car's lateral grip. Arriving
+#: at one faster than it can be taken flat means a lift in the middle of a
+#: high-load corner, which the driver has to judge afresh every lap.
+SWEEPER_MIN_KPH = 150.0
+SWEEPER_MIN_LOAD = 0.5
+#: Sweeper points closer than this are one corner.
+SWEEPER_JOIN_M = 75.0
+
 
 def _geometry(profile, longitudinal, ds, reset_zones, speed_zones):
     """Everything about a lap that depends only on position, computed once.
@@ -66,6 +75,15 @@ def _geometry(profile, longitudinal, ds, reset_zones, speed_zones):
             if reach < ceiling[i]:
                 ceiling[i] = reach
 
+    # Which point each ceiling is there for: itself where the driver's speed
+    # binds, or the corner a braking run is slowing the car for.
+    raw = [min(profile.cap_at(i * step), 400.0) for i in range(n)]
+    origin = list(range(n))
+    for _ in range(2):
+        for i in range(n - 1, -1, -1):
+            if ceiling[i] < raw[i] - 1e-9:
+                origin[i] = origin[(i + 1) % n]
+
     slot = profile._slot
     gas = [0.0] * n
     deploy_frac = [0.0] * n
@@ -92,8 +110,34 @@ def _geometry(profile, longitudinal, ds, reset_zones, speed_zones):
                 cut_kph[i] = kph
                 break
 
+    # Sweepers, each a run of neighbouring points named by where it begins,
+    # and for every point the sweeper its ceiling belongs to, or -1.
+    lat_max = getattr(profile, "lat_max", 0.0) or 0.0
+    sweeper = [-1] * n
+    last, gap = -1, int(SWEEPER_JOIN_M / step)
+    for i in range(n):
+        d = i * step
+        if (SWEEPER_MIN_KPH <= raw[i] * 3.6 and raw[i] < 400.0
+                and on_throttle[i] and profile.brake_mean[slot(d)] < 0.05
+                and lat_max > 0.0
+                and profile.lat[slot(d)] >= SWEEPER_MIN_LOAD * lat_max):
+            # One corner, not several: the load dips for a few metres
+            # through a long sweeper, and an S joins up too.
+            sweeper[i] = sweeper[last] if last >= 0 and i - last <= gap else i
+            last = i
+    if sweeper[0] >= 0 and sweeper[-1] >= 0:       # one corner across the line
+        for i in range(n):
+            if sweeper[i] != 0:
+                break
+            sweeper[i] = sweeper[-1]
+    lifting = [-1] * n
+    for i in range(n):
+        d = i * step
+        if on_throttle[i] and profile.brake_mean[slot(d)] < 0.05:
+            lifting[i] = sweeper[origin[i]]
+
     data = (n, step, ceiling, gas, deploy_frac, harvest_frac, full_throttle,
-            on_throttle, grip, drag_k, in_reset, cut_kph)
+            on_throttle, grip, drag_k, in_reset, cut_kph, lifting)
     cache[key] = (longitudinal, data)
     return data
 
@@ -139,6 +183,9 @@ class Result:
     dist: list[float] = field(default_factory=list)
     #: The state the car finishes in, for a run that continues into another.
     exit: "Carry | None" = None
+    #: Speed the driver has to lift off in each sweeper, in kph, keyed by
+    #: where the sweeper begins in metres. See SWEEPER_MIN_KPH.
+    lifts: dict = field(default_factory=dict)
 
 
 def run_to_line(before, after, switch_m: float, car, longitudinal, profile,
@@ -234,7 +281,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
     """
     length = profile.length_m
     (n, step, ceiling, gas_at, deploy_frac, harvest_frac, full_throttle_at,
-     on_throttle_at, grip_at, drag_k_at, in_reset_at, cut_kph_at) = _geometry(
+     on_throttle_at, grip_at, drag_k_at, in_reset_at, cut_kph_at, lifting_at) = _geometry(
         profile, longitudinal, ds, tuple(map(tuple, reset_zones)),
         tuple(map(tuple, speed_zones)))
 
@@ -332,6 +379,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
     speeds, dists = [], []
 
     refused = 0.0
+    lifts = {}
     # One settling lap, not a run to convergence. Iterating until a settling
     # lap ends where it began was tried and is worse: on VRC's own maps the
     # model deploys about 0.5 MJ a lap more than it harvests, so the fixed
@@ -349,6 +397,7 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             store_start = store
             refused = 0.0
             capped = False
+            lifts = {}
         for i in range(lo, hi):
             d = (i % n) * step
             cmd_deploy, cmd_clip = commands[i % n]
@@ -517,6 +566,14 @@ def simulate(splits, car, longitudinal, profile, powertrain,
             v_free = (square if square > 1.0 else 1.0) ** 0.5
             limit = ceiling[(i + 1) % n]
             v_next = v_free if v_free < limit else limit
+            kept = v if v < v_free else v_free
+            if limit < kept:
+                # Held below the speed it would otherwise keep, on the
+                # throttle and off the brake: the driver is lifting. Where
+                # that is for a sweeper, the speed given up is the lift.
+                corner = lifting_at[(i + 1) % n]
+                if corner >= 0:
+                    lifts[corner] = lifts.get(corner, 0.0) + (kept - limit) * 3.6
             if v_next < 1.0:
                 v_next = 1.0
             mean_v = (v + v_next) * 0.5
@@ -575,4 +632,5 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                   store_min_kj=store_min, store_start_kj=store_start,
                   harvest_capped=capped,
                   refused_mj=refused / 1000.0,
-                  speed=speeds, dist=dists)
+                  speed=speeds, dist=dists,
+                  lifts={c * step: kph for c, kph in lifts.items()})
