@@ -2482,3 +2482,22 @@ a carried reserve buys nothing here), ES +0.28 s banking 0.46 MJ. Solve
 142 s. The earlier one-lap figures for the modes were flattered by about
 0.36 s: a single lap starts at the driver's own line speed whatever the map
 leaves itself for the run to it.
+
+### SoC Adaptation off for the race map
+
+A nine-lap RACE stint at Sepang with adaptation on and a 0% target (07/10):
+lap-to-lap -1.09, +0.10, +0.34, +0.70, -0.82, +0.96, +0.37, +0.22, +0.20 MJ.
+The ECU cut the early zones by up to 35% (748-1136 m: 250 kW written, 158-
+204 delivered from lap 4) and the battery climbed to 53%, reaching 100% part
+way round on laps 4 and 6-9. The laps it held back were the slow ones (7.5-
+8.3 MJ deployed, 1:37.0-1:37.7; the 9.29 MJ lap was 1:36.41).
+
+The race map balances itself around its held level -- spending above it,
+banking below, 29% -> 2% -> 4% -> 13% here -- and a 0% target fights that
+by holding whatever level the car is at. Adaptation is now off for RACE and
+stays on for the modes that spend or bank to a target (AD1, AD2, K2, ES).
+
+The level itself, Sepang, against settling onto empty: hold 5% -0.13 s,
+10% -0.15, 15% +0.16, 25% -0.06 -- within the search's own 0.1-0.15 s
+scatter, so 5-10% is the range and `HELD_FRACTION` stays at 10%. VRC's SoC
+Target is a change per lap, not a level, so it cannot be used to hold one.

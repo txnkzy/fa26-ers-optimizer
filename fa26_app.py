@@ -119,9 +119,16 @@ RACE_VARIANTS = [
 MODE_STRATS = {"Q": 1, "RACE": 2, "SLO": 3, "SC": 3,
                "AD1": 4, "AD2": 5, "K2": 6, "ES": 7}
 
-#: SoC Target per strat for the ones that run SoC Adaptation: the race family.
-#: Qualifying and recharge keep it off, as VRC recommends for qualifying.
-SOC_TARGETS = {2: 0, **{strat: pct for _l, strat, pct, _o in RACE_VARIANTS}}
+#: SoC Target per strat for the ones that run SoC Adaptation: the modes that
+#: spend or bank. Qualifying and recharge keep it off, as VRC recommends for
+#: qualifying -- and so does the race map. It balances itself around the
+#: charge it is planned for, banking below it and spending above it, and a
+#: target of 0% fights that by holding whatever charge the car happens to be
+#: on. A nine-lap Sepang stint with it on swung -1.09, +0.70, -0.82, +0.96
+#: MJ, then banked 0.2 MJ a lap up to 53%, filling the battery part way round
+#: on five laps; the ECU had cut the early zones by up to 35%, and the laps it
+#: held back were the slow ones.
+SOC_TARGETS = {strat: pct for _l, strat, pct, _o in RACE_VARIANTS}
 
 
 #: The charge the race map may hold from lap to lap, when that is quicker

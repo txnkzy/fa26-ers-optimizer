@@ -307,7 +307,7 @@ check("each PU mode selects its strat, the rest leave the rotary free",
       else "free modes overridden: %s" % _free)
 _soc = {n: (values.get(mapping["STRAT_%d_SOC_TARGET" % n]),
             values.get(mapping["STRAT_%d_SOC_ADAPTATION" % n])) for n in range(1, 8)}
-check("SoC targets written, adaptation only on the race family",
+check("SoC targets written, adaptation only on the modes that spend or bank",
       all(_soc[n] == ((A.SOC_TARGETS[n], 1) if n in A.SOC_TARGETS else (0, 0))
           for n in _soc),
       ", ".join("%d:%+d%s" % (n, t, "" if a else " off") for n, (t, a) in _soc.items()))

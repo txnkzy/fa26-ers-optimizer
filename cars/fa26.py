@@ -632,9 +632,10 @@ def write_strategies(setup_path, mapping: dict[str, int],
     # leave on while measuring whether the car follows the map it was given, so
     # every strat is pinned to a flat target with adaptation off.
     #
-    # Adaptation is now on for the race family of strats, by request, and off
-    # everywhere else: VRC recommends it off for qualifying, and a recharge
-    # lap is a different job. The maps are planned for the same target the
+    # Adaptation is on for the strats that spend or bank to a target, and off
+    # everywhere else: VRC recommends it off for qualifying, a recharge lap is
+    # a different job, and the race map balances itself (see SOC_TARGETS in
+    # the app). The maps are planned for the same target the
     # car is told to chase, so adaptation starts from a map that already
     # meets it and only has to correct for the day. Laps driven with it on
     # are left out of the model's checks; see provenance.attribute.
