@@ -2439,3 +2439,46 @@ Sepang, from half charge: push -0.37 s a lap for 0.75 MJ, attack -0.24 s for
 119 s against 80 s. Laps driven with adaptation on are left out of the
 model's checks (provenance.ADAPTED): five so far, all on setups that had it
 on; holdout 0.56% over the remaining 105.
+
+### The Sepang mode test, and a race map that reaches the line empty
+
+Two runs at Sepang, 07/10. The modes switched maps as written (logged strat
+and delivered power agree for K2, ES, AD2/AD1). ES banked +0.42-0.67 MJ a
+lap and AD2 spent 0.45-0.49 against their 0.4 targets. Otherwise the test
+was spoilt twice: the setup's Power and Energy Limits sat on Qualify (7.5 MJ
+recovered on every lap, against the race's 8.5), and the battery was near
+empty for most laps, where every map is the same map.
+
+The second run showed what the driver had felt: the race map spent 350 kW
+to 4804 m on the back straight, was empty by 4800 m, recovered nothing
+under the final hairpin's braking because the lap's 8.5 MJ was already
+spent, and crossed the line at 241 kph -- 291 on the one lap that arrived
+with charge. Easing the back straight changed nothing in the model: the lap
+starts empty, so there is nothing to carry. The race map had been planned
+around an empty battery.
+
+`Objective.hold_level` holds the budget across the settling lap as well as
+the measured one, so a map cannot empty the store on the settling lap and
+look neutral afterwards. Not a floor: the store still runs to empty within
+the lap. The level matters, because the battery swings 2-3 MJ within a lap
+and a level held high fills part way round and wastes recovery:
+
+| race map | Sepang | Monza | Baku |
+|---|---|---|---|
+| settled onto empty | 94.301, 0% into the last 600 m, 256 kph | 84.918 | 104.473 |
+| holding 10% | **94.153**, 44%, 297 kph | +0.239 | +0.380 |
+| holding 25% | 94.244 | +0.205 | +0.546 |
+| holding 50% | 94.296 | +0.722 | +1.474 |
+
+So the race map is planned both ways, settled-onto-empty and holding 10%
+(`HELD_FRACTION`), and the quicker kept: never slower than before. The mode
+maps are planned as repeating laps around the held level -- ES banking up
+from it, AD1/AD2/K2 spending back down to it -- since from half charge the
+save map could bank nothing at all. `_soften` steps one split at a time.
+
+Sepang 07/10, against the race map holding 10%: K2 -0.14 s a lap for
+0.75 MJ, AD1 -0.11 s for 0.40 MJ, AD2 +0.05 s for 0.09 MJ (without Overtake
+a carried reserve buys nothing here), ES +0.28 s banking 0.46 MJ. Solve
+142 s. The earlier one-lap figures for the modes were flattered by about
+0.36 s: a single lap starts at the driver's own line speed whatever the map
+leaves itself for the run to it.

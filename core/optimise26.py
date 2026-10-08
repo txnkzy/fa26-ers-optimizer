@@ -103,6 +103,14 @@ class Objective:
     #: positive banks it. The attack, defend, push and save maps, each matched
     #: to the car's own SoC Target for its strat.
     store_delta_kj: float = 0.0
+    #: With `energy_neutral` and a settling lap, hold the budget across both
+    #: laps, not only the measured one. Without it a map may empty the store
+    #: on the settling lap and then look neutral on the measured lap, which
+    #: is a race map planned around an empty battery: at Sepang it reached
+    #: the final hairpin with nothing, crossed the line at 241 kph instead
+    #: of 291, and spent its power at 300 kph on the back straight instead.
+    #: It is not a floor -- the store may still run to empty within the lap.
+    hold_level: bool = False
 
     def score(self, result, start_store_kj: float) -> float | None:
         """Lower is better. None means the plan is not admissible."""
@@ -110,6 +118,10 @@ class Objective:
         if result.harvested_mj > self.harvest_cap_mj + 1e-6:
             return None
         if self.min_store_fraction > 0.0 and                 result.store_min_kj < STORE_CAPACITY_KJ * self.min_store_fraction - 1e-6:
+            return None
+        if (self.energy_neutral and self.hold_level and not self.one_shot
+                and result.store_start_kj < start_store_kj
+                + self.store_delta_kj - 1e-6):
             return None
         if self.energy_neutral and (result.store_end_kj < result.store_start_kj
                                     + self.store_delta_kj - 1e-6):
@@ -1134,26 +1146,38 @@ def _shaken(splits, rng, profile, reset_zones):
 
 
 def _soften(splits, evaluator, profile, objective: Objective,
-            start_store_kj: float):
-    """A restart's map, with every deployment a step lower until it is allowed.
+            start_store_kj: float, limit: int = 60):
+    """A restart's map, with deployment stepped down until it is allowed.
 
     A climb handed a map its objective refuses strips it to nothing and starts
     again, which is right for a guess and wrong for a map derived from the
     race answer: the save map starts from a race map that ends the lap level
     rather than ahead, and stripping it threw the race map's shape away.
-    Stepping the power down keeps the shape and finds the nearest map that
-    banks enough.
+
+    One split at a time, the strongest first, not every split at once. A
+    whole step everywhere banked well over a megajoule a lap, filled the
+    battery on the settling lap, and left the save map nowhere to bank the
+    next lap at all -- so no step was ever allowed and the save map came out
+    as a recharge map, four seconds slow.
     """
     current = make_executable(
         [ensure_live_exit(sanitise(s, profile), profile) for s in splits],
         profile, evaluator.reset_zones)
-    for _ in range(len(POWERS)):
+    for _ in range(limit):
         if objective.score(evaluator.one(current), start_store_kj) is not None:
             return current
-        lower = [_less_deploy(s) or s for s in current]
-        if lower == current:
+        order = sorted(range(len(current)),
+                       key=lambda k: -current[k].deploy_kw
+                       * max(current[k].deploy_end_m - current[k].start_m, 0))
+        for k in order:
+            lower = _less_deploy(current[k])
+            if lower is not None:
+                trial = list(current)
+                trial[k] = lower
+                current = make_executable(trial, profile, evaluator.reset_zones)
+                break
+        else:
             break
-        current = make_executable(lower, profile, evaluator.reset_zones)
     return splits
 
 

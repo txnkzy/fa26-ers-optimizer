@@ -124,6 +124,11 @@ MODE_STRATS = {"Q": 1, "RACE": 2, "SLO": 3, "SC": 3,
 SOC_TARGETS = {2: 0, **{strat: pct for _l, strat, pct, _o in RACE_VARIANTS}}
 
 
+#: The charge the race map may hold from lap to lap, when that is quicker
+#: than running to empty; see `Engine._solve`.
+HELD_FRACTION = 0.10
+
+
 def modes_for(strat: int) -> list[str]:
     return [m for m, s in MODE_STRATS.items() if s == strat]
 
@@ -1530,30 +1535,44 @@ class Engine:
                        for _l, strat_no, _s, _n, _o in STRATEGIES}
         starts = {strat_no: optimise26.starting_store_kj(lap, kind_of(strat_no))
                   for _l, strat_no, _s, _n, _o in STRATEGIES}
-        # The other modes' maps: the race map with another energy budget,
+        # The race map two ways, keeping the quicker: settling onto an empty
+        # battery, as it always has been, and holding a little charge from lap
+        # to lap (Objective.hold_level) -- not a floor, the battery still runs
+        # to empty within the lap. Planned from empty, Sepang's reached the
+        # final hairpin with nothing, recovered nothing under braking because
+        # the lap's allowance was already spent, and crossed the line at 241
+        # kph instead of 291. Holding 10% there is 0.15 s a lap quicker, goes
+        # into the final 600 m with 44% and crosses the line at 297. At Monza
+        # (+0.24 s) and Baku (+0.38 s) the empty one stays quicker, so it is a
+        # race between them, never slower than before. Holding half charge
+        # instead cost Baku 1.47 s a lap: a battery held high spends the lap
+        # near full and throws recovery away.
+        held = laplib.STORE_CAPACITY_KJ * HELD_FRACTION
+        held_objective = replace(objectives[2], hold_level=True)
+        # The other modes' maps are the race map with another energy budget,
         # climbed from the race answer rather than searched from scratch.
-        # Each is one lap from half charge, not a settled one. A lap that
-        # spends from the battery does not repeat, and settling first drained
-        # Sepang's attack map from 80% to 5% before the lap it was judged on.
-        # Half charge, not more: from 80% the battery filled part way round
-        # and threw recovery away, and the save map came out quicker than the
-        # attack map. And all of them from the same charge, plus a neutral
-        # map from it too, because the race map is not one to compare
-        # against: it is planned around an empty battery, which is what
-        # holds it to neutral -- given 3.2 MJ, it spends all of it in a lap.
-        # The neutral one is only the yardstick for "this much quicker a
-        # lap"; it is not written.
-        variants = RACE_VARIANTS + [("Neutral", 0, 0, False)]
+        variants = RACE_VARIANTS
         for label, strat_no, pct, overtake in variants:
             cap = 99.0 if unlimited else alloc.mj(
                 "race_overtake" if overtake else "race")
             objectives[strat_no] = optimise26.Objective(
                 name=label, harvest_cap_mj=cap, energy_neutral=True,
-                one_shot=True,
+                hold_level=True,
                 store_delta_kj=pct / 100.0 * laplib.STORE_CAPACITY_KJ)
             powertrains[strat_no] = (fa26.Powertrain(taper=taper_for(1))
                                      if overtake else powertrain_for(2))
-            starts[strat_no] = laplib.STORE_CAPACITY_KJ * 0.5
+            # Started so the measured lap, after the settling lap, works
+            # around the race map's held level: a save map banks from it, a
+            # map that spends comes back down to it -- which is how they are
+            # used, building charge in ES and spending it in AD1, AD2 or K2.
+            # Not around half charge: the battery swings by 2-3 MJ within a
+            # Sepang lap, so above about 40% at the line it fills part way
+            # round and throws recovery away. Planned from there the save map
+            # could bank nothing at all, and the others spent short of their
+            # targets.
+            share = pct / 100.0
+            starts[strat_no] = laplib.STORE_CAPACITY_KJ * max(
+                0.0, HELD_FRACTION - share * (2.0 if share < 0 else 1.0))
 
         def task_for(strat_no, splits_, seeds):
             return dict(splits=splits_, car=car, longitudinal=cal,
@@ -1564,15 +1583,27 @@ class Engine:
                         speed_zones=speed_zones,
                         approach=approach if strat_no == 1 else None)
 
-        race_at = [e[1] for e in searched].index(2)
+        tasks = [task_for(e[1], seed, reference) for e in searched]
+        tasks.append(dict(task_for(2, seed, reference),
+                          objective=held_objective, start_store_kj=held))
         found = optimise26.optimise_many(
-            [task_for(e[1], seed, reference) for e in searched],
-            on_progress=self.tick,
-            derived=[(race_at, task_for(v[1], seed, ()))
+            tasks, on_progress=self.tick,
+            # The mode maps spend or bank from a held charge, so they start
+            # from the race map that holds one.
+            derived=[(len(tasks) - 1, task_for(v[1], seed, ()))
                      for v in variants])
         answers = dict(zip([e[1] for e in searched]
-                           + [v[1] for v in variants], found))
-        self.neutral = answers.pop(0)[1]
+                           + [v[1] for v in variants],
+                           found[:len(searched)] + found[len(tasks):]))
+        self.race_held = found[len(searched)]
+        held_score = held_objective.score(self.race_held[1], held)
+        empty_score = objectives[2].score(answers[2][1], starts[2])
+        if held_score is not None and (empty_score is None
+                                       or held_score < empty_score):
+            answers[2] = self.race_held
+            objectives[2], starts[2] = held_objective, held
+            self.detail("Race map     holds its charge level: quicker here "
+                        "than settling onto an empty battery.")
         self.tick(1.0)
 
         entries = STRATEGIES + [(label, strat_no, "race", True, False)
@@ -2066,13 +2097,12 @@ class Engine:
         per_lap = max(abs(net), 0.05)
         full = laplib.STORE_CAPACITY_KJ / 1000.0
         modes = " or ".join(modes_for(strat_no)) or "STRAT %d" % strat_no
-        # Against a neutral map from the same charge, not the race map: see
-        # `_solve`. That one is planned around an empty battery.
+        # Against the race map that holds its level, also a repeating lap.
         gain = ""
-        neutral = getattr(self, "neutral", None)
-        if neutral is not None:
-            d = result.lap_time_s - neutral.lap_time_s
-            gain = (" %.2fs a lap %s than staying neutral."
+        race = getattr(self, "race_held", (None, None))[1]
+        if race is not None:
+            d = result.lap_time_s - race.lap_time_s
+            gain = (" %.2fs a lap %s than holding your charge."
                     % (abs(d), "quicker" if d < 0 else "slower"))
         target = "SoC Target %+d%%" % pct
         if net < 0:
