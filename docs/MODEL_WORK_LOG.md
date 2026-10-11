@@ -2501,3 +2501,74 @@ The level itself, Sepang, against settling onto empty: hold 5% -0.13 s,
 10% -0.15, 15% +0.16, 25% -0.06 -- within the search's own 0.1-0.15 s
 scatter, so 5-10% is the range and `HELD_FRACTION` stays at 10%. VRC's SoC
 Target is a change per lap, not a level, so it cannot be used to hold one.
+
+### 1.1.3: notes that fit a short or unlimited lap
+
+A player's session at Croix-en-Ternois (1962 m, 47 s, not in the FIA
+notices, recovery limit switched off by hand) came back with five maps all
+62% -> 62% at 5.65 MJ, each told that recovery was lost to a full battery and
+to re-run before trusting it, the mode maps reading "banks 0.05 MJ a lap,
+empty to full in about 80 laps", and a plan recovering 5.65 MJ a lap against
+1.33 on the laps it was built from.
+
+* `power_share`: a map asking for 85% or more of full power wherever the
+  throttle is down, that never empties the battery, cannot spend more. It
+  gets one plain note in place of the lost-recovery and unspent-charge ones.
+* A plan recovering 1.5x and 1 MJ more than the laps did, with room in the
+  battery on those laps, says it is built on energy the car is not
+  recovering, and names the recovery limit.
+* The mode note no longer floors the change at 0.05 MJ; a map that neither
+  spends nor banks says so.
+* The closing line counts the maps instead of saying three; the saved-setup
+  message describes the PU modes instead of saying the wheel does not change
+  the map.
+
+None of these fire on a Sepang solve.
+
+### 1.1.3 (continued): circuit data straight from the FIA
+
+Each round's Power Unit Information notice now reaches every copy of the
+program without a release:
+
+* `core/pu_notice.py` reads the notice's form by position -- the five
+  recharge limits, power limited distance, reduction rate, the four curve
+  names and the sector tables -- and the power curves off the chart's vector
+  lines, calibrated on the grid. Every import proves the chart reading: the
+  Base curves must come out exactly as built in (Base - Standard 350 kW to
+  290 kph, 100 at 340, nothing at 345). Anything it cannot place, or outside
+  what the regulations allow, refuses the notice. A window carrying a mark
+  the form never explains is left out and reported: Madrid's "1500-5100*".
+* Checked against the notices entered by hand: Madrid and Baku to the
+  figure; Monza's notice also declares an alternative-curve sector,
+  2100-2800 m, missing from the table, now added. Singapore (R17) brought
+  three new curves -- Rev 1 - Standard 350 kW to 200 kph and nothing at 300,
+  Rev 1 - Overtake 150 kW at 300 and nothing at 310, Alt 2 250 kW onto Rev 1
+  - Standard -- and race limits 8.5/9.0 MJ where the table had the
+  pre-season 8.0/8.5. Curves new to the program travel in the table
+  (`curves`), as do the venue and country names (`aliases`).
+* `tools/fia_watch.py`, run every three hours by
+  `.github/workflows/fia-notices.yml`, finds the current event's notice on the
+  FIA documents page, imports it, stamps the table and commits it. A refused
+  notice changes nothing, is recorded so it is not retried, and opens an
+  issue; an unreachable FIA site fails the run and opens none.
+* The program downloads `data/fa26_recharge.json` at start-up
+  (`circuit_updates.py`) and lays it over its own, entry by entry, only when
+  the download's stamp is at least as new as its own. Nothing is sent. The
+  diagnostics say what happened.
+
+All seventeen notices so far, Australia (R01) to Singapore (R17), read and
+compared with the table on 11/10, then imported: every recharge limit, rate,
+power limited distance and curve name already agreed. The reader had to
+learn four versions of the form -- Australia's "Normal lap / Overtake" row
+and two curves, China's and Japan's two sector tables, Monaco's three curve
+names, Austria's page printed half as large again with non-breaking spaces
+-- so it now finds values by what they are and tables by the article heading
+them, scaled to the page. What the table lacked: alternative-curve sectors
+at Miami, Canada, Barcelona, Austria, Silverstone, Spa, Hungary and
+Zandvoort; reset sectors at Australia, Monaco, Barcelona, Silverstone and
+Spa; and the shape of Monaco's Rev 1 curves, which it had only by name and
+so ran on Base - Standard (350 kW to 290 kph, where Rev 1 gives out at 300
+after falling from 200). With them, Monaco's holdout went 0.21% -> 0.16%
+(worst 0.44 -> 0.32) and nothing else moved; differences 0.422 s, segments
+0.142 s rms. "Montréal" now keys as montreal, not montral. Madrid's
+"1500-5100*" stays set aside.

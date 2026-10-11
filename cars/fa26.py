@@ -298,6 +298,25 @@ TAPER_CURVES = {
     "Base - Overtake": TAPER_OVERTAKE,
     "Alt 1": TAPER_ALT1,
 }
+BUILT_IN_TAPERS = frozenset(TAPER_CURVES)
+
+
+def register_curves(curves: dict) -> None:
+    """Learn curves an event notice brought in, by name, as (kph, kW) corners.
+
+    Singapore's notice introduced Rev 1 - Standard, Rev 1 - Overtake and Alt 2;
+    they arrive with the circuit data rather than with a new program. A curve
+    the program was built with is never replaced.
+    """
+    for name, points in (curves or {}).items():
+        if name in BUILT_IN_TAPERS:
+            continue
+        try:
+            corners = tuple((float(v), float(kw)) for v, kw in points)
+        except (TypeError, ValueError):
+            continue
+        if corners and corners[-1][1] == 0.0:
+            TAPER_CURVES[name] = corners
 
 
 def _curve_points(taper) -> tuple:

@@ -46,6 +46,7 @@ if not getattr(sys, "frozen", False):
         sys.path.insert(0, str(ROOT / sub))
 
 import calibrate
+import circuit_updates
 import carphysics
 import fa26
 import install
@@ -66,7 +67,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 
 
 def car_data() -> Path:
@@ -647,6 +648,7 @@ def readiness() -> dict:
            # whole answer, and it used to be invisible.
            "app_dir": str(install.app_dir()),
            "live_search": install.live_search_enabled(),
+           "circuit_data": dict(circuit_updates.STATUS),
            "protection": controlled_folder_access(),
            "blocked_advice": BLOCKED_ADVICE,
            "documents": {
@@ -1084,6 +1086,24 @@ def commanded_kj(splits, profile, a: float, b: float) -> float:
                 total += split.deploy_kw * step / speed
             d += step
     return total
+
+
+def power_share(splits, profile, length_m: float) -> float:
+    """How much of full power the map asks for, wherever the driver is on it.
+
+    1.0 is 350 kW everywhere the throttle is down. A map near that cannot ask
+    for more, so energy it finishes with is energy the car had no way to
+    spend -- on a short lap the motor's power, not the battery, is the limit.
+    """
+    full = 0.0
+    d = 0.0
+    while d < length_m:
+        step = min(profile.ds, length_m - d)
+        speed = profile.measured_speed_at(d)
+        if speed > 1.0 and profile.gas_mean[profile._slot(d)] >= 0.2:
+            full += fa26.POWER_MAX * step / speed
+        d += step
+    return commanded_kj(splits, profile, 0.0, length_m) / full if full > 0 else 0.0
 
 
 def plural(n: int, one: str, many: str | None = None) -> str:
@@ -1727,8 +1747,8 @@ class Engine:
         except Exception:
             pass                       # a run is worth more than its record
         self._check_fresh(key)
-        self.say("Three maps ready. Save them into a setup, then restart "
-                 "the session.")
+        self.say("%d maps ready. Save them into a setup, then restart "
+                 "the session." % len(self.results))
 
     def _check_fresh(self, key: str) -> None:
         """Say so if the session moved on while this was being worked out.
@@ -1786,6 +1806,15 @@ class Engine:
     #: prediction cannot catch the model being wrong. `OPENING_SHARE` is the
     #: one that catches that.
     QUALI_LEFTOVER_PCT = 10.0
+
+    #: Share of full power above which a map cannot ask for more; see
+    #: `power_share`.
+    SATURATED_SHARE = 0.85
+
+    #: When a plan recovers this many times what the laps did, and at least
+    #: this much more, it is built on energy the car is not recovering.
+    RECOVERY_RATIO = 1.5
+    RECOVERY_GAP_MJ = 1.0
 
     #: Share of a map's commanded deployment that may sit before the driver's
     #: first lift of the lap before it is worth saying so.
@@ -1943,7 +1972,24 @@ class Engine:
         # allowance would still have allowed.
         headroom = max(0.0, cap - result.harvested_mj)
         recoverable = min(result.refused_mj, headroom)
-        if recoverable > 0.1 and strat_no != 3:
+        # A map already asking for full power everywhere the throttle is down,
+        # that still never empties the battery, is not a search that failed:
+        # the car cannot spend what it recovers. A 1962 m club circuit came
+        # back with five maps all 62% -> 62%, each told that recovery was
+        # being lost and to re-run before trusting it -- advice nothing could
+        # act on. Said once, plainly, instead.
+        saturated = (strat_no != 3
+                     and power_share(splits, profile, lap.length_m) >= self.SATURATED_SHARE
+                     and result.store_min_kj > laplib.STORE_CAPACITY_KJ * 0.05)
+        if saturated:
+            notes.append(
+                "This map already asks for full power everywhere you are on "
+                "the throttle and still finishes the lap on %.0f%%: on this "
+                "circuit the car cannot spend everything it recovers. That is "
+                "not a fault, and running the optimizer again will not change "
+                "it." % pct(result.store_end_kj))
+            self.note("   " + notes[-1])
+        if recoverable > 0.1 and strat_no != 3 and not saturated:
             notes.append(
                 "%.1f MJ of recovery was lost to a full battery. Using more "
                 "earlier in the lap would make room." % recoverable)
@@ -1999,7 +2045,7 @@ class Engine:
                 self.note("   " + notes[-1])
 
         left = 100.0 * result.store_end_kj / laplib.STORE_CAPACITY_KJ
-        if strat_no == 1 and left >= self.QUALI_LEFTOVER_PCT:
+        if strat_no == 1 and left >= self.QUALI_LEFTOVER_PCT and not saturated:
             notes.append(
                 "This map finishes the lap still holding %.0f%% of the battery "
                 "— about %.1f MJ it never spent. A qualifying map should arrive "
@@ -2008,6 +2054,28 @@ class Engine:
                 "delivering. Worth re-running before you trust it."
                 % (left, result.store_end_kj / 1000.0))
             self.note("   " + notes[-1])
+
+        # The plan can only spend what the car recovers, and it works that
+        # out from the model rather than from the laps. When the laps say the
+        # car recovered a fraction of it, with room in the battery to take
+        # more, the plan rests on energy that is not there: the same club
+        # circuit planned 5.65 MJ a lap against 1.33 recovered on the laps it
+        # was built from, and called the result 0.9 s quicker.
+        if strat_no in (1, 2):
+            driven = lap.totals()[1]
+            roomy = max(lap.store_kj) < laplib.STORE_CAPACITY_KJ * 0.9
+            if (roomy and result.harvested_mj > driven * self.RECOVERY_RATIO
+                    and result.harvested_mj - driven > self.RECOVERY_GAP_MJ):
+                limit = ("switched off" if cap >= 90.0
+                         else "%.1f MJ" % cap)
+                notes.append(
+                    "This plan recovers %.1f MJ a lap, but your laps here "
+                    "recovered only %.1f MJ with room in the battery for more. "
+                    "It is built on energy your car is not recovering, so do "
+                    "not trust its times yet. Check the recovery limit (here "
+                    "it is %s), drive a few laps with the battery above 30%%, "
+                    "and run it again." % (result.harvested_mj, driven, limit))
+                self.note("   " + notes[-1])
 
         unused = cap - result.harvested_mj
         if (strat_no != 3 and cap < 90.0
@@ -2101,7 +2169,7 @@ class Engine:
         # a map that spends less and is quicker beats one that spends it all.
         # The car's SoC Adaptation closes the rest on track.
         net = (result.store_end_kj - result.store_start_kj) / 1000.0
-        per_lap = max(abs(net), 0.05)
+        per_lap = abs(net)
         full = laplib.STORE_CAPACITY_KJ / 1000.0
         modes = " or ".join(modes_for(strat_no)) or "STRAT %d" % strat_no
         # Against the race map that holds its level, also a repeating lap.
@@ -2112,6 +2180,14 @@ class Engine:
             gain = (" %.2fs a lap %s than holding your charge."
                     % (abs(d), "quicker" if d < 0 else "slower"))
         target = "SoC Target %+d%%" % pct
+        if per_lap < 0.1:
+            # Nothing to spend or bank: energy is not what limits this lap,
+            # and the old wording turned that into "banks 0.05 MJ a lap, empty
+            # to full in about 80 laps".
+            return ["%s: holds its charge rather than %s it (%s). Energy is "
+                    "not what limits the lap here, so this plays out like the "
+                    "race map." % (modes, "spending" if pct < 0 else "banking",
+                                   target)]
         if net < 0:
             return ["%s: spends %.2f MJ of the battery a lap, so about %d "
                     "laps from full (%s).%s" % (modes, per_lap,
@@ -2897,6 +2973,9 @@ def main(argv=None) -> int:
         return 1
 
     url = "http://127.0.0.1:%d/" % port
+    # The circuit table as published since this build: each FIA Power Unit
+    # Information notice, within hours. Never waited on.
+    circuit_updates.check_in_background()
     print("FA26 ERS Deployment Optimizer  --  %s" % url)
     print("telemetry: %s" % baseline_dir())
     threading.Thread(target=server.serve_forever, daemon=True).start()

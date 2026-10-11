@@ -1,4 +1,7 @@
 {
+  "_meta": {
+    "updated": "2026-10-11T15:38:44Z"
+  },
   "albertpark": {
     "practice": 85,
     "qualify": 70,
@@ -10,7 +13,17 @@
     "power_limited_m": 3518,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
-    "centreline_m": 5278
+    "centreline_m": 5278,
+    "reset_zones": [
+      [
+        1450,
+        1600
+      ]
+    ],
+    "aliases": [
+      "australian",
+      "melbourne"
+    ]
   },
   "austin": {
     "practice": 90,
@@ -31,6 +44,7 @@
     "power_limited_m": 3796,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 6003,
     "curve_alternative": "Alt 1",
     "alt_zones": [
       [
@@ -57,7 +71,10 @@
         "q"
       ]
     ],
-    "centreline_m": 6003
+    "aliases": [
+      "azerbaijan",
+      "baku"
+    ]
   },
   "barcelona": {
     "practice": 90,
@@ -70,6 +87,22 @@
     "power_limited_m": 2440,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 4657,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        820,
+        2100
+      ],
+      [
+        2520,
+        2850
+      ],
+      [
+        3480,
+        3750
+      ]
+    ],
     "speed_zones": [
       [
         1000,
@@ -87,7 +120,24 @@
         260
       ]
     ],
-    "centreline_m": 4657
+    "reset_zones": [
+      [
+        1150,
+        1400
+      ],
+      [
+        2850,
+        3050
+      ],
+      [
+        4300,
+        4700
+      ]
+    ],
+    "aliases": [
+      "barcelona",
+      "barcelonacatalunya"
+    ]
   },
   "hungaroring": {
     "practice": 90,
@@ -100,11 +150,16 @@
     "power_limited_m": 1885,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
-    "reset_zones": [
+    "centreline_m": 4381,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
       [
-        4150,
-        4400,
-        "q"
+        1780,
+        2700
+      ],
+      [
+        3500,
+        4000
       ]
     ],
     "speed_zones": [
@@ -114,7 +169,17 @@
         240
       ]
     ],
-    "centreline_m": 4381
+    "reset_zones": [
+      [
+        4150,
+        4400,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "budapest",
+      "hungarian"
+    ]
   },
   "interlagos": {
     "practice": 90,
@@ -159,6 +224,7 @@
     "power_limited_m": 3206,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 5416,
     "curve_alternative": "Alt 1",
     "reset_zones": [
       [
@@ -167,7 +233,10 @@
         "q"
       ]
     ],
-    "centreline_m": 5416
+    "aliases": [
+      "madrid",
+      "spanish"
+    ]
   },
   "mexico": {
     "practice": 90,
@@ -188,11 +257,16 @@
     "power_limited_m": 3346,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
-    "reset_zones": [
+    "centreline_m": 5412,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
       [
-        5000,
-        5500,
-        "q"
+        370,
+        1550
+      ],
+      [
+        3100,
+        3520
       ]
     ],
     "speed_zones": [
@@ -207,7 +281,16 @@
         240
       ]
     ],
-    "centreline_m": 5412
+    "reset_zones": [
+      [
+        5000,
+        5500,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "miami"
+    ]
   },
   "monaco": {
     "practice": 90,
@@ -220,7 +303,44 @@
     "power_limited_m": 1388,
     "curve_standard": "Rev 1 - Standard",
     "curve_override": "Rev 1 - Overtake",
-    "centreline_m": 3337
+    "centreline_m": 3337,
+    "reset_zones": [
+      [
+        3070,
+        3400,
+        "q"
+      ]
+    ],
+    "curves": {
+      "Rev 1 - Standard": [
+        [
+          200.0,
+          350.0
+        ],
+        [
+          300.0,
+          0.0
+        ]
+      ],
+      "Rev 1 - Overtake": [
+        [
+          200.0,
+          350.0
+        ],
+        [
+          300.0,
+          150.0
+        ],
+        [
+          310.0,
+          0.0
+        ]
+      ]
+    },
+    "aliases": [
+      "monaco",
+      "montecarlo"
+    ]
   },
   "montreal": {
     "practice": 85,
@@ -233,6 +353,14 @@
     "power_limited_m": 2682,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 4361,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        220,
+        1200
+      ]
+    ],
     "reset_zones": [
       [
         4000,
@@ -240,7 +368,10 @@
         "q"
       ]
     ],
-    "centreline_m": 4361
+    "aliases": [
+      "canadian",
+      "montreal"
+    ]
   },
   "monza": {
     "practice": 75,
@@ -253,6 +384,14 @@
     "power_limited_m": 4218,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 5793,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        2100,
+        2800
+      ]
+    ],
     "reset_zones": [
       [
         5300,
@@ -260,8 +399,10 @@
         "q"
       ]
     ],
-    "curve_alternative": "Alt 1",
-    "centreline_m": 5793
+    "aliases": [
+      "italian",
+      "monza"
+    ]
   },
   "redbullring": {
     "practice": 85,
@@ -274,6 +415,18 @@
     "power_limited_m": 2923,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 4236,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        2170,
+        2960
+      ],
+      [
+        3720,
+        3920
+      ]
+    ],
     "reset_zones": [
       [
         4100,
@@ -281,7 +434,10 @@
         "q"
       ]
     ],
-    "centreline_m": 4236
+    "aliases": [
+      "austrian",
+      "spielberg"
+    ]
   },
   "sakhir": {
     "practice": 90,
@@ -302,6 +458,7 @@
     "power_limited_m": 3365,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 5543,
     "curve_alternative": "Alt 1",
     "alt_zones": [
       [
@@ -340,7 +497,10 @@
         "q"
       ]
     ],
-    "centreline_m": 5543
+    "aliases": [
+      "bahrain",
+      "sepang"
+    ]
   },
   "shanghai": {
     "practice": 90,
@@ -353,7 +513,11 @@
     "power_limited_m": 3125,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
-    "centreline_m": 5451
+    "centreline_m": 5451,
+    "aliases": [
+      "chinese",
+      "shanghai"
+    ]
   },
   "silverstone": {
     "practice": 85,
@@ -366,6 +530,18 @@
     "power_limited_m": 3833,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 5891,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        350,
+        1000
+      ],
+      [
+        4950,
+        5450
+      ]
+    ],
     "speed_zones": [
       [
         3700,
@@ -378,15 +554,99 @@
         230
       ]
     ],
-    "centreline_m": 5891
+    "reset_zones": [
+      [
+        400,
+        550
+      ],
+      [
+        3000,
+        3300
+      ],
+      [
+        5650,
+        5900,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "british",
+      "silverstone"
+    ]
   },
   "singapore": {
     "practice": 90,
     "qualify": 90,
-    "race": 80,
-    "race_overtake": 85,
+    "race": 85,
+    "race_overtake": 90,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:17",
+    "rate_kw_s": 100,
+    "power_limited_m": 2185,
+    "curve_standard": "Rev 1 - Standard",
+    "curve_override": "Rev 1 - Overtake",
+    "centreline_m": 4927,
+    "curve_alternative": "Alt 2",
+    "alt_zones": [
+      [
+        400,
+        900
+      ],
+      [
+        1750,
+        2150
+      ],
+      [
+        2600,
+        3000
+      ]
+    ],
+    "reset_zones": [
+      [
+        4700,
+        4900,
+        "q"
+      ]
+    ],
+    "curves": {
+      "Rev 1 - Standard": [
+        [
+          200.0,
+          350.0
+        ],
+        [
+          300.0,
+          0.0
+        ]
+      ],
+      "Rev 1 - Overtake": [
+        [
+          200.0,
+          350.0
+        ],
+        [
+          300.0,
+          150.0
+        ],
+        [
+          310.0,
+          0.0
+        ]
+      ],
+      "Alt 2": [
+        [
+          228.5,
+          250.0
+        ],
+        [
+          300.0,
+          0.0
+        ]
+      ]
+    },
+    "aliases": [
+      "singapore"
+    ]
   },
   "spa": {
     "practice": 90,
@@ -399,6 +659,14 @@
     "power_limited_m": 4594,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 7004,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        2400,
+        4900
+      ]
+    ],
     "speed_zones": [
       [
         2500,
@@ -411,7 +679,33 @@
         240
       ]
     ],
-    "centreline_m": 7004
+    "reset_zones": [
+      [
+        1150,
+        1400
+      ],
+      [
+        2650,
+        2750
+      ],
+      [
+        3800,
+        4000
+      ],
+      [
+        6150,
+        6350
+      ],
+      [
+        6800,
+        7000,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "belgian",
+      "spafrancorchamps"
+    ]
   },
   "suzuka": {
     "practice": 90,
@@ -424,7 +718,11 @@
     "power_limited_m": 3472,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
-    "centreline_m": 5807
+    "centreline_m": 5807,
+    "aliases": [
+      "japanese",
+      "suzuka"
+    ]
   },
   "yasmarina": {
     "practice": 90,
@@ -445,6 +743,22 @@
     "power_limited_m": 2411,
     "curve_standard": "Base - Standard",
     "curve_override": "Base - Overtake",
+    "centreline_m": 4259,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        350,
+        800
+      ],
+      [
+        2000,
+        2450
+      ],
+      [
+        3100,
+        3400
+      ]
+    ],
     "reset_zones": [
       [
         3700,
@@ -452,6 +766,9 @@
         "q"
       ]
     ],
-    "centreline_m": 4259
+    "aliases": [
+      "dutch",
+      "zandvoort"
+    ]
   }
 }

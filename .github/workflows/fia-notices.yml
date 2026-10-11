@@ -1,0 +1,61 @@
+# Every few hours: read any new FIA Power Unit Information notice into the
+# circuit table, and publish it. Every copy of the optimizer downloads that
+# table when it starts, so a race weekend needs no new version.
+#
+# A notice the reader refuses changes nothing and opens an issue, which
+# GitHub emails to the repository's owner. See tools/fia_watch.py.
+
+name: FIA power unit notices
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the PDF reader
+        run: pip install pymupdf
+
+      - name: Look for a new notice
+        id: watch
+        run: |
+          set +e
+          python tools/fia_watch.py > watch.log 2>&1
+          code=$?
+          cat watch.log
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 3 is the FIA site being unreachable: fail the run, open no issue.
+          if [ "$code" = "3" ]; then exit 1; fi
+          exit 0
+
+      - name: Publish the circuit table
+        run: |
+          if [ -n "$(git status --porcelain data/)" ]; then
+            git config user.name "FIA notice watch"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/fa26_recharge.json data/fia_notices.json
+            git commit -m "Circuit data from the FIA Power Unit Information notice" -m "$(cat watch.log)"
+            git push
+          fi
+
+      - name: Ask a person to check
+        if: steps.watch.outputs.code == '1' || steps.watch.outputs.code == '2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "FIA power unit notice needs checking" \
+            --body-file watch.log

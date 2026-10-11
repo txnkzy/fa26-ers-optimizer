@@ -1216,6 +1216,103 @@ def _switch_is_actionable() -> tuple[bool, str]:
 _ok, _why = _switch_is_actionable()
 check("the driver is told a landmark, not a distance", _ok, _why)
 
+
+# --- circuit data arrives without a new version ------------------------------
+# A downloaded table is laid over the built-in one only when it is at least as
+# new; a broken entry in it is ignored; a circuit it adds is found by the names
+# its notice gives, inside a track folder's prefix and year; and a curve it
+# brings is learned. None of it touches the real download on this computer.
+def _downloaded_table_rules() -> tuple[bool, str]:
+    import json as _json
+    import tempfile
+    import recharge as _r
+    real = _r.DOWNLOADED_PATH
+    tmp = Path(tempfile.mkdtemp()) / "circuits.json"
+    new = {"practice": 90, "qualify": 80, "race": 80, "race_overtake": 85,
+           "outlap": 90, "source": "fia:99", "curve_standard": "Rev 9 - Check",
+           "curves": {"Rev 9 - Check": [[250.0, 350.0], [320.0, 0.0]]},
+           "aliases": ["checkville"]}
+    bad = {"practice": 900, "qualify": 80, "race": 80, "race_overtake": 85,
+           "outlap": 90}
+    try:
+        _r.DOWNLOADED_PATH = tmp
+        out = {}
+        for label, stamp in (("old", "2000-01-01T00:00:00Z"),
+                             ("new", "2999-01-01T00:00:00Z")):
+            tmp.write_text(_json.dumps({"_meta": {"updated": stamp},
+                                        "checkcircuit": new, "broken": bad}))
+            _r.reload()
+            out[label] = (_r.lookup("rt_checkville_2026").source,
+                          "broken" in _r.load_table())
+        known = fa26.taper_is_known("Rev 9 - Check")
+    finally:
+        _r.DOWNLOADED_PATH = real
+        _r.reload()
+    if out["old"][0] != "fia-baseline":
+        return False, "an older download overruled the built-in table"
+    if out["new"][0] != "fia:99":
+        return False, "a newer download's circuit was not found: %s" % (out["new"],)
+    if out["new"][1] or out["old"][1]:
+        return False, "a broken entry was used"
+    if not known:
+        return False, "the curve it brought was not learned"
+    return True, "older ignored, newer used, broken entry skipped, curve learned"
+
+
+_ok, _why = _downloaded_table_rules()
+check("a downloaded circuit table is used only when it is sound and newer",
+      _ok, _why)
+
+
+# The FIA notice reader, on the notice kept beside the project when there is
+# one: every figure has to come out as the table holds it, and the chart's
+# Base curves exactly as the regulations define them.
+def _notice_reader() -> tuple[bool, str]:
+    import json as _json
+    source = Path(A.__file__).resolve().parent / "docs" / "sources" / \
+        "R14_Spain_Madrid_Power_Unit_Information.pdf"
+    if not source.exists():
+        return True, "no notice beside the project to read (fine on a clone)"
+    try:
+        import pu_notice
+        notice = pu_notice.parse(source.read_bytes())
+    except ImportError:
+        return True, "PyMuPDF not installed here; the reader runs on GitHub"
+    table = _json.loads((Path(A.__file__).resolve().parent / "data"
+                         / "fa26_recharge.json").read_text(encoding="utf-8"))
+    got, want = notice.entry(14), table["madrid"]
+    differ = [k for k in want if k not in ("source", "aliases")
+              and got.get(k) != want.get(k)]
+    if differ:
+        return False, "Madrid reads differently: %s" % differ
+    if notice.skipped != ["1500-5100*"]:
+        return False, "the unexplained 1500-5100* was not set aside: %s" % notice.skipped
+    return True, "Madrid read to the table; 1500-5100* set aside for a person"
+
+
+_ok, _why = _notice_reader()
+check("an FIA notice is read to the figure", _ok, _why)
+
+
+# Everything that runs away from this check -- the watcher runs on GitHub's
+# machines, out of sight -- at least has to compile. A stray line break once
+# left tools/fia_watch.py unable to start at all.
+def _everything_compiles() -> tuple[bool, str]:
+    import py_compile
+    root = Path(A.__file__).resolve().parent
+    files = [p for d in ("core", "cars", "tools") for p in (root / d).glob("*.py")]
+    files.append(root / "fa26_app.py")
+    for f in files:
+        try:
+            py_compile.compile(str(f), doraise=True)
+        except py_compile.PyCompileError as exc:
+            return False, "%s: %s" % (f.name, str(exc).splitlines()[-1][:60])
+    return True, "%d files" % len(files)
+
+
+_ok, _why = _everything_compiles()
+check("every script compiles, the GitHub watcher included", _ok, _why)
+
 print("FAILED: %s" % ", ".join(fails) if fails else "ALL PASS")
 srv.shutdown()
 sys.exit(1 if fails else 0)

@@ -14,12 +14,23 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, asdict
+import os
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
 from paths import resource_root
 
 TABLE_PATH = resource_root() / "data" / "fa26_recharge.json"
+
+#: The circuit table as last downloaded, laid over the one built into the
+#: program; see `circuit_updates.py`. Each FIA Power Unit Information notice
+#: reaches it within hours of publication, so a race weekend needs no new
+#: version of the program.
+#: The table's own entry for when it was last updated, ISO time in UTC.
+META = "_meta"
+
+DOWNLOADED_PATH = (Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"))
+                   / "FA26 Optimizer" / "circuits.json")
 
 #: Whether a declared C5.12.5 zone lets the power demand rise under full
 #: throttle. The notice's words are "a reset of MGU-K power *reduction* is
@@ -127,6 +138,12 @@ class Allocation:
     #: 5750 -- so a window near the end of the lap lands up to 80 m out if it
     #: is used as published. Given both lengths the windows can be scaled.
     centreline_m: int = 0
+    #: Power curves this circuit's notice brought in that the program was
+    #: built without, as {name: [[kph, kW], ...]}; see fa26.register_curves.
+    curves: dict = field(default_factory=dict)
+    #: Other names the circuit goes by -- the notice's venue and its event's
+    #: country -- so a track folder named after either finds it.
+    aliases: tuple = ()
 
     @property
     def is_baseline(self) -> bool:
@@ -199,13 +216,74 @@ def _canonical() -> tuple:
     """Known circuit keys, longest first, so the most specific name wins."""
     global _CANONICAL
     if not _CANONICAL:
-        names = set(DEFAULT_TABLE)
-        try:
-            names |= set(json.loads(TABLE_PATH.read_text(encoding="utf-8")))
-        except (OSError, ValueError):
-            pass
+        names = set(DEFAULT_TABLE) | set(_raw_table())
         _CANONICAL = tuple(sorted(names, key=len, reverse=True))
     return _CANONICAL
+
+
+def _data_aliases() -> dict:
+    out = {}
+    for key, entry in _raw_table().items():
+        for alias in entry.get("aliases") or ():
+            if alias and alias != key:
+                out.setdefault(alias, key)
+    return out
+
+
+def valid_entry(entry) -> bool:
+    """Whether a circuit entry is safe to use: every field known, limits sane."""
+    try:
+        alloc = Allocation(**entry)
+    except TypeError:
+        return False
+    limits = (alloc.practice, alloc.qualify, alloc.race, alloc.race_overtake,
+              alloc.outlap)
+    return (all(isinstance(v, int) and 30 <= v <= 90 for v in limits)
+            and alloc.rate_kw_s in (50, 100))
+
+
+def _raw_table() -> dict:
+    """The built-in table with the downloaded one laid over it, entry by entry.
+
+    A downloaded entry replaces a built-in one of the same name and adds any
+    the program does not know. One that does not pass `valid_entry` is
+    ignored, and a download that cannot be read at all changes nothing.
+    """
+    try:
+        table = json.loads(TABLE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        table = {}
+    try:
+        downloaded = json.loads(DOWNLOADED_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        downloaded = {}
+    built = str((table.pop(META, None) or {}).get("updated", ""))
+    if isinstance(downloaded, dict):
+        # Only a table at least as new as the one built in. Otherwise a
+        # build made after a notice would be overruled by an older download
+        # -- which is what any copy of the program would have done between
+        # its release and the repository catching up.
+        fetched = str((downloaded.get(META) or {}).get("updated", ""))
+        if fetched >= built:
+            for key, entry in downloaded.items():
+                if key != META and isinstance(entry, dict) and valid_entry(entry):
+                    table[key] = entry
+    return table
+
+
+def built_in_stamp() -> str:
+    """When the table this program was built with was last updated."""
+    try:
+        table = json.loads(TABLE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return str((table.get(META) or {}).get("updated", ""))
+
+
+def reload() -> None:
+    """Forget cached circuit names after the table has been updated."""
+    global _CANONICAL
+    _CANONICAL = ()
 
 
 def normalise(track: str) -> str:
@@ -228,13 +306,16 @@ def normalise(track: str) -> str:
             head.append(p)
         if head:
             name = head[0]
+    # Accents dropped rather than deleted: "Montréal" is "montreal".
+    import unicodedata
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     name = name.lower().strip()
     name = re.sub(r"^(fn_|rj_|acu_|csp_|ks_)", "", name)
     name = re.sub(r"[^a-z0-9]+", "", name)
     # Track folders embed years and layout tags anywhere in the name
     # (lasvegas23, abu_dhabi_2021_chq), so drop digits wherever they appear.
     name = re.sub(r"[0-9]+", "", name)
-    name = ALIASES.get(name, name)
+    name = ALIASES.get(name) or _data_aliases().get(name, name)
     if name in _canonical():
         return name
 
@@ -250,6 +331,12 @@ def normalise(track: str) -> str:
     # words, and both already resolve exactly or through an alias.
     for key in _canonical():
         if len(key) >= MIN_CONTAINED_NAME and key in name:
+            return key
+    # And the names the notices give, the same way: a circuit new to the
+    # table arrives with its venue and country, and a track folder carries
+    # them inside an author's prefix and a year.
+    for alias, key in sorted(_data_aliases().items(), key=lambda kv: -len(kv[0])):
+        if len(alias) >= MIN_CONTAINED_NAME and alias in name:
             return key
     return name
 
@@ -294,9 +381,12 @@ ALIASES = {
 
 
 def load_table() -> dict[str, Allocation]:
-    if not TABLE_PATH.exists():
+    raw = _raw_table()
+    if not raw:
         return dict(DEFAULT_TABLE)
-    raw = json.loads(TABLE_PATH.read_text(encoding="utf-8"))
+    import fa26
+    for entry in raw.values():
+        fa26.register_curves(entry.get("curves"))
     return {k: Allocation(**v) for k, v in raw.items()}
 
 

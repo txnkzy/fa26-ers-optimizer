@@ -1207,6 +1207,9 @@ function diagnostics() {
              + (state.ready.found_automatically ? " (found automatically)"
                                                 : " (set by hand)"));
     out.push("logger installed: " + state.ready.logger);
+    const cd = state.ready.circuit_data || {};
+    out.push("circuit data: " + (cd.result || "unknown")
+             + (cd.checked ? " (checked " + cd.checked + ")" : ""));
   }
   // Unknown is not "no". A page whose optimizer had already shut down -- the
   // Edge window that lost it -- reported "game running: false" to a player
@@ -1437,13 +1440,13 @@ function renderApplied(res) {
 
   const p = el("p");
   p.append(document.createTextNode(
-    "All three maps are in your setup. It will load on STRAT "
-    + res.active + ", the qualifying map. To change which one you are running, "
-    + "use "));
+    "All " + state.summary.length + " maps are in your setup, and the PU mode "
+    + "switch on the wheel picks between them: Q qualifying, RACE race, SLO "
+    + "and SC recharge, AD1 attack, AD2 defend, K2 push, ES save. It will load "
+    + "on STRAT " + res.active + ". In FS, FW, IN, K2+, T4 and RS the "));
   p.append(el("code", null, "STRAT Map"));
   p.append(document.createTextNode(
-    " on the pit setup screen: 1 qualifying, 2 race, 3 recharge. The PU mode "
-    + "switch on the wheel does not change it."));
+    " rotary decides instead, which is where to compare maps of your own."));
   panel.append(p);
 
   panel.append(el("p", "loud", "Restart the session before you drive"));
