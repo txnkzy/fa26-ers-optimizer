@@ -1247,3 +1247,14 @@ table.split-table {
  * is reachable before the first lap rather than after it. */
 .auto-switch { margin-top: 2px; }
 .auto-warn { margin-top: 7px; }
+
+/* A newer version is out. Quiet, but where it will be seen. */
+.update-banner {
+  margin: 0;
+  padding: 8px 24px;
+  background: #2a2114;
+  color: var(--accent);
+  border-bottom: 1px solid #3a2f1c;
+  font-size: 13px;
+}
+.update-banner[hidden] { display: none; }

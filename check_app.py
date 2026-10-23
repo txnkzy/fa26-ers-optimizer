@@ -1313,6 +1313,39 @@ def _everything_compiles() -> tuple[bool, str]:
 _ok, _why = _everything_compiles()
 check("every script compiles, the GitHub watcher included", _ok, _why)
 
+
+# Maintenance mode: the things most likely to go wrong unwatched have to say
+# so themselves.
+_missing = A.car_changes()
+check("the installed car has every setup item this version relies on",
+      not _missing, ", ".join(_missing[:3]) if _missing else "all present")
+
+_latest = json.loads((Path(A.__file__).resolve().parent / "data"
+                      / "latest_version.json").read_text(encoding="utf-8"))
+check("the published version file names this release",
+      _latest.get("version") == A.VERSION,
+      "%s against %s" % (_latest.get("version"), A.VERSION))
+
+
+def _blocked_page_fails() -> tuple[bool, str]:
+    sys.path.insert(0, str(Path(A.__file__).resolve().parent / "tools"))
+    import fia_watch
+    real = fia_watch.fetch
+    fia_watch.fetch = lambda url: b"<html>Checking your browser...</html>"
+    try:
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = fia_watch.main([])
+    finally:
+        fia_watch.fetch = real
+    return code == 3, "exit %d" % code
+
+
+_ok, _why = _blocked_page_fails()
+check("an FIA page with no documents fails the watcher, not 'nothing new'",
+      _ok, _why)
+
 print("FAILED: %s" % ", ".join(fails) if fails else "ALL PASS")
 srv.shutdown()
 sys.exit(1 if fails else 0)

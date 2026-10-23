@@ -2572,3 +2572,25 @@ after falling from 200). With them, Monaco's holdout went 0.21% -> 0.16%
 (worst 0.44 -> 0.32) and nothing else moved; differences 0.422 s, segments
 0.142 s rms. "Montréal" now keys as montreal, not montral. Madrid's
 "1500-5100*" stays set aside.
+
+### 1.1.4: maintenance mode
+
+The last feature release for the FA26. What is most likely to go wrong
+unwatched now says so itself:
+
+* `circuit_updates.check_version` reads `data/latest_version.json` from the
+  repository at start-up; the page shows a banner when it names a newer
+  version than the one running. The file is edited by hand at each release,
+  and `check_app.py` refuses a build whose version it does not name.
+* `fa26.missing_setup_items` lists every setup item the app reads or writes;
+  the readiness check names any the installed car lacks ("car_changed")
+  instead of failing during a save, as the car's v1.1 update made 1.1.2 do.
+* The watcher treats a documents page with no documents on it as unreachable
+  (exit 3, a failed run) rather than as a week with no notice, so a bot check
+  or an outage cannot pass for a quiet week.
+* The watch runs until 25 December 2026 and then disables itself; the FA27
+  optimizer will be its own program.
+
+The COTA notice (R18) was the first imported with no one involved: published
+on 22-23 October, committed by the watch at 04:47 UTC on the 23rd, every
+figure matching the PDF, and picked up by a 1.1.3 copy at start-up.

@@ -142,8 +142,9 @@ async function checkReady() {
     }
     return true;
   }
-  $("setup-title").textContent = r.kind === "no_car"
-    ? "Car not found" : "Assetto Corsa not found";
+  $("setup-title").textContent = r.kind === "no_car" ? "Car not found"
+    : r.kind === "car_changed" ? "The car has been updated"
+    : "Assetto Corsa not found";
   $("setup-problem").textContent = r.problem;
   fillPath(r.root);
   $("run").disabled = true;
@@ -1624,6 +1625,29 @@ async function restore() {
 }
 
 checkReady().then((ok) => (ok ? load(true).then(restore) : null));
+
+/* A newer version, when there is one. The optimizer asks once at start-up,
+ * in the background, so the answer arrives a few seconds after the page. */
+function newer(a, b) {
+  const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+async function checkForUpdate() {
+  let r;
+  try { r = await get("/api/ready"); } catch (err) { return; }
+  const cd = r.circuit_data || {};
+  if (!cd.latest || !newer(cd.latest, r.version)) return;
+  const banner = $("update-banner");
+  banner.textContent = "Version " + cd.latest + " of the optimizer is out. "
+    + (cd.where || "Download it from the same place you got this one.");
+  banner.hidden = false;
+}
+setTimeout(checkForUpdate, 6000);
+setTimeout(checkForUpdate, 30000);
 // Watch for laps as they are driven, so alt-tabbing back after a run shows
 // them without anyone having to press anything.
 state.watch = setInterval(() => {

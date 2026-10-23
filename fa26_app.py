@@ -67,7 +67,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 
 
 def car_data() -> Path:
@@ -687,8 +687,39 @@ def readiness() -> dict:
         out["kind"] = exc.kind
         out["problem"] = exc.message
         return out
+    missing = car_changes()
+    if missing:
+        out["kind"] = "car_changed"
+        out["problem"] = (
+            "The Formula Alpha 2026 has been updated in a way this version of "
+            "the optimizer does not recognise: %d setup %s it relies on %s "
+            "missing or renamed (%s). Check the Discord for an updated "
+            "version of the optimizer."
+            % (len(missing), plural(len(missing), "item"),
+               "is" if len(missing) == 1 else "are", ", ".join(missing[:3])))
+        return out
     out["ok"] = True
     return out
+
+
+_CAR_CHANGES: dict = {}
+
+
+def car_changes() -> list[str]:
+    """Setup items this version relies on that the installed car lacks.
+
+    Checked once per version of the car's setup file, not on every poll.
+    """
+    path = car_data() / "setup.ini"
+    try:
+        stamp = (path.stat().st_mtime, path.stat().st_size)
+    except OSError:
+        return []
+    if _CAR_CHANGES.get("stamp") != stamp:
+        mapping = setupfile.item_index_map(
+            path.read_text(encoding="utf-8", errors="replace"))
+        _CAR_CHANGES.update(stamp=stamp, missing=fa26.missing_setup_items(mapping))
+    return _CAR_CHANGES["missing"]
 
 
 #: A lap saved within a few seconds of the game starting still belongs to

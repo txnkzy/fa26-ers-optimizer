@@ -23,10 +23,34 @@ import recharge
 
 URL = ("https://raw.githubusercontent.com/txnkzy/fa26-ers-optimizer/main/"
        "data/fa26_recharge.json")
+#: The newest released version, so a copy that has fallen behind can say so.
+LATEST_URL = ("https://raw.githubusercontent.com/txnkzy/fa26-ers-optimizer/"
+              "main/data/latest_version.json")
 TIMEOUT_S = 8
 
 #: What happened at the last check, for the diagnostics page.
-STATUS = {"checked": "", "result": "not checked yet", "circuits": 0}
+STATUS = {"checked": "", "result": "not checked yet", "circuits": 0,
+          "latest": "", "where": ""}
+
+
+def check_version(url: str = LATEST_URL) -> str:
+    """The newest released version, as published; empty if unknown.
+
+    Fixes only reach players who install them, and nothing told a player on
+    an old version that a new one existed -- after a car update broke 1.1.2,
+    the only way to find out was to ask on Discord.
+    """
+    try:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "FA26-ERS-Optimizer"})
+        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        latest = str(raw.get("version", ""))
+        where = str(raw.get("where", ""))
+    except Exception:
+        return ""
+    STATUS.update(latest=latest, where=where)
+    return latest
 
 
 def check(url: str = URL) -> str:
@@ -67,7 +91,10 @@ def check(url: str = URL) -> str:
 
 
 def check_in_background() -> None:
-    threading.Thread(target=check, name="circuit-updates", daemon=True).start()
+    def both():
+        check()
+        check_version()
+    threading.Thread(target=both, name="circuit-updates", daemon=True).start()
 
 
 def _done(result: str, circuits: int = 0) -> str:

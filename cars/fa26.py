@@ -98,6 +98,32 @@ def split_ids(map_index: int, split_index: int) -> list[str]:
     ]
 
 
+#: Strats the app writes maps into, and PU modes it points at them.
+WRITTEN_STRATS = 7
+PU_MODE_COUNT = 14
+
+
+def missing_setup_items(mapping: dict[str, int]) -> list[str]:
+    """Setup items the app reads or writes that this car does not have.
+
+    The car's v1.1 update reordered its setup file and the program crashed on
+    every player who had updated. A car that drops or renames an item the app
+    relies on should be named as the problem, plainly, before anything tries
+    to use it -- not discovered as a crash part way through a save.
+    """
+    wanted = ["STRAT_MAP", "ERS_UNLIMITED_MODE", "ERS_SESSION_LIMITS",
+              "ERS_REGEN_MAX_MJ_R", "ERS_REGEN_MAX_MJ_R_OT",
+              "ERS_REGEN_MAX_MJ_Q", "ERS_REGEN_MAX_MJ_P", "ERS_REGEN_MAX_MJ_OL"]
+    for n in range(1, WRITTEN_STRATS + 1):
+        wanted += [f"STRAT_{n}_DEPLOYMENT_MAP", f"STRAT_{n}_SOC_TARGET",
+                   f"STRAT_{n}_SOC_ADAPTATION"]
+        for split in range(1, SPLITS_PER_MAP + 1):
+            wanted += split_ids(n, split)
+    for m in range(1, PU_MODE_COUNT + 1):
+        wanted += [f"PU_MODE_{m}_STRAT_MAP", f"PU_MODE_{m}_STRAT_MAP_ACTIVE"]
+    return [item for item in wanted if item not in mapping]
+
+
 def read_map(setup_text: str, mapping: dict[str, int], map_index: int) -> list[Split]:
     """Non-empty splits of one deployment map, in file order."""
     values = setupfile.read_values(setup_text)

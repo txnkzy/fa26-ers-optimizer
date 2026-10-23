@@ -15,21 +15,43 @@ on:
 permissions:
   contents: write
   issues: write
+  actions: write
+
+# The 2026 season's last notice is long out by Christmas. The first run after
+# 25 December 2026 switches this job off for good; the FA27 optimizer will be
+# its own program, with its own watcher.
+env:
+  SEASON_ENDS: "2026-12-25"
 
 jobs:
   watch:
     runs-on: ubuntu-latest
     steps:
+      - name: Stop after the season
+        id: season
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(date -u +%F)" \> "$SEASON_ENDS" ]; then
+            echo "The 2026 season is over; switching the notice watch off."
+            gh workflow disable fia-notices.yml --repo "$GITHUB_REPOSITORY"
+            echo "over=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.season.outputs.over != 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.season.outputs.over != 'true'
         with:
           python-version: "3.12"
 
       - name: Install the PDF reader
+        if: steps.season.outputs.over != 'true'
         run: pip install pymupdf
 
       - name: Look for a new notice
+        if: steps.season.outputs.over != 'true'
         id: watch
         run: |
           set +e
@@ -42,6 +64,7 @@ jobs:
           exit 0
 
       - name: Publish the circuit table
+        if: steps.season.outputs.over != 'true'
         run: |
           if [ -n "$(git status --porcelain data/)" ]; then
             git config user.name "FIA notice watch"
@@ -52,7 +75,7 @@ jobs:
           fi
 
       - name: Ask a person to check
-        if: steps.watch.outputs.code == '1' || steps.watch.outputs.code == '2'
+        if: steps.season.outputs.over != 'true' && (steps.watch.outputs.code == '1' || steps.watch.outputs.code == '2')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

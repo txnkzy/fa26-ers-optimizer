@@ -41,6 +41,7 @@ LIST_URL = ("https://www.fia.com/documents/championships/"
             "fia-formula-one-world-championship-14")
 BASE = "https://www.fia.com"
 AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FA26-ERS-Optimizer"
+ANY_DOCUMENT = re.compile(r"/files/decision-document/[^\"'\s>]+\.pdf", re.I)
 NOTICE_LINK = re.compile(
     r'(/(?:sites/default|system)/files/decision-document/'
     r'[^"\'\s>]*power_unit_information[^"\'\s>]*\.pdf)', re.I)
@@ -121,8 +122,15 @@ def main(argv=None) -> int:
         sources = [(Path(args.pdf).name, Path(args.pdf).read_bytes())]
     else:
         try:
-            links = [u for u in notice_links(
-                fetch(LIST_URL).decode("utf-8", "replace")) if u not in record]
+            page = fetch(LIST_URL).decode("utf-8", "replace")
+            # The page always lists the current event's documents -- dozens
+            # of them. One with none at all is a page that did not load (a
+            # bot check, an outage), not a quiet week, and saying "nothing
+            # new" there would hide a watcher that has stopped working.
+            if not ANY_DOCUMENT.search(page):
+                raise RuntimeError("the documents page came back with no "
+                                   "documents on it")
+            links = [u for u in notice_links(page) if u not in record]
             if not links:
                 print("No new Power Unit Information notice.")
                 return 0
