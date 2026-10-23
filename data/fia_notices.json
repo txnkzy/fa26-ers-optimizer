@@ -106,5 +106,11 @@
     "event": "2026 SINGAPORE GRAND PRIX",
     "imported": "2026-10-11",
     "round": "R17"
+  },
+  "https://www.fia.com/system/files/decision-document/2026_united_states_grand_prix_-_power_unit_information.pdf": {
+    "circuit": "austin",
+    "event": "2026 UNITED STATES GRAND PRIX",
+    "imported": "2026-10-23",
+    "round": "R18"
   }
 }

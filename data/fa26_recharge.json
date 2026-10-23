@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "updated": "2026-10-11T15:38:44Z"
+    "updated": "2026-10-23T04:47:23Z"
   },
   "albertpark": {
     "practice": 85,
@@ -27,11 +27,49 @@
   },
   "austin": {
     "practice": 90,
-    "qualify": 80,
-    "race": 80,
-    "race_overtake": 85,
+    "qualify": 85,
+    "race": 85,
+    "race_overtake": 90,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:18",
+    "rate_kw_s": 100,
+    "power_limited_m": 2847,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 5513,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        1300,
+        1850
+      ],
+      [
+        3700,
+        5250
+      ]
+    ],
+    "speed_zones": [
+      [
+        4430,
+        4600,
+        250
+      ]
+    ],
+    "reset_zones": [
+      [
+        4500,
+        4750
+      ],
+      [
+        5350,
+        5500,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "austin",
+      "unitedstates"
+    ]
   },
   "baku": {
     "practice": 90,
