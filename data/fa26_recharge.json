@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "updated": "2026-10-23T04:47:23Z"
+    "updated": "2026-10-30T00:58:24Z"
   },
   "albertpark": {
     "practice": 85,
@@ -279,10 +279,43 @@
   "mexico": {
     "practice": 90,
     "qualify": 85,
-    "race": 80,
-    "race_overtake": 85,
+    "race": 85,
+    "race_overtake": 90,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:19",
+    "rate_kw_s": 100,
+    "power_limited_m": 2101,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 4304,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        2000,
+        2900
+      ],
+      [
+        3600,
+        3950
+      ]
+    ],
+    "speed_zones": [
+      [
+        2600,
+        2800,
+        250
+      ]
+    ],
+    "reset_zones": [
+      [
+        4050,
+        4300,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "mexicocity"
+    ]
   },
   "miami": {
     "practice": 90,
