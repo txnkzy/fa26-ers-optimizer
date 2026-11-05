@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "updated": "2026-10-30T00:58:24Z"
+    "updated": "2026-11-05T23:37:54Z"
   },
   "albertpark": {
     "practice": 85,
@@ -220,12 +220,38 @@
     ]
   },
   "interlagos": {
-    "practice": 90,
+    "practice": 85,
     "qualify": 65,
     "race": 80,
     "race_overtake": 85,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:20",
+    "rate_kw_s": 100,
+    "power_limited_m": 2278,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 4309,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        2000,
+        3150
+      ]
+    ],
+    "reset_zones": [
+      [
+        2900,
+        3050
+      ],
+      [
+        3700,
+        4300,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "saopaulo"
+    ]
   },
   "jeddah": {
     "practice": 90,
