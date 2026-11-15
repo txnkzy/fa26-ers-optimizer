@@ -63,3 +63,7 @@ __pycache__/
 *.py[cod]
 *.log
 fa26_error.log
+
+# --- experimental compiled simulator ----------------------------------------
+native/fa26sim/target/
+core/fa26sim.dll

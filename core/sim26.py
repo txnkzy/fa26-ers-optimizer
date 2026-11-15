@@ -249,14 +249,14 @@ def _commands_along(splits, n, step, length):
             out[i] = (0.0, split.clip_kw)
     return out
 
-def simulate(splits, car, longitudinal, profile, powertrain,
-             start_store_kj: float, harvest_cap_kj: float,
-             store_capacity_kj: float = 4000.0, ds: float = 2.5,
-             settle: bool = True, reset_zones: "tuple" = (),
-             speed_zones: "tuple" = (), entry: "Carry | None" = None,
-             window: "tuple[float, float] | None" = None,
-             trace: "list | None" = None) -> Result:
-    """Integrate one lap.
+def simulate_py(splits, car, longitudinal, profile, powertrain,
+                start_store_kj: float, harvest_cap_kj: float,
+                store_capacity_kj: float = 4000.0, ds: float = 2.5,
+                settle: bool = True, reset_zones: "tuple" = (),
+                speed_zones: "tuple" = (), entry: "Carry | None" = None,
+                window: "tuple[float, float] | None" = None,
+                trace: "list | None" = None) -> Result:
+    """Integrate one lap. The reference: `simulate` may run a compiled copy.
 
     `trace`, when given a list, receives one row per measured step: distance,
     time, speed, power delivered and harvested, charge, and what limited the
@@ -634,3 +634,37 @@ def simulate(splits, car, longitudinal, profile, powertrain,
                   refused_mj=refused / 1000.0,
                   speed=speeds, dist=dists,
                   lifts={c * step: kph for c, kph in lifts.items()})
+
+
+try:
+    import sim26_native as _native
+except Exception:                                   # noqa: BLE001
+    _native = None
+
+
+def simulate(splits, car, longitudinal, profile, powertrain,
+             start_store_kj: float, harvest_cap_kj: float,
+             store_capacity_kj: float = 4000.0, ds: float = 2.5,
+             settle: bool = True, reset_zones: "tuple" = (),
+             speed_zones: "tuple" = (), entry: "Carry | None" = None,
+             window: "tuple[float, float] | None" = None,
+             trace: "list | None" = None) -> Result:
+    """Integrate one lap -- see `simulate_py`, which defines the answer.
+
+    Experimental: where the compiled integration (`sim26_native`) is built and
+    the inputs are the plain kinds it was ported from, it does the work, and
+    is held to the Python's numbers by `native/parity.py`. A trace, or
+    anything it does not recognise, goes to the Python.
+    """
+    if (_native is not None and trace is None
+            and _native.eligible(car, powertrain)):
+        result = _native.simulate(
+            sys.modules[__name__], splits, car, longitudinal, profile,
+            powertrain, start_store_kj, harvest_cap_kj, store_capacity_kj,
+            ds, settle, reset_zones, speed_zones, entry, window)
+        if result is not None:
+            return result
+    return simulate_py(splits, car, longitudinal, profile, powertrain,
+                       start_store_kj, harvest_cap_kj, store_capacity_kj,
+                       ds, settle, reset_zones, speed_zones, entry, window,
+                       trace)
