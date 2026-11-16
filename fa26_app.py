@@ -45,6 +45,7 @@ if not getattr(sys, "frozen", False):
     for sub in ("core", "cars"):
         sys.path.insert(0, str(ROOT / sub))
 
+import ailine
 import calibrate
 import circuit_updates
 import carphysics
@@ -999,6 +1000,68 @@ def current() -> dict:
     return payload
 
 
+#: Points in a track outline sent to the page. Enough for a smooth line at
+#: the size it is drawn; the racing-line files run to several thousand.
+OUTLINE_POINTS = 700
+_OUTLINES: dict = {}
+
+
+def track_outline(key: str) -> dict:
+    """The circuit's shape, for drawing a map with the deployment on it.
+
+    Read from the game's own racing line for the track the session was driven
+    on -- `ai/fast_lane.ai`, which every track ships -- and used for its
+    positions only: whether the AI that drove it was any good does not matter
+    to an outline. Points come back scaled into a 1000-wide box with the
+    fraction of the lap each one sits at, so a zone given in metres can be
+    laid along it. No file, or one that cannot be read, is `points: None`,
+    and the page draws a plain loop instead.
+    """
+    track = key.split("__" + CAR_ID.rsplit("_csp", 1)[0])[0].split("__vrc_")[0]
+    hit = _OUTLINES.get(track)
+    if hit is not None:
+        return hit
+    out = {"points": None, "track": track}
+    root = install.find_root()
+    name, _, layout = track.partition("__")
+    folders = []
+    if root:
+        base = Path(root) / "content" / "tracks" / name
+        if layout:
+            folders.append(base / layout)
+        folders.append(base)
+    for folder in folders:
+        try:
+            path = folder / "ai" / "fast_lane.ai"
+            if not path.is_file():
+                continue
+            blob = path.read_bytes()
+            _version, count, _lap, _sectors = ailine.HEADER.unpack_from(blob, 0)
+            if count < 10 or len(blob) < ailine.HEADER.size + count * ailine.POINT.size:
+                continue
+            raw = [ailine.POINT.unpack_from(
+                       blob, ailine.HEADER.size + i * ailine.POINT.size)
+                   for i in range(count)]
+        except (OSError, ValueError, ailine.struct.error):
+            continue
+        total = raw[-1][3] or 1.0
+        step = max(1, count // OUTLINE_POINTS)
+        picked = raw[::step]
+        xs = [p[0] for p in picked]
+        zs = [p[2] for p in picked]
+        span = max(max(xs) - min(xs), max(zs) - min(zs), 1.0)
+        scale = 1000.0 / span
+        out = {"track": track, "length_m": total,
+               "width": round((max(xs) - min(xs)) * scale, 1),
+               "height": round((max(zs) - min(zs)) * scale, 1),
+               "points": [[round((p[0] - min(xs)) * scale, 1),
+                           round((p[2] - min(zs)) * scale, 1),
+                           round(p[3] / total, 5)] for p in picked]}
+        break
+    _OUTLINES[track] = out
+    return out
+
+
 def setups_for(circuit: str) -> list[dict]:
     """Setup files in this circuit's folder, newest first.
 
@@ -1276,6 +1339,9 @@ class Engine:
                 "generation": self.generation,
                 "error": self.error,
                 "switch": self.switch_note,
+                # Which session these maps are from, so the page can draw
+                # them on the right circuit after the window is reopened.
+                "key": getattr(self, "session_key", ""),
             }
             if have != len(self.summary):
                 out["summary"] = self.summary
@@ -1299,6 +1365,7 @@ class Engine:
             self.started_at = time.time()
             self.generation += 1
             self.status = "Starting"
+            self.session_key = key
         threading.Thread(
             target=self._guard,
             args=(key, qualify, race, unlimited, write_alloc),
@@ -2465,8 +2532,19 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"error": "one of those runs is gone"}, code=404)
                 else:
                     self._json(found)
+            elif route == "/api/track":
+                self._json(track_outline(query.get("key", [""])[0]))
             elif route == "/api/setups":
-                self._json({"setups": setups_for(query.get("circuit", [""])[0])})
+                # By circuit, or by the session the maps came from: maps kept
+                # from an earlier session have no session on the page to ask
+                # about, and still have to be saved somewhere.
+                circuit = query.get("circuit", [""])[0]
+                if not circuit and query.get("key", [""])[0]:
+                    try:
+                        circuit = session_detail(query["key"][0])["circuit"]
+                    except Exception:
+                        circuit = ""
+                self._json({"setups": setups_for(circuit)})
             elif route == "/api/poll":
                 self._json(ENGINE.snapshot(
                     int(query.get("since", ["0"])[0]),
