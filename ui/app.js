@@ -9,7 +9,6 @@
 
 const $ = (id) => document.getElementById(id);
 const MAX_KW = 350;          // the car's deploy and harvest ceiling
-const FLOOR_KW = 200;        // the floor held for a second at throttle
 const WATCH_MS = 4000;       // how often to look for a lap you just finished
 
 const state = {
@@ -32,7 +31,11 @@ const state = {
   watch: null,
   ready: null,
   version: "",
-  view: "home",
+  view: "session",
+  //: A session the driver said was not the one they are driving.
+  declined: null,
+  //: Whether these maps have been saved into a setup.
+  saved: false,
   game: null,
   useStale: false,
 };
@@ -127,7 +130,8 @@ async function checkReady() {
   $("setup-change").hidden = false;
   $("setup-close").hidden = true;
   $("intro").hidden = (blocked || needsLogger) || state.summary.length > 0;
-  if (state.view === "folders") paintFolders();
+  if (state.view === "settings") { paintFolders(); paintAbout(); }
+  if (blocked) { $("waiting").hidden = true; showView("session"); }
 
   if (!blocked) {
     {
@@ -309,16 +313,85 @@ async function saveTelemetry(folder) {
  * the first-run panel, the introduction, the run, the results, the save form
  * and the log -- so the page was long, and which parts were live depended on
  * state you could not see from the top of it. */
-function showView(name) {
+const STEPS = ["session", "solve", "maps", "save"];
+//: The names the old layout used, still used by code that asks for them.
+const ALIAS = { home: "session", folders: "settings", runs: "history", guide: "help" };
+
+/* A step can be opened once there is something on it: Solve needs a session,
+ * Maps needs a solve, Save needs the maps. */
+function reachable(name) {
+  if (name === "solve") return !!state.detail || state.running;
+  if (name === "maps") return state.summary.length > 0;
+  if (name === "save") return state.summary.length >= 3;
+  return true;
+}
+
+function paintSteps() {
+  const done = { session: !!state.detail, solve: state.summary.length > 0,
+                 maps: state.saved, save: state.saved };
+  const steps = [...document.querySelectorAll(".step")];
+  steps.forEach((step, i) => {
+    const name = step.dataset.view;
+    step.classList.toggle("is-on", state.view === name);
+    step.classList.toggle("done", !!done[name] && state.view !== name);
+    step.classList.toggle("locked", !reachable(name));
+    step.querySelector("i").textContent = done[name] && state.view !== name ? "✓" : String(i + 1);
+  });
+  [...document.querySelectorAll(".steps .join")].forEach((join, i) => {
+    join.classList.toggle("done", !!done[STEPS[i]]);
+  });
+  for (const tab of document.querySelectorAll(".aux .tab")) {
+    tab.classList.toggle("is-on", tab.dataset.view === state.view);
+  }
+}
+
+function showView(name, pane) {
+  name = ALIAS[name] || name;
+  if (STEPS.includes(name) && !reachable(name)) return;
+  if (state.view === "save" && name !== "save") closeApply();
   state.view = name;
-  for (const view of document.querySelectorAll(".view")) {
-    view.hidden = view.id !== "view-" + name;
+  for (const screen of document.querySelectorAll(".screen")) {
+    screen.classList.toggle("show", screen.id === "screen-" + name);
   }
-  for (const tab of document.querySelectorAll(".tab")) {
-    tab.classList.toggle("is-on", tab.dataset.view === name);
+  paintSteps();
+  if (name === "settings") { paintFolders(); paintAbout(); if (pane) settingsPane(pane); }
+  if (name === "history") loadRuns();
+  if (name === "save") openApply();
+}
+
+function settingsPane(name) {
+  for (const tab of document.querySelectorAll(".pane-tab")) {
+    tab.classList.toggle("is-on", tab.dataset.settings === name);
   }
-  if (name === "folders") paintFolders();
-  if (name === "runs") loadRuns();
+  for (const pane of document.querySelectorAll(".pane")) {
+    pane.classList.toggle("is-on", pane.dataset.settings === name);
+  }
+}
+
+/* Version, which lap simulation is running, how fresh the circuit data is:
+ * the things a report needs, where they can be read without copying anything. */
+function paintAbout() {
+  const r = state.ready || {}, box = $("about-facts");
+  box.innerHTML = "";
+  const cd = r.circuit_data || {};
+  for (const [term, value] of [
+    ["Version", state.version || r.version || "unknown"],
+    ["Lap simulation", r.integration || "unknown"],
+    ["Circuit data", (cd.result || "unknown") + (cd.checked ? " (checked " + cd.checked + ")" : "")],
+    ["Car", $("car-id").textContent || "—"],
+    ["Assetto Corsa", r.root || "not found"]]) {
+    box.append(el("dt", null, term), el("dd", null, value));
+  }
+  $("logger-state").textContent = !r.logger
+    ? "The logger is not installed. No laps are recorded until it is."
+    : r.logger_outdated ? "The logger is installed, but this version changed how it records. Update it below."
+    : "The logger is installed and up to date.";
+}
+
+/* Solving swaps the ready card for the progress ring, and back. */
+function solving(on) {
+  $("running").hidden = !on;
+  $("ready-card").hidden = on;
 }
 
 /* A qualifying time while you are still driving, from the screening step of
@@ -584,11 +657,14 @@ async function load(force) {
   // "This session" means laps driven since the sim started. A session from
   // hours ago and a reboot later is not current, however new it is on disk --
   // and a stale one is the state the map-order guard exists to catch.
-  const usable = session && (session.live || state.useStale);
+  const usable = session && (session.live || state.useStale)
+    && session.key !== state.declined;
   if (!usable) {
     state.detail = null;
     state.revision = null;
     showWaiting(data.game, session);
+    if (state.view === "solve" && !state.running) showView("session");
+    paintSteps();
     return;
   }
 
@@ -605,6 +681,8 @@ async function load(force) {
     state.unlimited = data.session.unlimited;
   }
   renderSession(grew);
+  Maps.loadOutline(data.session.key);
+  paintSteps();
   paintLive(data.session.key);
   if (!state.running) {
     $("run").disabled = false;
@@ -659,6 +737,8 @@ function renderSession(grew) {
   $("options-block").hidden = false;
 
   $("circuit-name").textContent = d.name;
+  $("solve-eyebrow").textContent = d.name + " · " + d.pooled
+    + (d.pooled === 1 ? " lap" : " laps");
 
   const dl = $("facts");
   dl.innerHTML = "";
@@ -711,7 +791,7 @@ function renderSession(grew) {
   if (state.ready && state.ready.logger && state.ready.logger_outdated) {
     showNotice("The logger needs updating",
                "It records your laps, and this version changed how. "
-               + "Update it on the Folders page, then restart the session.");
+               + "Update it in Settings, under Logger, then restart the session.");
   }
   if (state.ready && !state.ready.logger) {
     showNotice("The logger is not installed",
@@ -817,7 +897,11 @@ async function run() {
   $("switch-call").hidden = true;
   state.log = [];
   $("cards").innerHTML = "";
-  $("running").hidden = false;
+  $("no-maps").hidden = false;
+  state.saved = false;
+  state.mapsKey = d.key;
+  showView("solve");
+  solving(true);
   $("running").dataset.stopping = "false";
   $("stop").disabled = false;
   $("stop").textContent = "Stop";
@@ -842,7 +926,7 @@ async function run() {
     });
   } catch (err) {
     setStatus("Could not start", "bad");
-    $("running").hidden = true;
+    solving(false);
     $("run").disabled = false;
     failure(err);
     return;
@@ -859,6 +943,7 @@ function showProgress(fraction, phase, elapsed) {
   $("bar").style.width = value + "%";
   $("bar-outer").setAttribute("aria-valuenow", String(value));
   $("pct").textContent = value + "%";
+  $("ring-arc").style.strokeDashoffset = String(402 * (1 - Math.max(0, Math.min(1, fraction))));
   if (phase) $("phase").textContent = phase;
   $("elapsed").textContent = elapsed >= 60
     ? Math.floor(elapsed / 60) + "m " + Math.round(elapsed % 60) + "s"
@@ -923,7 +1008,8 @@ async function poll(id) {
   $("live").hidden = false;
 
   if (data.cancelled) {
-    $("running").hidden = true;
+    solving(false);
+    paintSteps();
     // Nothing survives a stop, so the page goes back to where it started
     // rather than leaving an empty results heading behind.
     $("results").hidden = true;
@@ -933,7 +1019,12 @@ async function poll(id) {
   }
 
   showProgress(1, "Finished", data.elapsed);
-  setTimeout(() => { $("running").hidden = true; }, 900);
+  // A beat on 100% so the ring is seen to finish, then on to what it made.
+  setTimeout(() => {
+    solving(false);
+    if (!data.error && state.summary.length && state.view === "solve") showView("maps");
+  }, 700);
+  if (data.error) failure(data.error);
   setStatus(data.error ? "Something went wrong" : "Ready",
             data.error ? "bad" : "ready");
 }
@@ -966,115 +1057,45 @@ function paintSwitch(text) {
 }
 
 function failure(err) {
+  if (!err) return;
   $("trouble-text").textContent = String((err && err.message) || err);
   $("trouble").hidden = false;
 }
 
 /* ------------------------------------------------------------------ cards */
 function renderCards() {
-  const box = $("cards");
-  box.innerHTML = "";
-  if (!state.summary.length) return;
+  const have = state.summary.length > 0;
+  $("results").hidden = !have;
+  $("no-maps").hidden = have;
+  if (!have) { $("cards").innerHTML = ""; paintSteps(); return; }
 
-  $("results").hidden = false;
   // The maps outlive the session that produced them -- reopen the window
   // after driving something else and the run is still there to be saved,
   // while the session behind it is gone. Reading its name regardless threw,
-  // and a thrown renderer draws no cards at all: the whole result vanished
+  // and a thrown renderer draws nothing at all: the whole result vanished
   // rather than losing its subtitle.
   const d = state.detail;
-  const title = $("results-title");
-  title.textContent = "";
-  title.append(document.createTextNode(d ? d.name : "Your maps"));
-  if (d) {
-    title.append(el("small", null,
-      "from " + d.pooled + (d.pooled === 1 ? " lap" : " laps")
-      + " · your best was " + d.best
+  $("results-title").textContent = d
+    ? d.name + " · " + d.pooled + (d.pooled === 1 ? " lap" : " laps")
       + (state.unlimited ? " · no recharge limit"
-                         : " · recharge " + mj(state.qualify) + "/"
-                           + mj(state.race) + " MJ")));
-  } else {
-    title.append(el("small", null, "from an earlier session"));
-  }
+                         : " · recharge " + mj(state.qualify) + "/" + mj(state.race) + " MJ")
+    : "Maps from an earlier session";
   $("apply-open").disabled = state.summary.length < 3;
-
-  for (const s of state.summary) box.append(card(s));
+  Maps.render(state.summary);
+  paintSteps();
 }
 
-function card(s) {
-  const node = el("article", "card");
-  node.dataset.strat = s.strat;
-
-  const head = el("div", "card-head");
-  // The mode names are what the driver reaches for on the wheel; the strat
-  // number is what the setup screen shows.
-  const modes = (s.modes || []).join(" / ");
-  head.append(el("span", "chip", (modes ? modes + " · " : "") + "STRAT " + s.strat),
-              el("span", "card-name", s.label),
-              el("span", "card-time", s.lap));
-  head.append(el("span", "card-delta " + (s.delta_s < 0 ? "gain" : "loss"),
-    Math.abs(s.delta_s) < 0.05
-      ? "level with your best lap"
-      : Math.abs(s.delta_s).toFixed(1) + "s "
-        + (s.delta_s < 0 ? "quicker" : "slower") + " than your best lap"));
-  node.append(head);
-
-  const metrics = el("div", "metrics");
-  const add = (label, value) => {
-    const wrap = el("div");
-    wrap.append(el("div", "metric-label", label),
-                el("div", "metric-value", value));
-    metrics.append(wrap);
-  };
-  add("Battery used", s.deploy_mj.toFixed(1) + " MJ");
-  add("Battery recovered", s.harvest_mj.toFixed(1) + " MJ");
-  add("Starts at", pct(s.store_start));
-  add("Ends at", pct(s.store_end));
-  add("Dips to", pct(s.store_min));
-  add("Zones", String(s.map.length));
-  node.append(metrics);
-
-  node.append(strip(s), axis(s));
-  const legend = el("p", "strip-legend");
-  legend.append(el("span", "dep", "where you get extra power"),
-                el("span", "spd", "your speed, peaking at "
-                   + Math.round(s.peak_kph) + " kph"));
-  if (s.map.some((m) => m.clip_kw > 0)) {
-    legend.append(el("span", "har", "charging while on power"));
-  }
-  if (s.braking && s.braking.length) {
-    legend.append(el("span", "brk", "where you brake"));
-  }
-  node.append(legend);
-
-  if (s.notes.length) {
-    const ul = el("ul", "card-notes");
-    for (const n of s.notes) ul.append(el("li", null, n));
-    node.append(ul);
-  }
-
-  node.append(splitTable(s));
-  return node;
-}
-
-/* The map drawn against lap distance: power above the line, charging below.
- * The speed trace sits behind it because a row of bars over a bare axis says
- * nothing -- against the trace you can see the blocks land on the straights.
- * Charging while on power is rare, so that band is only drawn when the map
- * actually uses it rather than reserving a third of the height for nothing. */
+/* The lap drawn against distance, under the circuit: speed as a line, the
+ * map's zones as bands behind it, braking as the darker stretches. Against
+ * the speed trace the bands can be seen to sit on the straights; the braking
+ * zones are the landmarks that say which straight. */
 function strip(s) {
-  const W = 1000;
-  const clips = s.map.filter((m) => m.clip_kw > 0);
-  const DEPTH = clips.length ? 18 : 0;
-  const MID = 64;
-  const H = MID + 4 + DEPTH;
+  const W = 1000, H = 84;
   const ns = "http://www.w3.org/2000/svg";
-
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   svg.setAttribute("preserveAspectRatio", "none");
   svg.setAttribute("class", "strip");
-  svg.style.height = H + "px";
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label",
     s.label + ": " + s.map.length + " deployment zones over "
@@ -1082,96 +1103,47 @@ function strip(s) {
     + Math.round(s.peak_kph) + " kph");
 
   const x = (m) => Math.max(0, Math.min(W, W * m / s.length_m));
-  const rect = (a, b, y, h, fill, opacity) => {
-    if (b <= a || h <= 0) return;
+  const rect = (a, b, fill, opacity) => {
+    if (b <= a) return;
     const r = document.createElementNS(ns, "rect");
     r.setAttribute("x", a.toFixed(2));
-    r.setAttribute("y", y.toFixed(2));
+    r.setAttribute("y", "0");
     r.setAttribute("width", Math.max(0.8, b - a).toFixed(2));
-    r.setAttribute("height", h.toFixed(2));
+    r.setAttribute("height", String(H));
     r.setAttribute("fill", fill);
     if (opacity) r.setAttribute("opacity", String(opacity));
     svg.append(r);
   };
+  // A zone may wrap the start/finish line, so it is drawn as two pieces.
+  const band = (from, to, fill, opacity) => {
+    if (to >= from) rect(x(from), x(to), fill, opacity);
+    else { rect(x(from), W, fill, opacity); rect(0, x(to), fill, opacity); }
+  };
 
-  /* Braking zones first, behind everything: they are the landmarks that make
-   * the rest readable. Without them the strip is bars over a bare distance
-   * axis, and "it deploys nothing after the chicane" is not something you can
-   * see. With them the corners are where the shading is. */
-  for (const z of (s.braking || [])) rect(x(z[0]), x(z[1]), 0, H, "var(--brake)");
-  for (let i = 1; i < 4; i++) rect(W * i / 4, W * i / 4 + 1, 0, H, "var(--line-soft)");
+  for (const z of (s.braking || [])) rect(x(z[0]), x(z[1]), "var(--brake)");
+  for (const sp of s.map) {
+    if (sp.deploy_kw > 0) {
+      band(sp.start, sp.deploy_end, "var(--deploy)", 0.10 + 0.16 * Math.min(1, sp.deploy_kw / MAX_KW));
+    }
+    if (sp.clip_kw > 0) band(sp.clip_start, sp.end, "var(--harvest)", 0.2);
+  }
 
   if (s.speed && s.speed.length > 1) {
-    const top = Math.max(s.peak_kph, 1);
-    const pts = s.speed.map((v, i) => {
-      const px = W * i / (s.speed.length - 1);
-      const py = MID - MID * 0.92 * (v / top);
-      return px.toFixed(1) + "," + py.toFixed(1);
-    });
+    const top = Math.max(s.peak_kph, 1) * 1.08;
+    const pts = s.speed.map((v, i) =>
+      (W * i / (s.speed.length - 1)).toFixed(1) + "," + (H - (H - 8) * (v / top)).toFixed(1));
     const area = document.createElementNS(ns, "polygon");
-    area.setAttribute("points", "0," + MID + " " + pts.join(" ") + " " + W + "," + MID);
-    area.setAttribute("fill", "var(--raise)");
-    svg.append(area);
-  }
-
-  // the level the car holds for a second after every throttle application
-  rect(0, W, MID - MID * FLOOR_KW / MAX_KW, 1, "var(--line)");
-
-  for (const sp of s.map) {
-    const h = MID * Math.min(1, sp.deploy_kw / MAX_KW);
-    // A zone may wrap the start/finish line, so it is drawn as two pieces.
-    if (sp.deploy_end >= sp.start) {
-      rect(x(sp.start), x(sp.deploy_end), MID - h, h, "var(--hue)");
-    } else {
-      rect(x(sp.start), W, MID - h, h, "var(--hue)");
-      rect(0, x(sp.deploy_end), MID - h, h, "var(--hue)");
-    }
-  }
-
-  rect(0, W, MID, 1.5, "var(--line)");
-
-  for (const sp of clips) {
-    const depth = DEPTH * Math.min(1, sp.clip_kw / MAX_KW);
-    if (sp.end >= sp.clip_start) {
-      rect(x(sp.clip_start), x(sp.end), MID + 3, depth, "var(--dim)", 0.8);
-    } else {
-      rect(x(sp.clip_start), W, MID + 3, depth, "var(--dim)", 0.8);
-      rect(0, x(sp.end), MID + 3, depth, "var(--dim)", 0.8);
-    }
+    area.setAttribute("points", "0," + H + " " + pts.join(" ") + " " + W + "," + H);
+    area.setAttribute("fill", "rgba(234,240,248,.07)");
+    const line = document.createElementNS(ns, "polyline");
+    line.setAttribute("points", pts.join(" "));
+    line.setAttribute("fill", "none");
+    line.setAttribute("stroke", "#c9d4e3");
+    line.setAttribute("stroke-width", "1.4");
+    line.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.append(area, line);
   }
   return svg;
-}
-
-/* Distance markers under the strip. The quarters are drawn as gridlines
- * above, so the numbers and the lines share one scale. */
-function axis(s) {
-  const row = el("div", "strip-axis");
-  for (let i = 0; i <= 4; i++) {
-    row.append(el("span", null,
-      Math.round(s.length_m * i / 4) + (i === 4 ? " m" : "")));
-  }
-  return row;
-}
-
-function splitTable(s) {
-  const det = el("details", "splits");
-  det.append(el("summary", null,
-                "The numbers that get written into your setup"));
-  const scroll = el("div", "splits-scroll");
-  const table = el("table", "split-table");
-  const head = el("tr");
-  for (const h of ["start", "deployEnd", "clipStart", "splitEnd",
-                   "deploy kW", "clip kW"]) head.append(el("th", null, h));
-  table.append(head);
-  for (const sp of s.map) {
-    const tr = el("tr");
-    for (const v of [sp.start, sp.deploy_end, sp.clip_start, sp.end,
-                     sp.deploy_kw, sp.clip_kw]) tr.append(el("td", null, String(v)));
-    table.append(tr);
-  }
-  scroll.append(table);
-  det.append(scroll);
-  return det;
 }
 
 /* ------------------------------------------------------------ diagnostics */
@@ -1319,11 +1291,12 @@ function closeApply() {
  * again. It is re-read every few seconds and whenever the window regains focus,
  * and redrawn only when something on disk changed. */
 async function refreshSetups() {
-  if ($("apply-panel").hidden || !state.detail) return;
+  if ($("apply-panel").hidden || !(state.detail || state.mapsKey)) return;
   let setups = [];
   try {
-    setups = (await get("/api/setups?circuit="
-      + encodeURIComponent(state.detail.circuit))).setups;
+    setups = (await get(state.detail
+      ? "/api/setups?circuit=" + encodeURIComponent(state.detail.circuit)
+      : "/api/setups?key=" + encodeURIComponent(state.mapsKey))).setups;
   } catch (err) { return; }
   const stamp = setups.map((s) => s.path + "@" + s.mtime).join("|");
   if (stamp === state.setupStamp) return;
@@ -1337,7 +1310,6 @@ function applyKeys(e) {
 
 async function openApply() {
   $("apply-panel").hidden = false;
-  $("apply-back").hidden = false;
   document.addEventListener("keydown", applyKeys, true);
   $("applied").hidden = true;
   state.setup = null;
@@ -1378,7 +1350,7 @@ function renderSetups(setups) {
         + "save a setup for this circuit in Assetto Corsa if you would rather "
         + "keep them here. "
       : "")
-    + "Only deployment maps 1 to 3 are replaced. Nothing else in your setup is "
+    + "Only the deployment maps are replaced. Nothing else in your setup is "
     + "touched, and a backup copy is made first.";
 
   let headed = false;
@@ -1428,6 +1400,7 @@ async function applyGo() {
     return;
   }
   setStatus("Saved", "ready");
+  state.saved = true;
   $("apply-panel").hidden = true;
   clearInterval(state.setupWatch);
   window.removeEventListener("focus", refreshSetups);
@@ -1497,13 +1470,33 @@ function renderApplied(res) {
   if (res.backup) items.push("Your previous setup is saved at " + res.backup);
   for (const t of items) ul.append(el("li", null, t));
   panel.append(ul);
-  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const row = el("div", "btns");
+  const back = el("button", "btn", "Back to the maps");
+  back.type = "button";
+  back.onclick = () => showView("maps");
+  row.append(back);
+  panel.append(row);
+  paintSteps();
 }
 
 /* ------------------------------------------------------------------- wire */
 $("run").onclick = run;
 $("stop").onclick = stop;
-$("use-last").onclick = () => { state.useStale = true; load(true); };
+$("use-last").onclick = () => { state.useStale = true; state.declined = null; load(true); };
+$("session-yes").onclick = () => { state.useStale = true; showView("solve"); };
+$("session-no").onclick = () => {
+  if (state.detail) state.declined = state.detail.key;
+  state.useStale = false;
+  load(true);
+};
+$("trouble-close").onclick = () => { $("trouble").hidden = true; };
+for (const tab of document.querySelectorAll(".pane-tab")) {
+  tab.onclick = () => settingsPane(tab.dataset.settings);
+}
+document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]");
+  if (go) showView(go.dataset.go);
+});
 $("ac-save").onclick = saveAcPath;
 for (const tab of document.querySelectorAll(".tab")) {
   tab.onclick = () => showView(tab.dataset.view);
@@ -1522,8 +1515,8 @@ $("live-search").onchange = async (e) => {
 };
 $("compare-go").onclick = runCompare;
 $("compare-clear").onclick = () => { compare.picked = []; $("compare-out").textContent = ""; loadRuns(); };
-$("setup-change").onclick = () => showView("folders");
-$("find-laps").onclick = () => showView("folders");
+$("setup-change").onclick = () => showView("settings", "folders");
+$("find-laps").onclick = () => showView("settings", "folders");
 /* The path is chosen in Explorer rather than typed: it is long, easy to get
  * subtly wrong, and the program could only say so afterwards. */
 const PICKS = {
@@ -1587,12 +1580,12 @@ $("tel-path").onkeydown = (e) => {
 $("install-logger").onclick = installLogger;
 $("install-logger-2").onclick = () => installLogger($("install-logger-2"));
 $("ac-path").onkeydown = (e) => { if (e.key === "Enter") saveAcPath(); };
-$("apply-open").onclick = openApply;
+$("apply-open").onclick = () => showView("save");
+$("copy-diag-about").onclick = () => copyDiagnostics($("copy-diag-about"));
 $("copy-diag").onclick = () => copyDiagnostics($("copy-diag"));
 $("copy-diag-wait").onclick = () => copyDiagnostics($("copy-diag-wait"));
-$("apply-cancel").onclick = closeApply;
-$("apply-back").onclick = closeApply;
-$("apply-go").onclick = async () => { await applyGo(); closeApply(); };
+$("apply-cancel").onclick = () => showView("maps");
+$("apply-go").onclick = applyGo;
 
 /* The maps live in the server, so reopening the window gets them back rather
  * than making anyone sit through the solve a second time. */
@@ -1606,7 +1599,8 @@ async function restore() {
   if (data.running) {
     state.running = true;
     $("intro").hidden = true;
-    $("running").hidden = false;
+    showView("solve");
+    solving(true);
     $("running").dataset.stopping = String(!!data.stopping);
     $("stop").disabled = !!data.stopping;
     $("run").disabled = true;
@@ -1622,10 +1616,20 @@ async function restore() {
   }
   $("intro").hidden = true;
   paintSwitch(data.switch);
+  // The session behind these maps may be over; the circuit is still theirs.
+  state.mapsKey = data.key || "";
+  if (data.key) Maps.loadOutline(data.key);
   renderCards();
+  showView("maps");
 }
 
-checkReady().then((ok) => (ok ? load(true).then(restore) : null));
+showView("session");
+/* A screen can be asked for by name in the address, as in `#settings`. The
+ * app never does; it is how a screen is opened directly when checking it. */
+checkReady().then((ok) => (ok ? load(true).then(restore) : null)).then(() => {
+  const want = location.hash.slice(1);
+  if (want) showView(want);
+});
 
 /* A newer version, when there is one. The optimizer asks once at start-up,
  * in the background, so the answer arrives a few seconds after the page. */

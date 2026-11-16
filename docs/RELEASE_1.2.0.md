@@ -1,10 +1,21 @@
 # FA26 ERS Deployment Optimizer — v1.2.0
 
-**About twenty times faster, and the same answers.** 1.1.4 was meant to be
-the last feature release, and this adds no features: nothing about how you
-use the app has changed. It just stops making you wait.
+**About twenty times faster, and a new look.** 1.1.4 was meant to be the
+last feature release. Then the search got fast enough to be worth making the
+rest of the app as quick to use.
 
 ## What's in this release
+
+**The map is drawn on the track.** The results screen now shows the circuit
+itself, with deployment in amber and red and harvesting in teal, and a car
+going round at the speeds the plan predicts, saying what the map is asking
+for where it is. Hover a zone for its power and distances. Pick any of the
+seven maps on the right and the track redraws for it.
+
+**Four steps instead of one long page.** Session, Solve, Maps, Save, across
+the top in the order you use them, with folders, the logger, past runs and
+help on the right. Everything the old layout did is still there; it has just
+stopped scrolling.
 
 **A solve takes seconds, not minutes.** The lap simulation at the heart of
 the search — the part that prices every map the optimizer tries — has been

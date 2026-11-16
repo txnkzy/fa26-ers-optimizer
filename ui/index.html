@@ -11,19 +11,36 @@
 </head>
 <body>
 
+<!-- One screen at a time, in the order they are used: say which session,
+     solve it, look at the maps, save them. Everything that is not a step --
+     folders, past runs, help -- is on the right. Screens are shown with a
+     class, not the `hidden` attribute, so nothing on one is ever "hidden" in
+     the markup: the between-laps switch is on Settings from the moment the
+     window opens. -->
+<div class="app">
+
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark" aria-hidden="true"></span>
-    <span class="brand-name">ERS Deployment Optimizer</span>
-    <span class="brand-car" id="car-id"></span>
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+    <span class="brand-name">FA26 Optimizer</span>
     <span class="brand-version" id="version"></span>
+    <span class="brand-car" id="car-id" hidden></span>
   </div>
 
-  <nav class="tabs" aria-label="Sections">
-    <button type="button" class="tab is-on" data-view="home">Optimizer</button>
-    <button type="button" class="tab" data-view="folders" id="open-setup">Folders</button>
-    <button type="button" class="tab" data-view="runs">Past runs</button>
-    <button type="button" class="tab" data-view="guide">How it works</button>
+  <nav class="steps" aria-label="Steps">
+    <button type="button" class="step tab" data-view="session"><i>1</i>Session</button>
+    <span class="join"></span>
+    <button type="button" class="step tab" data-view="solve"><i>2</i>Solve</button>
+    <span class="join"></span>
+    <button type="button" class="step tab" data-view="maps"><i>3</i>Maps</button>
+    <span class="join"></span>
+    <button type="button" class="step tab" data-view="save"><i>4</i>Save</button>
+  </nav>
+
+  <nav class="aux" aria-label="More">
+    <button type="button" class="tab" data-view="history">History</button>
+    <button type="button" class="tab" data-view="help">Help</button>
+    <button type="button" class="tab" data-view="settings" id="open-setup">Settings</button>
   </nav>
 
   <div class="status" id="status" data-state="wait">
@@ -34,267 +51,300 @@
 
 <p class="update-banner" id="update-banner" role="status" hidden></p>
 
-<main class="shell">
+<!-- Starting and saving both report their failures here, over whichever
+     screen is showing: a failure is worth more room than a line in a feed. -->
+<section class="trouble" id="trouble" hidden>
+  <p class="trouble-title">That did not work</p>
+  <p class="trouble-text" id="trouble-text"></p>
+  <button type="button" class="link" id="trouble-close">Dismiss</button>
+</section>
 
-<!-- ========================================================== optimizer -->
-<div class="view" id="view-home">
+<main class="screens">
 
-  <aside class="rail" id="rail">
+<!-- ============================================================ 1 session -->
+<section class="screen center" id="screen-session">
 
-    <section class="block" id="session-block">
-      <h2 class="block-title">
-        This session
-        <span class="live" id="live" hidden><span class="live-dot"></span>live</span>
-      </h2>
+  <!-- Only what is actually missing, and only while it is missing. -->
+  <section class="card firstrun" id="setup" hidden>
+    <p class="eyebrow">Before you start</p>
+    <h2 id="setup-title">Setting up</h2>
+    <p class="lede" id="setup-problem"></p>
 
-      <div class="waiting" id="waiting">
-        <div class="waiting-pulse" id="waiting-pulse" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </div>
-        <p class="waiting-title" id="waiting-title">Waiting for laps</p>
-        <p class="waiting-text" id="waiting-text">
-          Drive with the logger running. Laps appear here as you finish them.
-        </p>
-        <div class="last-session" id="last-session" hidden>
-          <p class="last-label">Last session</p>
-          <p class="last-name" id="last-name"></p>
-          <p class="last-meta" id="last-meta"></p>
-          <button type="button" class="ghost small" id="use-last">Use it anyway</button>
-        </div>
-        <p class="waiting-path"><code id="telemetry-path"></code></p>
-        <div class="waiting-links">
-          <button type="button" class="link" id="find-laps">Laps not showing up?</button>
-          <button type="button" class="link" id="copy-diag-wait">Copy diagnostics</button>
-        </div>
-      </div>
-
-      <div id="session-card" hidden>
-        <p class="circuit" id="circuit-name"></p>
-        <dl class="facts" id="facts"></dl>
-        <div class="live-estimate" id="live-estimate" hidden>
-          <div id="le-body" hidden>
-            <div class="le-head">
-              <span class="le-label">Qualifying, as it stands</span>
-              <span class="le-tag" id="le-tag"></span>
-            </div>
-            <div class="le-time" id="le-time"></div>
-            <p class="le-note" id="le-note"></p>
-          </div>
-
-          <div class="le-full" id="le-full" hidden>
-            <div class="le-head">
-              <span class="le-label">Full search</span>
-              <span class="le-tag" id="lf-tag"></span>
-            </div>
-            <div class="le-time" id="lf-time"></div>
-            <p class="le-note" id="lf-note"></p>
-          </div>
-
-        </div>
-        <details class="laps" id="lap-detail">
-          <summary><span id="lap-summary"></span></summary>
-          <ul class="lap-list" id="lap-list"></ul>
-        </details>
-      </div>
-    </section>
-
-    <!-- This used to sit inside the live estimate, which only appears once a
-         lap has landed -- so the one switch you would want to set *before*
-         driving was the one you could not reach until after. It lives on its
-         own now, visible from the moment the window opens. -->
-    <section class="block" id="autosearch-block">
-      <h2 class="block-title">Between laps</h2>
-      <label class="check auto-switch">
-        <input type="checkbox" id="live-search">
-        <span>Keep searching between laps</span>
-      </label>
-      <p class="hint auto-warn">
-        Off by default. It runs the same search the button runs, again every
-        time you finish a lap &mdash; <b>every processor core at full tilt
-        for several seconds, while the game wants them too</b>. Turn it on only if your
-        machine has the headroom.
+    <div id="setup-logger" hidden>
+      <p class="lede" id="logger-note">
+        The logger records your laps. It goes into Assetto Corsa's
+        <code>apps/lua</code> folder.
       </p>
-    </section>
+      <div class="btns"><button type="button" class="btn go" id="install-logger">Install the logger</button></div>
+    </div>
 
-    <section class="block" id="warnings-block" hidden>
-      <h2 class="block-title">Worth knowing</h2>
-      <div id="warnings"></div>
-    </section>
+    <div id="setup-path" hidden>
+      <label class="field-label" for="ac-path">Assetto Corsa folder</label>
+      <div class="path-row">
+        <input type="text" id="ac-path" class="filter"
+               placeholder="C:\Program Files (x86)\Steam\steamapps\common\assettocorsa"
+               spellcheck="false" autocomplete="off">
+        <button type="button" class="btn go" id="ac-save">Use this</button>
+      </div>
+      <p class="hint">The folder with <code>content</code> and <code>apps</code> in it.</p>
+    </div>
 
-    <section class="block" id="limits-block" hidden>
-      <h2 class="block-title">
-        Recharge limit
-        <button type="button" class="link" id="limits-toggle"></button>
-      </h2>
-      <p class="block-note" id="limits-source"></p>
+    <p class="lede warn" id="setup-error" hidden></p>
+    <div class="btns">
+      <button type="button" class="btn" id="setup-change">Open folder settings</button>
+      <button type="button" class="btn" id="setup-close" hidden>Close</button>
+    </div>
+  </section>
 
-      <div class="sliders" id="sliders">
-        <div class="slider-row">
+  <!-- No laps to work from yet, or laps from a session that is over. -->
+  <section class="card" id="waiting">
+    <p class="eyebrow">Session</p>
+    <h2 id="waiting-title">Waiting for laps</h2>
+    <p class="lede" id="waiting-text">
+      Drive with the logger running. Laps appear here as you finish them.
+    </p>
+    <div class="pulse" id="waiting-pulse" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="last-session" id="last-session" hidden>
+      <p class="eyebrow">Last session</p>
+      <p class="last-name" id="last-name"></p>
+      <p class="last-meta" id="last-meta"></p>
+      <div class="btns"><button type="button" class="btn" id="use-last">Use these laps</button></div>
+    </div>
+    <div class="intro-note" id="intro" hidden>
+      <b>Drive</b> a few clean laps, <b>solve</b>, <b>save</b>, then
+      <b>restart the session</b> &mdash; the car only reads a setup when it loads.
+    </div>
+    <p class="waiting-path"><code id="telemetry-path"></code></p>
+    <div class="waiting-links">
+      <button type="button" class="link" id="find-laps">Laps not showing up?</button>
+      <button type="button" class="link" id="copy-diag-wait">Copy diagnostics</button>
+    </div>
+  </section>
+
+  <!-- The session being driven. -->
+  <section class="card ask" id="session-card" hidden>
+    <p class="eyebrow">New laps found
+      <span class="live" id="live" hidden><span class="live-dot"></span>live</span></p>
+    <h2>Are you driving <em id="circuit-name"></em>?</h2>
+    <p class="lede">These are the laps the optimizer would work from.</p>
+    <div class="duo">
+      <div class="thumb"><svg id="session-track" viewBox="0 0 100 100" aria-hidden="true"></svg></div>
+      <dl class="facts" id="facts"></dl>
+    </div>
+
+    <div class="live-estimate" id="live-estimate" hidden>
+      <div id="le-body" hidden>
+        <div class="le-head">
+          <span class="le-label">Qualifying, as it stands</span>
+          <span class="le-tag" id="le-tag"></span>
+          <span class="le-time" id="le-time"></span>
+        </div>
+        <p class="le-note" id="le-note"></p>
+      </div>
+      <div class="le-full" id="le-full" hidden>
+        <div class="le-head">
+          <span class="le-label">Full search</span>
+          <span class="le-tag" id="lf-tag"></span>
+          <span class="le-time" id="lf-time"></span>
+        </div>
+        <p class="le-note" id="lf-note"></p>
+      </div>
+    </div>
+
+    <details class="laps" id="lap-detail">
+      <summary><span id="lap-summary"></span></summary>
+      <ul class="lap-list" id="lap-list"></ul>
+    </details>
+
+    <div class="btns">
+      <button type="button" class="btn go" id="session-yes">Yes, use these laps</button>
+      <button type="button" class="btn" id="session-no">No</button>
+    </div>
+  </section>
+</section>
+
+<!-- ============================================================== 2 solve -->
+<section class="screen center" id="screen-solve">
+  <section class="card" id="ready-card">
+    <p class="eyebrow" id="solve-eyebrow">Ready</p>
+    <h2>Ready to solve</h2>
+    <p class="lede">Seven maps, one for each PU mode on the wheel.</p>
+
+    <div class="block" id="limits-block" hidden>
+      <div class="sliders limits" id="sliders">
+        <div class="slider-row limit">
           <div class="slider-head">
-            <label for="qualify-range">Qualifying</label>
+            <label for="qualify-range">Recharge limit &middot; qualifying</label>
             <output class="slider-value" id="qualify-value">7.0<span>MJ</span></output>
           </div>
           <input type="range" id="qualify-range" min="40" max="91" step="1" value="70">
-          <div class="slider-scale"><span>4</span><span>6</span><span>8</span><span class="inf">&#8734;</span></div>
         </div>
-
-        <div class="slider-row">
+        <div class="slider-row limit">
           <div class="slider-head">
-            <label for="race-range">Race</label>
+            <label for="race-range">Recharge limit &middot; race</label>
             <output class="slider-value" id="race-value">8.0<span>MJ</span></output>
           </div>
           <input type="range" id="race-range" min="40" max="86" step="1" value="80">
-          <div class="slider-scale"><span>4</span><span>6</span><span>8</span><span class="inf">&#8734;</span></div>
         </div>
       </div>
-
+      <p class="source"><span id="limits-source"></span>
+        <button type="button" class="link" id="limits-toggle"></button></p>
       <p class="hint" id="unlimited-hint" hidden>
         No limit at all &mdash; VRC's <b>unlimited</b> switch, for circuits
         with no official figure.
       </p>
-
       <label class="check" id="remember-wrap" hidden>
         <input type="checkbox" id="remember"> <span>Remember for this circuit</span>
       </label>
-    </section>
+    </div>
 
-    <section class="block" id="options-block" hidden>
-      <h2 class="block-title">When you save</h2>
+    <div class="block" id="warnings-block" hidden>
+      <p class="eyebrow">Worth knowing</p>
+      <div id="warnings"></div>
+    </div>
+
+    <div class="btns"><button type="button" class="btn go" id="run" disabled>Solve</button></div>
+  </section>
+
+  <section class="card running" id="running" hidden>
+    <div class="ring">
+      <svg viewBox="0 0 150 150" aria-hidden="true">
+        <circle cx="75" cy="75" r="64" class="ring-track"/>
+        <circle cx="75" cy="75" r="64" class="ring-arc" id="ring-arc"/>
+      </svg>
+      <b id="pct">0%</b>
+    </div>
+    <h2 class="phase" id="phase">Working</h2>
+    <div class="bar" id="bar-outer" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="bar-fill" id="bar"></div>
+    </div>
+    <p class="running-note">
+      <span id="elapsed">0s</span> &middot; usually well under a minute. You can go
+      back to the game.
+    </p>
+    <div class="btns centre"><button type="button" class="btn" id="stop">Stop</button></div>
+  </section>
+</section>
+
+<!-- =============================================================== 3 maps -->
+<section class="screen" id="screen-maps">
+  <div class="results" id="results" hidden>
+    <div class="stage">
+      <div class="stage-head">
+        <h1 id="map-title">Qualifying</h1>
+        <span class="chip" id="map-mode"></span>
+        <p id="map-what"></p>
+        <div class="stage-tabs" role="tablist">
+          <button type="button" class="stage-tab is-on" data-pane="track">Track</button>
+          <button type="button" class="stage-tab" data-pane="notes">Notes <span id="note-count"></span></button>
+          <button type="button" class="stage-tab" data-pane="numbers">Numbers</button>
+        </div>
+      </div>
+
+      <div class="stage-pane is-on" data-pane="track">
+        <div class="mapbox">
+          <svg id="track-svg" role="img" aria-label="The circuit with this map drawn on it"></svg>
+          <div class="readout"><div class="v"><span id="car-kph">0</span><small>kph</small></div>
+            <div class="s" id="car-state"></div></div>
+          <div class="legend">
+            <span><i class="dep"></i>Deploy</span>
+            <span><i class="har"></i>Harvest</span>
+            <span><i class="off"></i>Nothing commanded</span>
+          </div>
+          <p class="no-outline" id="no-outline" hidden>This track's shape could not be read, so the lap is drawn as a plain loop.</p>
+        </div>
+        <div class="mapbox strip-box"><p class="cap">Speed around the lap</p><div id="strip-host"></div></div>
+      </div>
+
+      <div class="stage-pane" data-pane="notes">
+        <!-- The only thing on this page that has to be done in the car. -->
+        <div class="switch-call" id="switch-call" hidden>
+          <p class="switch-label">In the car</p>
+          <p class="switch-where" id="switch-where"></p>
+          <p class="switch-why" id="switch-why"></p>
+        </div>
+        <ul class="card-notes" id="map-notes"></ul>
+        <p class="hint" id="no-notes" hidden>Nothing to flag on this map.</p>
+      </div>
+
+      <div class="stage-pane" data-pane="numbers">
+        <div class="metrics" id="map-metrics"></div>
+        <p class="hint">The numbers that get written into your setup:</p>
+        <div class="splits-scroll" id="map-splits"></div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div>
+        <p class="label" id="results-title">Maps</p>
+        <div class="maps" id="cards"></div>
+      </div>
+      <div class="stats">
+        <p class="label">Predicted lap</p>
+        <div class="lap" id="map-lap"></div>
+        <div class="delta" id="map-delta"></div>
+        <div class="gauge">
+          <div class="row"><span>Battery</span><b id="map-batt"></b></div>
+          <div class="cells" id="map-cells"></div>
+        </div>
+        <div class="bars">
+          <div class="bar2"><span>Deployed</span><u><s id="map-depbar" class="dep"></s></u><b id="map-dep"></b></div>
+          <div class="bar2"><span>Harvested</span><u><s id="map-harbar" class="har"></s></u><b id="map-har"></b></div>
+        </div>
+      </div>
+      <div class="side-actions">
+        <button type="button" class="btn go" id="apply-open">Save into a setup &rarr;</button>
+        <button type="button" class="link" id="copy-diag">Copy diagnostics</button>
+      </div>
+    </aside>
+  </div>
+  <div class="center" id="no-maps">
+    <section class="card">
+      <p class="eyebrow">Maps</p>
+      <h2>No maps yet</h2>
+      <p class="lede">Solve a session and its maps appear here.</p>
+      <div class="btns"><button type="button" class="btn" data-go="solve">Go to Solve</button></div>
+    </section>
+  </div>
+</section>
+
+<!-- =============================================================== 4 save -->
+<section class="screen center" id="screen-save">
+  <div class="scrim" id="apply-back" hidden></div>
+  <section class="card" id="apply-panel" hidden aria-labelledby="apply-title">
+    <p class="eyebrow">Save</p>
+    <h2 id="apply-title">Save into a setup</h2>
+    <p class="lede" id="apply-note"></p>
+    <div class="setup-list" id="setup-list"></div>
+    <div class="block" id="options-block" hidden>
       <label class="check">
         <input type="checkbox" id="write-alloc" checked>
-        <span>Set the ERS limits to the FIA notice</span>
+        <span><b>Set the ERS limits to the FIA notice</b>
+          Recharge limits, power reduction rate and power curves, as published
+          for this circuit. Off, the car keeps what the setup had.</span>
       </label>
-      <p class="hint">Recharge limits, power reduction rate and power curves, as
-        published for this circuit. Off, the car keeps what the setup had.</p>
-    </section>
-
-    <div class="rail-actions">
-      <button type="button" class="primary" id="run" disabled>Run optimizer</button>
     </div>
-  </aside>
-
-  <section class="content" id="content">
-
-    <!-- Only what is actually missing, and only while it is missing. -->
-    <section class="panel firstrun" id="setup" hidden>
-      <h2 id="setup-title">Setting up</h2>
-      <p class="panel-note" id="setup-problem"></p>
-
-      <div id="setup-logger" hidden>
-        <p class="panel-note" id="logger-note">
-          The logger records your laps. It goes into Assetto Corsa's
-          <code>apps/lua</code> folder.
-        </p>
-        <button type="button" class="primary" id="install-logger">Install the logger</button>
-      </div>
-
-      <div id="setup-path" hidden>
-        <label class="field-label" for="ac-path">Assetto Corsa folder</label>
-        <div class="path-row">
-          <input type="text" id="ac-path" class="filter"
-                 placeholder="C:\Program Files (x86)\Steam\steamapps\common\assettocorsa"
-                 spellcheck="false" autocomplete="off">
-          <button type="button" class="primary" id="ac-save">Use this</button>
-        </div>
-        <p class="hint">The folder with <code>content</code> and <code>apps</code> in it.</p>
-      </div>
-
-      <p class="panel-note" id="setup-error" hidden></p>
-      <div class="panel-actions">
-        <button type="button" class="ghost small" id="setup-change">Open folder settings</button>
-        <button type="button" class="ghost small" id="setup-close" hidden>Close</button>
-      </div>
-    </section>
-
-    <div class="intro" id="intro" hidden>
-      <h1>Three maps from the laps you just drove.</h1>
-      <p class="lede">
-        The optimizer reads your laps, works out how your car behaves, and
-        finds where to spend battery around the circuit.
-      </p>
-      <div class="strat-grid">
-        <article class="strat-ghost" data-strat="1">
-          <span class="chip">STRAT 1</span>
-          <h3>Qualifying</h3>
-          <p>Spends the whole battery over one lap.</p>
-        </article>
-        <article class="strat-ghost" data-strat="2">
-          <span class="chip">STRAT 2</span>
-          <h3>Race</h3>
-          <p>Ends the lap with the charge it started.</p>
-        </article>
-        <article class="strat-ghost" data-strat="3">
-          <span class="chip">STRAT 3</span>
-          <h3>Recharge</h3>
-          <p>Puts charge back in. Meant to feel slow.</p>
-        </article>
-      </div>
-      <ol class="steps">
-        <li><b>Drive</b> a few clean laps in one session.</li>
-        <li><b>Run the optimizer.</b></li>
-        <li><b>Save, then restart the session</b> &mdash; the car only reads a
-            setup when it loads.</li>
-      </ol>
+    <div class="btns">
+      <button type="button" class="btn go" id="apply-go" disabled>Save maps</button>
+      <button type="button" class="btn" id="apply-cancel">Back to the maps</button>
     </div>
-
-    <section class="running" id="running" hidden>
-      <div class="running-head">
-        <h2 id="phase">Working</h2>
-        <span class="running-pct" id="pct">0%</span>
-        <button type="button" class="ghost small" id="stop">Stop</button>
-      </div>
-      <div class="bar" id="bar-outer" role="progressbar"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="bar-fill" id="bar"></div>
-      </div>
-      <p class="running-note">
-        <span id="elapsed">0s</span> &middot; usually well under a minute. You can go
-        back to the game.
-      </p>
-    </section>
-
-    <div class="results" id="results" hidden>
-      <div class="results-head">
-        <h1 id="results-title">Results</h1>
-        <div class="actions">
-          <button type="button" class="ghost small" id="copy-diag">Copy diagnostics</button>
-          <button type="button" class="primary" id="apply-open">Save to a setup&hellip;</button>
-        </div>
-      </div>
-
-      <!-- The only thing on this page that has to be done in the car, so it
-           goes above the maps rather than inside a note on one of them. -->
-      <div class="switch-call" id="switch-call" hidden>
-        <p class="switch-label">In the car</p>
-        <p class="switch-where" id="switch-where"></p>
-        <p class="switch-why" id="switch-why"></p>
-      </div>
-
-      <div class="cards" id="cards"></div>
-    </div>
-
-    <section class="panel done" id="applied" hidden></section>
-
-    <!-- Starting and saving both used to report their failures into the
-         activity log. With the log gone they need somewhere of their own,
-         and a failure is worth more room than a line in a feed anyway. -->
-    <section class="panel trouble" id="trouble" hidden>
-      <p class="trouble-title">That did not work</p>
-      <p class="trouble-text" id="trouble-text"></p>
-    </section>
   </section>
-</div>
+  <section class="card done" id="applied" hidden></section>
+</section>
 
-<!-- ============================================================ folders -->
-<div class="view page" id="view-folders" hidden>
-  <header class="page-head">
-    <h1>Folders</h1>
-    <p class="lede">
-      Three places on this machine. Each is found automatically; each can be
-      set by hand if it was found wrong.
-    </p>
-  </header>
-
+<!-- ============================================================= settings -->
+<section class="screen settings" id="screen-settings">
+  <nav class="panes" aria-label="Settings">
+    <button type="button" class="pane-tab is-on" data-settings="folders">Folders</button>
+    <button type="button" class="pane-tab" data-settings="logger">Logger</button>
+    <button type="button" class="pane-tab" data-settings="prefs">Preferences</button>
+    <button type="button" class="pane-tab" data-settings="about">About</button>
+  </nav>
+  <div class="pane-host">
+    <div class="pane is-on" data-settings="folders">
+      <h3>Folders</h3>
+      <p class="lede">Each is found automatically, and can be set by hand if it was found wrong.</p>
   <section class="folder">
     <div class="folder-head">
       <h2>Assetto Corsa</h2>
@@ -311,10 +361,6 @@
       <button type="button" class="link" data-edit="ac">or type the path</button>
     </div>
 
-    <div class="folder-logger" id="folder-logger" hidden>
-      <p class="hint" id="folder-logger-note"></p>
-      <button type="button" class="primary" id="install-logger-2">Install the logger</button>
-    </div>
     <div class="folder-edit" id="ac-edit" hidden>
       <label class="field-label" for="ac-path-2">The folder with <code>content</code> and <code>apps</code> in it</label>
       <div class="path-row">
@@ -392,18 +438,55 @@
   </section>
 
   <p class="page-foot" id="folders-error" hidden></p>
-</div>
 
-<!-- ======================================================== how it works -->
-<!-- ========================================================== past runs -->
-<div class="view page" id="view-runs" hidden>
-  <h1 class="page-title">Past runs</h1>
-  <p class="page-lede">
-    Every run this tool has finished, newest first. Tick two to see what
-    changed between them &mdash; which is the only way to tell whether
-    something you changed helped.
-  </p>
+    </div>
 
+    <div class="pane" data-settings="logger">
+      <h3>Logger</h3>
+      <p class="lede" id="logger-state">The logger records your laps in game.</p>
+    <div class="folder-logger" id="folder-logger" hidden>
+      <p class="hint" id="folder-logger-note"></p>
+      <button type="button" class="primary" id="install-logger-2">Install the logger</button>
+    </div>
+
+      <p class="hint">In game, open the apps bar on the right and enable
+        <b>FA26 Baseline Logger</b>.</p>
+    </div>
+
+    <div class="pane" data-settings="prefs">
+      <h3>Preferences</h3>
+      <div class="block" id="autosearch-block">
+        <label class="check auto-switch">
+          <input type="checkbox" id="live-search">
+          <span><b>Keep searching between laps</b>
+            Off by default. It runs the same search the button runs, again every
+            time you finish a lap &mdash; every processor core at full tilt
+            for several seconds, while the game wants them too. Turn it on only if
+            your machine has the headroom.</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="pane" data-settings="about">
+      <h3>About</h3>
+      <dl class="kv" id="about-facts"></dl>
+      <div class="btns">
+        <button type="button" class="btn" id="copy-diag-about">Copy diagnostics</button>
+        <button type="button" class="btn" data-go="help">How it works</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================== history -->
+<section class="screen page" id="screen-history">
+  <div class="card wide">
+    <p class="eyebrow">History</p>
+    <h2>Past runs</h2>
+    <p class="lede">
+      Every run this tool has finished, newest first. Tick two to see what
+      changed between them.
+    </p>
   <div class="runs-empty" id="runs-empty" hidden>
     <p>No runs kept yet. Run the optimizer and it will start a record here.</p>
   </div>
@@ -426,9 +509,14 @@
     </thead>
     <tbody id="runs-body"></tbody>
   </table>
-</div>
 
-<div class="view page" id="view-guide" hidden>
+  </div>
+</section>
+
+<!-- ================================================================= help -->
+<section class="screen page" id="screen-help">
+  <div class="card wide guide">
+    <p class="eyebrow">Help</p>
   <header class="page-head">
     <h1>How it works</h1>
     <p class="lede">Four steps, and the one everybody gets wrong is the last.</p>
@@ -455,7 +543,8 @@
       <h2>Save into a setup</h2>
       <p>
         Pick one of your setups for this circuit. The old file is copied to
-        <code>.bak</code> first, and only deployment maps 1 to 3 are touched.
+        <code>.bak</code> first, and only the deployment
+        maps are touched.
       </p>
     </li>
     <li>
@@ -469,7 +558,7 @@
   </ol>
 
   <section class="guide-strats">
-    <h2>The three maps</h2>
+    <h2>The three main maps</h2>
     <div class="strat-grid">
       <article class="strat-ghost" data-strat="1">
         <span class="chip">STRAT 1</span>
@@ -488,29 +577,21 @@
       </article>
     </div>
     <p class="hint">
-      Switch between them with <b>STRAT Map</b> on the pit setup screen. The
-      PU mode switch on the wheel does not change it.
+      The PU mode switch on the wheel picks between them: Q, RACE, and SLO or
+      SC for recharge. Attack, Defend, Push and Save sit on AD1, AD2, K2 and
+      ES. In the other modes <b>STRAT Map</b> on the pit setup screen decides.
     </p>
   </section>
-</div>
 
-</main>
-
-<!-- The save dialog sits over the page rather than below it: it used to open
-     as a panel under the results, so the button at the top scrolled its own
-     form out of sight. -->
-<div class="scrim" id="apply-back" hidden></div>
-<section class="panel modal" id="apply-panel" hidden role="dialog"
-         aria-modal="true" aria-labelledby="apply-title">
-  <h2 id="apply-title">Save into a setup</h2>
-  <p class="panel-note" id="apply-note"></p>
-  <div class="setup-list" id="setup-list"></div>
-  <div class="panel-actions">
-    <button type="button" class="primary" id="apply-go" disabled>Save maps</button>
-    <button type="button" class="ghost" id="apply-cancel">Cancel</button>
   </div>
 </section>
 
+</main>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+
+<script src="/ui/track.js"></script>
 <script src="/ui/app.js"></script>
 </body>
 </html>
