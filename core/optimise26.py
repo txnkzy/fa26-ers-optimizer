@@ -1623,7 +1623,7 @@ def _optimise_once(splits, car, longitudinal, profile, powertrain,
     if coarse is not None:
         coarse, result = _rebalance(coarse, fine, profile, objective,
                                     start_store_kj)
-    coarse = open_the_lap(coarse, profile)
+    coarse = open_the_lap(coarse, profile, fine.reset_zones)
     if approach is not None:
         # The finished map at every switch point, so the advice given with it
         # is the one it was planned for.
@@ -1702,7 +1702,7 @@ def _rebalance(splits, evaluator, profile, objective: Objective,
     return best, best_result
 
 
-def open_the_lap(splits, profile):
+def open_the_lap(splits, profile, reset_zones=()):
     """Let the opening split deploy, by asking the last one for more.
 
     A lap begins with the car already at full throttle, so whatever the last
@@ -1724,6 +1724,20 @@ def open_the_lap(splits, profile):
     six maps is a positive case, so this raises the last split rather than
     trusting a margin of one kilowatt: enough to be unambiguous, and the end of
     a lap is the run to the line, where the power is worth having anyway.
+
+    The last split is not always where the throttle was picked up. A long
+    straight is cut into several (`subdivide`), and then the last one begins
+    with the driver already flat -- so raising it alone is itself an increase
+    under throttle, which the car refuses, and the opening it was raised for
+    is refused with it. Every map of a Mexico solve came back that way, 200
+    before a boundary 262 m from the line and 300 after it, on laps driven by
+    the AI, which is flat the instant it is on the throttle and so has every
+    long straight cut. So the raise is carried back along the straight: each
+    split the driver is still on the throttle into is brought up to the same
+    level, as far as the split where the throttle was picked up. Where that
+    cannot be done -- the split before stops deploying short of the boundary,
+    or the run reaches back to the opening itself -- the map is left as it
+    was, unopened but drivable.
     """
     live = [s for s in splits if s.deploy_kw > 0]
     if len(live) < 2:
@@ -1734,9 +1748,30 @@ def open_the_lap(splits, profile):
     want = min(fa26.POWER_MAX, opening.deploy_kw + OPENING_MARGIN_KW)
     if want <= final.deploy_kw:
         return splits
-    return [fa26.Split(s.start_m, s.deploy_end_m, s.clip_start_m, s.end_m,
-                       want, s.clip_kw) if s is final else s
-            for s in splits]
+    reset_zones = tuple(tuple(z) for z in reset_zones)
+    settled = illegal_increases(splits, profile, reset_zones)
+    out = [fa26.Split(s.start_m, s.deploy_end_m, s.clip_start_m, s.end_m,
+                      want, s.clip_kw) if s is final else s
+           for s in splits]
+    for _ in range(len(out)):
+        fresh = [bad for bad in illegal_increases(out, profile, reset_zones)
+                 if bad not in settled]
+        if not fresh:
+            return out
+        for start_m, _before, _after in fresh:
+            # The split in command just before the boundary, and only if it
+            # is still deploying there: one that has stopped cannot be raised
+            # into holding the level.
+            behind = start_m - profile.ds
+            index = next((i for i, s in enumerate(out)
+                          if s.start_m <= behind < s.deploy_end_m
+                          and s.deploy_kw > 0), None)
+            if index is None or out[index] is opening:
+                return splits
+            s = out[index]
+            out[index] = fa26.Split(s.start_m, s.deploy_end_m, s.clip_start_m,
+                                    s.end_m, want, s.clip_kw)
+    return splits
 
 
 def _climb(splits, evaluator, profile, objective: Objective,
