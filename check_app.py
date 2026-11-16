@@ -1007,7 +1007,19 @@ def _opening_can_fire() -> tuple[bool, str]:
             _fa26.Split(4000, 4500, _fa26.CLIP_OFF, 4500, 200, 0)]
 
     class Shape:
+        # On the throttle inside the splits and off it between them, which is
+        # the lap these maps describe. `open_the_lap` reads it to tell a split
+        # that begins at a throttle application from one that begins with the
+        # driver already flat -- see check_rules.py for that case.
         length_m = 5000.0
+        ds = 2.5
+        gas = [1.0 if (i * 2.5 < 500 or 1000 <= i * 2.5 < 1500
+                       or 4000 <= i * 2.5 < 4500) else 0.0
+               for i in range(2000)]
+
+        def _slot(self, distance_m):
+            return min(int((distance_m % self.length_m) / self.ds),
+                       len(self.gas) - 1)
 
     fixed = _opt.open_the_lap(flat, Shape())
     live = [s for s in fixed if s.deploy_kw > 0]
