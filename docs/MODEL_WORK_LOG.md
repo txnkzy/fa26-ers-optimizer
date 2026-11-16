@@ -2635,3 +2635,30 @@ switch to STRAT 1 came before the new zone, so the zone itself is still
 unconfirmed in the car. Charge entering the push lap 3202 kJ against 3228
 planned. Found there and not fixed: the timing line is 294 m after the
 spline's zero, and the map ran dry about 200 m before it.
+
+## Super-clip carries to the lift
+
+Reported from PGO on 1.1.4: the race map's last split clipped 350 kW into the
+line, the opening asked for no clip, and the car went on clipping all the way
+to turn one because the driver stayed flat. The car's script is encrypted, so
+this comes from the recorded laps, and they agree with the report:
+
+* Interlagos, 8 November, STRAT 2 both laps: last split clipping 350 kW from
+  4069 m to the line, opening split deploy 0 with no clip. Lap 2 harvested
+  342-351 kW from the line to the lift at 112 m, lap 3 345-351 kW to 136 m.
+* Mid-lap the same: Bahrain's 150 kW clip ended at 4567 m and the car went on
+  harvesting 149-151 kW to the lift at 4740; Albert Park's 50 kW clip ran
+  266 m past the line on five laps of 20 September, each time to the lift.
+
+So a clip is a demand latched like the deploy demand: past its split and the
+line, until the throttle drops below the knee or a new clip is commanded. The
+simulator ended it with its split and priced the PGO map as free. It now
+carries `clip_kw` in `Carry` (ABI 2). Not established: what a smaller clip
+command does to a larger latched one, and whether a strategy switch at the
+line clears it; the model takes the new command and carries across a switch.
+
+Found on the way: an empty profile slot borrowed speed and mean throttle but
+not the throttle maximum, so it read 0.00 and the simulation saw a lift. 51 of
+471 laps had one at the line, where it granted the opening its command and
+the 200 kW floor and ended the clip. Interlagos lap 2 replayed: opening
+harvest 0 kW before, 350 after, against 345-350 measured.

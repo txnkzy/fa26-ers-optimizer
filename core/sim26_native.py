@@ -22,7 +22,7 @@ from pathlib import Path
 import carphysics
 import fa26
 
-ABI_VERSION = 1
+ABI_VERSION = 2
 LIBRARY = "fa26sim.dll"
 
 _D = ctypes.c_double
@@ -153,7 +153,7 @@ class _Geometry:
         self.speeds = (_D * self.cap)()
         self.lift_corner = (ctypes.c_int32 * n)()
         self.lift_kph = arr()
-        self.out = (_D * 14)()
+        self.out = (_D * 15)()
 
     def flags(self, powertrain):
         """Per-step flags, with the alternative power curve's zones marked."""
@@ -253,17 +253,17 @@ def simulate(sim, splits, car, longitudinal, profile, powertrain,
     if entry is not None:
         start_store_kj = entry.store_kj
         e = (entry.speed_ms, entry.demand_kw, entry.prev_level_kw,
-             entry.throttle_time_s)
+             entry.throttle_time_s, entry.clip_kw)
     else:
-        e = (0.0, 0.0, 0.0, 0.0)
-    params = (_D * 24)(
+        e = (0.0, 0.0, 0.0, 0.0, 0.0)
+    params = (_D * 25)(
         step, mass, longitudinal.traction_ms2 * mass, powertrain.floor_kw,
         powertrain.floor_hold_s, powertrain.ramp_down_kw_s, start_store_kj,
         harvest_cap_kj, store_capacity_kj, fa26.MAX_HARVEST_KW,
         fa26.MOTOR_EFFICIENCY, fa26.DEMAND_RESET_GAS, fa26.MAX_DEPLOY_KW,
         fa26.HARVEST_CUTOFF_KPH, fa26.HARVEST_RAMP_KPH,
         fa26.HARVEST_OFF_THROTTLE_KW, sim.INSTANT_CUT_KPH, car._table_step,
-        g.start_speed, e[0], e[1], e[2], e[3], profile.length_m)
+        g.start_speed, e[0], e[1], e[2], e[3], profile.length_m, e[4])
     ints = (ctypes.c_int64 * 10)(
         n, lo, hi, 1 if settle else 0, 1 if entry is not None else 0,
         max(0, n - int(sim.PRIME_M / step)), len(flat) // 6, n_taper, n_alt,
@@ -286,7 +286,8 @@ def simulate(sim, splits, car, longitudinal, profile, powertrain,
     lift_corner, lift_kph = g.lift_corner, g.lift_kph
     return sim.Result(
         exit=sim.Carry(speed_ms=out[8], store_kj=out[3], demand_kw=out[9],
-                       prev_level_kw=out[10], throttle_time_s=out[11]),
+                       prev_level_kw=out[10], throttle_time_s=out[11],
+                       clip_kw=out[14]),
         lap_time_s=out[0], deployed_mj=out[1] / 1000.0,
         harvested_mj=out[2] / 1000.0, store_end_kj=out[3],
         store_min_kj=out[4], store_start_kj=out[5],

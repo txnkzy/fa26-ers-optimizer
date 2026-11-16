@@ -155,7 +155,14 @@ def check_circuit(name, path, car, maps: int, rng) -> tuple:
                         ramp_down_kw_s=50.0),
     )
     checked, failures = 0, []
-    candidates = [[], seed] + [shaken(seed, rng) for _ in range(maps)]
+    # A map whose last split clips into the line, so the clip latch is carried
+    # across it, through the priming walk and the settling lap both.
+    last = max(seed, key=lambda s: s.end_m)
+    into_line = [s if s is not last else
+                 fa26.Split(s.start_m, s.deploy_end_m, s.deploy_end_m, s.end_m,
+                            s.deploy_kw, 350) for s in seed]
+    candidates = ([[], seed, into_line]
+                  + [shaken(seed, rng) for _ in range(maps)])
     for index, splits in enumerate(candidates):
         pt = trains[index % len(trains)]
         start = rng.choice((0.0, 500.0, L.store_kj[0], 2500.0, 4000.0))
@@ -176,7 +183,8 @@ def check_circuit(name, path, car, maps: int, rng) -> tuple:
         for switch in (120.0, 400.0):
             window_a = (length - sim26.PRIME_M, length - switch)
             entry = sim26.Carry(speed_ms=P.measured_speed_at(window_a[0]),
-                                store_kj=start)
+                                store_kj=start,
+                                clip_kw=150.0 if index % 2 else 0.0)
             checked += 1
             bad = both(other, car, cal, P, pt, start, this_cap, entry=entry,
                        window=window_a)

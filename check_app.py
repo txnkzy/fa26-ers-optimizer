@@ -1108,6 +1108,130 @@ _ok, _why = _line_rule_holds()
 check("the opening is granted only below what was carried", _ok, _why)
 
 
+# --- super-clip carries past its split while the driver stays flat -----------
+# A clip command is a demand like any other, and demand cannot change under
+# throttle: the clip goes on past the end of its split, and past the line, to
+# the first lift. Interlagos, 8 November: the race map's last split clipped
+# 350 kW into the line and the opening asked for nothing, and the car
+# harvested 345-350 kW from the line to the lift at 112-136 m on both laps that
+# arrived flat. The model ended the clip at the line and priced that map as
+# though it did. A clip into the line must therefore harvest the opening just
+# as an explicit clip over the opening would.
+def _clip_carries_to_the_lift() -> tuple[bool, str]:
+    import fa26 as _fa26
+    import sim26 as _sim
+    import lap as _laplib
+    import profile as _prof
+    import calibrate as _cal
+    import carphysics as _cp
+    one = shape = None
+    lift = 0.0
+    for path in sorted(A.baseline_dir().glob("*.csv")):
+        try:
+            cand = _laplib.load(path)
+        except Exception:
+            continue
+        if _laplib.problem(cand) or cand.length_m < 3000:
+            continue
+        cand_shape = _prof.Profile([cand])
+        # The lift as the simulation sees it, off the slot maximum it re-arms
+        # on, rather than `first_lift_m`'s mean. The two disagreed wherever a
+        # slot was empty -- a Sepang one at 225 m read 0.00 against 1.00 --
+        # until the profile filled the maximum as well; the check below holds
+        # that, and this one should not depend on it.
+        cand_lift = next((k * cand_shape.ds
+                          for k, g in enumerate(cand_shape.gas)
+                          if g < _fa26.DEMAND_RESET_GAS), 0.0)
+        tail = [g for d, g in zip(cand.dist, cand.gas)
+                if d >= cand.length_m - 150.0]
+        # Flat over the last 150 m and on to a lift well after the line, so
+        # the clip has a straight to carry down on either side of it.
+        if cand_lift >= 150 and tail and min(tail) >= 0.98:
+            one, shape, lift = cand, cand_shape, cand_lift
+            break
+    if one is None:
+        return True, "no lap flat across the line, skipped"
+    car = _cp.load(A.car_data())
+    car.fuel_liters = 45
+    cal = _cal.fit_longitudinal([one], car)
+    end = int(shape.length_m)
+    tail0 = end - 150
+    into_line = _fa26.Split(tail0, tail0, tail0, end, 0, 350)
+
+    def harvested(opening_clip_kw, settle):
+        # Refused counts too: a map that deploys nothing fills the store by
+        # the end of the lap, and the store then refuses exactly the energy
+        # this is trying to see -- both maps came back 6.24 MJ at Baku.
+        m = [_fa26.Split(0, 0, 0, int(lift), 0, opening_clip_kw), into_line]
+        r = _sim.simulate(m, car, cal, shape, _fa26.Powertrain(),
+                          start_store_kj=1000.0, harvest_cap_kj=1e9,
+                          settle=settle)
+        return r.harvested_mj + r.refused_mj
+
+    worst = ""
+    for settle in (False, True):
+        carried, explicit = harvested(0, settle), harvested(350, settle)
+        if carried < explicit - 0.05:
+            worst = ("a clip into the line harvested %.2f MJ, against %.2f "
+                     "for the same clip carried on to the lift at %.0f m%s"
+                     % (carried, explicit, lift,
+                        " (settled)" if settle else ""))
+    if worst:
+        return False, worst
+    return True, ("%s: clip into the line carries to the lift at %.0f m, "
+                  "%.2f MJ either way" % (one.path and Path(one.path).name[:24],
+                                          lift, carried))
+
+
+_ok, _why = _clip_carries_to_the_lift()
+check("super-clip into the line carries on to the first lift", _ok, _why)
+
+
+# --- an empty profile slot is not a lift ---------------------------------------
+# A slot the logger wrote no sample into borrows from the one before it. The
+# throttle maximum was left out, so an empty slot read 0.00 under a mean of
+# 1.00 and the simulation saw a lift there: 51 of 471 laps had one at the line,
+# which re-armed the demand, the floor and the clip latch exactly where a car
+# crossing flat keeps all three.
+def _empty_slot_is_not_a_lift() -> tuple[bool, str]:
+    import dataclasses
+    import fa26 as _fa26
+    import lap as _laplib
+    import profile as _prof
+    for path in sorted(A.baseline_dir().glob("*.csv")):
+        try:
+            one = _laplib.load(path)
+        except Exception:
+            continue
+        if _laplib.problem(one):
+            continue
+        whole = _prof.Profile(one)
+        if whole.gas[2] < 0.99:
+            continue                            # wants a lap flat at the line
+        # The same lap with nothing logged over the first 5 m.
+        keep = [i for i, d in enumerate(one.dist) if d >= 5.0]
+        pick = lambda xs: [xs[i] for i in keep]
+        holed = dataclasses.replace(
+            one, **{f.name: pick(getattr(one, f.name))
+                    for f in dataclasses.fields(one)
+                    if isinstance(getattr(one, f.name), list)
+                    and len(getattr(one, f.name)) == len(one.dist)})
+        shape = _prof.Profile(holed)
+        low = [k for k in range(3) if shape.gas[k] < _fa26.DEMAND_RESET_GAS]
+        if low:
+            return False, ("%s with its first 5 m unlogged reads gas %.2f at "
+                           "%.1f m, a lift the driver never made"
+                           % (path.name[:24], shape.gas[low[0]],
+                              low[0] * shape.ds))
+        return True, ("%s with its first 5 m unlogged reads gas %.2f at the "
+                      "line" % (path.name[:24], shape.gas[0]))
+    return True, "no lap flat at the line, skipped"
+
+
+_ok, _why = _empty_slot_is_not_a_lift()
+check("an empty profile slot is not a lift", _ok, _why)
+
+
 # --- the power curves are the ones the FIA draws ------------------------------
 # Read from the vector data of the chart in the Baku Power Unit Information
 # notice. Base - Standard has a knee at 100 kW and 340 kph; it was modelled as
