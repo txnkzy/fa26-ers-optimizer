@@ -36,7 +36,17 @@ def main() -> int:
     if done.returncode:
         return done.returncode
     built = CRATE / "target" / "release" / "fa26sim.dll"
-    shutil.copy2(built, ROOT / "core" / "fa26sim.dll")
+    target = ROOT / "core" / "fa26sim.dll"
+    # A running copy of the app holds the library open and Windows will not
+    # replace it. If what it holds is already this build there is nothing to
+    # do; if not, say so rather than kill somebody's window.
+    if not (target.is_file() and target.read_bytes() == built.read_bytes()):
+        try:
+            shutil.copy2(built, target)
+        except PermissionError:
+            print("%s is in use -- close the FA26 Optimizer window started "
+                  "from this folder and run this again." % target)
+            return 1
     print("built core/fa26sim.dll (%d kB)" % (built.stat().st_size // 1024))
     return 0
 

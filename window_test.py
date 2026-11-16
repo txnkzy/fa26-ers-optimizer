@@ -15,6 +15,7 @@ copy, with no arguments, twice, without closing anything in between.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -24,7 +25,9 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 SRC = Path(__file__).resolve().parent
-BUNDLE = Path(r"E:\FA26 Optimizer\FA26 Optimizer.zip")
+#: Where `build_exe.py` writes; FA26_BUILD_OUT moves both together.
+BUNDLE = Path(os.environ.get("FA26_BUILD_OUT")
+              or r"E:\Claude Code\FA26 Optimizer") / "FA26 Optimizer.zip"
 #: Long enough for PyInstaller to unpack itself and bind, on a cold cache.
 PATIENCE = 30.0
 

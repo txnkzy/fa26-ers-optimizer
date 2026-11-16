@@ -2594,3 +2594,44 @@ unwatched now says so itself:
 The COTA notice (R18) was the first imported with no one involved: published
 on 22-23 October, committed by the watch at 04:47 UTC on the 23rd, every
 figure matching the PDF, and picked up by a 1.1.3 copy at start-up.
+
+### 1.2.0: the integration, compiled
+
+A solve spent 99% of its time inside `sim26.simulate` (Barcelona race search:
+34.7 s of 35.1), and the search logic about 1%. So only the integration was
+ported: `native/fa26sim` is the loop and the helpers it calls, in Rust, built
+as a C library and reached through ctypes (`core/sim26_native.py`). The
+Python stays as `simulate_py`, the reference and the fallback.
+
+* Held to identical numbers, not close ones (`native/parity.py`): 14,880
+  integrations over 24 circuits, every field equal. `x ** 0.5` in Python is
+  the C runtime's `pow`, which differs from the correctly rounded square root
+  about once in two thousand values, so the library is handed that same
+  `pow` rather than using its own `sqrt`.
+* Whole race searches chose the same map in the same number of evaluations:
+  Barcelona 58.3 s -> 2.4, Spa 44.8 -> 1.8. A full solve from the app: Austin
+  205 s -> 11, Las Vegas 170 -> 9, all seven maps identical.
+* Two things went wrong on the way and are now checked. C arrays cached on
+  the car and the profile cannot be pickled across to the search's workers,
+  so the caches live in the module. And inside the packaged app a bare
+  `CDLL("ucrtbase")` is redirected to PyInstaller's unpacking folder, so the
+  first build ran on the Python without a word -- 262 s, right answers. The
+  readiness report now carries `integration`, and `native/exe_check.py`
+  refuses a bundle that is not running compiled.
+
+The recharge map. `recharge_map` asked whether the driver was flat a few
+metres into each split, and splits begin at the 60% knee, so the answer was
+no nearly everywhere: no clip at all at Las Vegas, one split of eighteen at
+Barcelona, the store arriving about a tenth short on 22 circuits of 24.
+Clipping every split the driver goes flat in overshot (Bahrain +11.9 s, the
+store full for most of the lap); longest-first needed up to eight splits.
+The shortfall is the floor deployed out of the last corner, so splits are
+brought in from the line backwards and one is enough everywhere. The window
+cut also walked a list it was inserting into, and skipped the second.
+
+Driven at Austin (fn_cota, 16 November): on STRAT 3 the store was full at the
+final corner's braking, and the floor measured 192-201 kW at three exits. The
+switch to STRAT 1 came before the new zone, so the zone itself is still
+unconfirmed in the car. Charge entering the push lap 3202 kJ against 3228
+planned. Found there and not fixed: the timing line is 294 m after the
+spline's zero, and the map ran dry about 200 m before it.

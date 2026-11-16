@@ -2,7 +2,7 @@
 
     python build_exe.py
 
-Produces `E:\\FA26 Optimizer\\FA26 Optimizer.exe` -- one file, no installer, no
+Produces `E:\\Claude Code\\FA26 Optimizer\\FA26 Optimizer.exe` -- one file, no installer, no
 Python needed on the machine that runs it -- and zips it with the read-me and
 the installation sheet, which is the file to hand to anyone else. The page,
 its fonts, the recharge tables and the in-game logger all travel inside the
@@ -15,6 +15,7 @@ the copy the user already owns -- see `core/install.py`.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -22,7 +23,9 @@ import zipfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent
-OUT = Path(r"E:\FA26 Optimizer")
+#: FA26_BUILD_OUT sends a build somewhere else, so a trial build does not
+#: replace the released one sitting in the usual folder.
+OUT = Path(os.environ.get("FA26_BUILD_OUT") or r"E:\Claude Code\FA26 Optimizer")
 NAME = "FA26 Optimizer"
 
 
@@ -67,8 +70,13 @@ FILEVERS = numbers(VERSION)
 HIDDEN = [
     "ailine", "calibrate", "carphysics", "acd", "fa26", "install", "lap",
     "optimise26", "paths", "profile", "recharge", "session", "setupfile",
-    "sim26",
+    "sim26", "sim26_native",
 ]
+
+#: The compiled lap integration. Without it the app still runs, on the Python
+#: integration and some twenty times slower, and says nothing about it -- so
+#: the build makes it afresh and stops if it cannot, rather than ship that.
+NATIVE = SRC / "core" / "fa26sim.dll"
 
 #: Left out on purpose. `gui` and `cli` belong to the older FA25 tool and drag
 #: in tkinter, which would add megabytes to an app that has no use for it.
@@ -127,6 +135,13 @@ def main() -> int:
         print("Update fa26_app.VERSION, or tag the commit you meant to build.")
         return 1
 
+    print("compiled lap integration")
+    made = subprocess.run([sys.executable, str(SRC / "native" / "build.py")],
+                          cwd=SRC)
+    if made.returncode != 0 or not NATIVE.is_file():
+        print("could not build %s -- see native/build.py." % NATIVE.name)
+        return 1
+
     print("icon")
     subprocess.run([sys.executable, "make_icon.py"], cwd=SRC, check=True)
 
@@ -156,6 +171,7 @@ def main() -> int:
         args += ["--paths", str(SRC / folder)]
     for source, target in DATA:
         args += ["--add-data", "%s%s%s" % (SRC / source, ";", target)]
+    args += ["--add-binary", "%s;." % NATIVE]
     for module in HIDDEN:
         args += ["--hidden-import", module]
     for module in EXCLUDE:

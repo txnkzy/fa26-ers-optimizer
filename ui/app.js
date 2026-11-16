@@ -1191,6 +1191,7 @@ function diagnostics() {
              + ", this app can write there: " + d.writable);
   }
   if (state.ready) {
+    out.push("lap integration: " + (state.ready.integration || "unknown"));
     out.push("ransomware protection (Controlled folder access): "
              + (state.ready.protection || "unknown"));
   }

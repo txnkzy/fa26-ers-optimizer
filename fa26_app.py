@@ -67,7 +67,7 @@ CAR_ID = fa26.CAR_ID
 #: tag is the source of truth: `build_exe.py` refuses to build when this and
 #: the tag disagree, because a build that misreports its own version turns
 #: every bug report into a guess about which one it came from.
-VERSION = "1.1.4"
+VERSION = "1.2.0"
 
 
 def car_data() -> Path:
@@ -629,6 +629,16 @@ def session_detail(key: str) -> dict:
     return detail
 
 
+def integration() -> str:
+    """"compiled" or "python" -- see `core/sim26_native.py`."""
+    native = getattr(sim26, "_native", None)
+    if native is None:
+        return "python (%s)" % (getattr(sim26, "_native_error", "") or "no bridge")
+    if native.available:
+        return "compiled"
+    return "python (%s)" % (native.reason or "library did not load")
+
+
 def readiness() -> dict:
     """What is stopping this machine from running the optimizer.
 
@@ -640,6 +650,11 @@ def readiness() -> dict:
     root = install.find_root()
     folder = baseline_dir()
     out = {"ok": False, "version": VERSION,
+           # Which lap integration this copy is running: the compiled one, or
+           # the Python it falls back to if the library did not load. The two
+           # give the same answers some twenty times apart in speed, so a
+           # report of a slow solve needs to say which.
+           "integration": integration(),
            "root": str(root) if root else "",
            "found_automatically": root is not None and not install.saved_root(),
            "car": False, "logger": False, "problem": "", "kind": "",
@@ -1527,6 +1542,7 @@ class Engine:
         self.say("Starting from %d zones, set by where you lift and get "
                  "back on the throttle." % len(seed))
         self.detail("Seeded %d splits from the throttle trace." % len(seed))
+        self.detail("Lap integration: %s." % integration())
 
         # Any setup already sitting in this track's folder -- VRC's own
         # optional setups especially -- carries a hand-authored map. A hill

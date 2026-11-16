@@ -32,30 +32,44 @@ _lib = None
 _pow = None
 
 
+#: Why the compiled integration is not in use, when it is not. Goes out with
+#: the diagnostics: a build that quietly ran on the Python was the first
+#: thing that went wrong with packaging this.
+reason = ""
+
+
 def _load():
     """The library, or None. Never raises: no library just means Python."""
+    global reason
     if os.environ.get("FA26_SIM", "").strip().lower() == "python":
+        reason = "turned off by FA26_SIM"
         return None
     if sys.platform != "win32":
+        reason = "not Windows"
         return None
     folders = [Path(__file__).resolve().parent]
     frozen = getattr(sys, "_MEIPASS", None)
     if frozen:
         folders.append(Path(frozen))
+    tried = []
     for folder in folders:
         path = folder / LIBRARY
         if not path.is_file():
+            tried.append("%s: not there" % path)
             continue
         try:
             lib = ctypes.CDLL(str(path))
             lib.fa26_abi_version.restype = ctypes.c_int
             if lib.fa26_abi_version() != ABI_VERSION:
+                tried.append("%s: built for another version" % path)
                 continue
             lib.fa26_simulate.restype = ctypes.c_int
             lib.fa26_simulate.argtypes = [_P] * 21
             return lib
-        except (OSError, AttributeError):
+        except (OSError, AttributeError) as exc:
+            tried.append("%s: %s: %s" % (path, type(exc).__name__, exc))
             continue
+    reason = "; ".join(tried)
     return None
 
 
@@ -67,15 +81,30 @@ def _c_pow():
     function rather than using its own `sqrt`, and the two integrations stay
     bit for bit the same.
     """
-    ucrt = ctypes.CDLL("ucrtbase")
-    return ctypes.cast(ucrt.pow, _P)
+    # Looked up in the copy this process already has loaded, not loaded by
+    # name. In the packaged app PyInstaller points a bare `CDLL("ucrtbase")`
+    # at its own unpacking folder, where there is no such file, and the first
+    # packaged build ran on the Python integration without a word.
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetModuleHandleW.restype = _P
+    kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
+    kernel32.GetProcAddress.restype = _P
+    kernel32.GetProcAddress.argtypes = [_P, ctypes.c_char_p]
+    module = kernel32.GetModuleHandleW("ucrtbase.dll")
+    if not module:
+        raise OSError("ucrtbase.dll is not loaded in this process")
+    address = kernel32.GetProcAddress(module, b"pow")
+    if not address:
+        raise OSError("ucrtbase.dll has no pow")
+    return _P(address)
 
 
 try:
     _lib = _load()
     if _lib is not None:
         _pow = _c_pow()
-except Exception:                                   # noqa: BLE001
+except Exception as exc:                            # noqa: BLE001
+    reason = "%s: %s" % (type(exc).__name__, exc)
     _lib = None
 
 #: Whether the compiled integration is there to be used at all.

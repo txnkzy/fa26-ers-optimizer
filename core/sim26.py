@@ -636,10 +636,13 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
                   lifts={c * step: kph for c, kph in lifts.items()})
 
 
+#: Why the compiled integration could not even be imported, if it could not.
+_native_error = ""
 try:
     import sim26_native as _native
-except Exception:                                   # noqa: BLE001
+except Exception as _exc:                           # noqa: BLE001
     _native = None
+    _native_error = "%s: %s" % (type(_exc).__name__, _exc)
 
 
 def simulate(splits, car, longitudinal, profile, powertrain,

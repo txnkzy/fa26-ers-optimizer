@@ -41,8 +41,8 @@ USING IT
   1. DRIVE. A few clean laps in one session, on whatever map the car has now.
      They appear in the optimizer as you finish them.
 
-  2. RUN THE OPTIMIZER. It takes a couple of minutes. You can leave it and go
-     back to the game.
+  2. RUN THE OPTIMIZER. It usually takes well under a minute. You can leave
+     it and go back to the game.
 
   3. SAVE the result into one of your setups for that circuit. You need to
      have saved a setup there already -- any name will do.
