@@ -33,6 +33,23 @@ battery was already full there.
 includes a "lap integration" line — `compiled`, or `python` with the reason.
 If a solve ever seems slow again, that line says why.
 
+## Two fixes from your reports
+
+**"Power changes the car will refuse."** Where a long straight had been cut
+into several zones, the app raised the power of the last one before the line
+on its own, which is an increase under throttle: the car refused it, and
+refused the opening zone of the next lap with it. Laps driven by the AI hit
+this on every map. The raise is now carried back along the straight to where
+the throttle was picked up, or not made at all.
+
+**Harvesting all the way to Turn 1.** Once the car is harvesting at full
+throttle it carries on until you lift, even past the end of the zone that
+asked for it and across the start/finish line. The app did not know that, so
+a race map could harvest into the line and leave the car slowing down the
+whole pit straight. It now plans with the harvest lasting until the lift.
+
+Thank you to PortalFawn for both.
+
 ## Known rough edges
 
 * The new recharge zone is a result from the model. It has not yet been
