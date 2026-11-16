@@ -430,31 +430,78 @@ def build_recharge(splits, car, longitudinal, profile, powertrain,
     Clipping at full power everywhere does fill the battery, but it also takes
     350 kW out of the driveline on every straight: Madrid came back as a 1339 s
     lap with 453 MJ of harvest refused by an already-full store. Once the store
-    is full, extra clip power is pure lap time for nothing. So the lowest power
-    that still arrives full is the right one, and it is cheap to find by trying
-    each level in turn.
+    is full, extra clip power is pure lap time for nothing. So the least
+    clipping that still arrives full is the right amount, and it is cheap to
+    find by trying.
     """
-    best = None
+    # A recharge lap is driven once, not repeated, so it is simulated
+    # one-shot like a qualifying lap.
+    def run(candidate):
+        return sim26.simulate(candidate, car, longitudinal, profile,
+                              powertrain, start_store_kj=start_store_kj,
+                              harvest_cap_kj=harvest_cap_kj, ds=ds,
+                              settle=False, reset_zones=reset_zones,
+                              speed_zones=speed_zones)
+
+    # Power is one way to be gentle and which splits clip is the other, and
+    # the second matters far more. Braking and coasting fill the store part
+    # way round nearly every lap; what leaves it about a tenth short at the
+    # line is the floor the car deploys out of the last corners, after the
+    # final braking zone has nothing left to put back. So the clip belongs at
+    # the end of the lap, and splits are brought in from the line backwards,
+    # stopping at the first count that arrives full and keeping the quickest
+    # lap among the powers that do.
+    #
+    # Clipping on every split the driver goes flat in overshot badly even at
+    # the lowest power: Bahrain 11.9 s a lap slower, Barcelona 7.1 s, the store
+    # full for most of the lap and the harvest refused. Bringing splits in
+    # longest first was little better -- seven at Sepang and Suzuka before the
+    # one that mattered came up, 3.4 s at Barcelona.
+    flat = sorted((i for i, sp in enumerate(splits) if _goes_flat(sp, profile)),
+                  key=lambda i: -splits[i].start_m)
     # Below the floor the clip cannot even cancel the car's own deployment, so
-    # start at it. A recharge lap is driven once, not repeated, so it is
-    # simulated one-shot like a qualifying lap.
-    for power in [p for p in POWERS if p >= fa26.FLOOR_KW]:
-        candidate = recharge_map(splits, profile, power)
-        result = sim26.simulate(candidate, car, longitudinal, profile,
-                                powertrain, start_store_kj=start_store_kj,
-                                harvest_cap_kj=harvest_cap_kj, ds=ds,
-                                settle=False, reset_zones=reset_zones,
-                                speed_zones=speed_zones)
-        best = (candidate, result)
-        if result.store_end_kj >= target_kj:
-            break
-    return best
+    # start at it.
+    powers = [p for p in POWERS if p >= fa26.FLOOR_KW]
+    fullest = None
+    for count in range(len(flat) + 1):
+        filled = []
+        for power in (powers if count else powers[:1]):
+            candidate = recharge_map(splits, profile, power,
+                                     only=frozenset(flat[:count]))
+            result = run(candidate)
+            if fullest is None or result.store_end_kj > fullest[1].store_end_kj:
+                fullest = (candidate, result)
+            if result.store_end_kj >= target_kj:
+                filled.append((candidate, result))
+        if filled:
+            return min(filled, key=lambda found: found[1].lap_time_s)
+    # Nothing fills it: the allowance or the lap is too short. The fullest.
+    return fullest
 
 
 FLOOR_CANCEL_M = 260
 
 
-def recharge_map(splits, profile, clip_kw: float = fa26.FLOOR_KW):
+def _goes_flat(split: fa26.Split, profile) -> bool:
+    """Whether the driver reaches full throttle inside the cancelling window.
+
+    Not whether they are flat where the split begins. Splits begin at the
+    arbitration knee, 60% throttle (see `seed_splits`), which is by
+    construction before the driver is flat -- so asking a few metres in said
+    no for nearly every split on the lap. Las Vegas came back with no clip at
+    all on three laps of three and Barcelona with one split of eighteen, and a
+    recharge lap that should hand over a full battery handed over 90% of one.
+    The car only clips at full throttle, so a clip commanded over the part of
+    the window before that is simply not acted on.
+    """
+    ds = max(1, int(profile.ds))
+    stop = min(split.end_m, split.start_m + FLOOR_CANCEL_M)
+    return any(profile.full_throttle_at(d)
+               for d in range(int(split.start_m), int(stop), ds))
+
+
+def recharge_map(splits, profile, clip_kw: float = fa26.FLOOR_KW,
+                 only: "frozenset | None" = None):
     """Harvest across the lap by cancelling the floor where it actually occurs.
 
     Commanding zero deployment does not stop the car deploying: it holds 200 kW
@@ -479,10 +526,12 @@ def recharge_map(splits, profile, clip_kw: float = fa26.FLOOR_KW):
     power across every full-throttle stretch, and command nothing beyond the
     floor the car holds at throttle application anyway.
     """
-    ds = int(profile.ds)
     out = []
-    for sp in splits:
-        if not profile.full_throttle_at(sp.start_m + ds):
+    for index, sp in enumerate(splits):
+        # `only` names the splits allowed to clip, by position; see
+        # `build_recharge`. Without it, every split the driver goes flat in.
+        if ((only is not None and index not in only)
+                or not _goes_flat(sp, profile)):
             out.append(fa26.Split(sp.start_m, sp.start_m, fa26.CLIP_OFF,
                                   sp.end_m, 0, 0))
         else:
@@ -490,17 +539,30 @@ def recharge_map(splits, profile, clip_kw: float = fa26.FLOOR_KW):
                                   sp.end_m, 0, int(clip_kw)))
 
     # Split off the cancelling window where there is room in the map for it.
+    # Chosen first and cut afterwards. Cutting while walking the list moved
+    # every later split along by one, so the positions still to be visited
+    # pointed at their neighbours: with two clipping splits the second was
+    # usually skipped and clipped down the whole of its straight.
     order = sorted(range(len(out)), key=lambda i: out[i].start_m - out[i].end_m)
+    spare = fa26.SPLITS_PER_MAP - len(out)
+    cutting = set()
     for i in order:
-        if len(out) >= fa26.SPLITS_PER_MAP:
+        if len(cutting) >= spare:
             break
         sp = out[i]
         if sp.clip_kw <= 0 or sp.end_m - sp.start_m <= FLOOR_CANCEL_M + MIN_CLIP_M:
             continue
+        cutting.add(i)
+    cut_out = []
+    for i, sp in enumerate(out):
+        if i not in cutting:
+            cut_out.append(sp)
+            continue
         cut = sp.start_m + FLOOR_CANCEL_M
-        out[i] = fa26.Split(sp.start_m, sp.start_m, sp.start_m, cut, 0, sp.clip_kw)
-        out.insert(i + 1, fa26.Split(cut, cut, fa26.CLIP_OFF, sp.end_m, 0, 0))
-    return out
+        cut_out.append(fa26.Split(sp.start_m, sp.start_m, sp.start_m, cut, 0,
+                                  sp.clip_kw))
+        cut_out.append(fa26.Split(cut, cut, fa26.CLIP_OFF, sp.end_m, 0, 0))
+    return cut_out
 
 
 def _nearest_power_index(power: float) -> int:

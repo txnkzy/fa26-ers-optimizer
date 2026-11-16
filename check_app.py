@@ -175,9 +175,18 @@ check("cancelling when idle reports nothing to stop",
 post("/api/solve", {"key": detail["key"], "circuit": detail["circuit"],
                     "qualify": detail["qualify"], "race": detail["race"],
                     "unlimited": False, "write_alloc": True})
-time.sleep(8)
-mid = get("/api/poll?since=0&have=99")
-check("a solve is running to stop", mid["running"])
+# Stopped once the search itself is under way, not after a fixed wait: eight
+# seconds used to land in the middle of a three-minute solve, and with the
+# compiled integration the whole solve is over in five.
+begun = time.time()
+while True:
+    mid = get("/api/poll?since=0&have=99")
+    if ("maps" in (mid["phase"] or "") or not mid["running"]
+            or time.time() - begun > 8):
+        break
+    time.sleep(0.05)
+check("a solve is running to stop", mid["running"],
+      "%.1fs in, %s" % (time.time() - begun, mid["phase"]))
 check("the stop is accepted", post("/api/cancel", {})["stopping"])
 asked = time.time()
 while time.time() - asked < 40:
@@ -260,6 +269,16 @@ for s in snap["summary"]:
     check("  STRAT %d has a speed trace" % s["strat"],
           len(s["speed"]) > 50 and s["peak_kph"] > 200,
           "peak %.0f kph" % s["peak_kph"])
+# The recharge map exists to hand the next lap a full battery. It once came
+# back with no clip at all, because the test for where to put one asked about
+# the wrong metre of each split, and left the store a tenth short.
+recharged = [s for s in snap["summary"] if s["strat"] == 3]
+check("the recharge map arrives with a full battery",
+      bool(recharged) and recharged[0]["store_end"] >= 3950,
+      "%.0f kJ at the line" % (recharged[0]["store_end"] if recharged else 0))
+check("the recharge map clips only as much as it needs",
+      bool(recharged) and 1 <= len(recharged[0]["map"]) <= 3,
+      "%d clipping splits" % (len(recharged[0]["map"]) if recharged else 0))
 check("qualifying is the fastest of the three",
       snap["summary"][0]["lap_s"] < snap["summary"][2]["lap_s"])
 
