@@ -494,6 +494,58 @@ check("user limits persist", A.load_user_limits()["__e2e_test__"]["qualify"] == 
 A.forget_user_limits("__e2e_test__")
 check("user limits forgettable", "__e2e_test__" not in A.load_user_limits())
 
+# --- the FIA's figures, shown and overridden -------------------------------
+# The Solve page shows everything a notice sets and lets every one of them be
+# changed. What it is sent must be the notice, and what comes back must reach
+# both the solve and the setup -- or be dropped if the car has no such thing.
+mex = recharge.lookup("mexico")
+block = A.fia_block(mex)
+check("the page is sent the notice as published",
+      block["official"] and block["notice"] == 19
+      and block["limits"] == {"race": 85, "race_overtake": 90, "qualify": 85,
+                              "practice": 90, "outlap": 90}
+      and block["curves"]["curve_alternative"] == "Alt 1"
+      and block["curve_points"]["Base - Standard"][0] == [290.0, 350.0]
+      and len(block["alt_zones"]) == 2
+      and all(0 <= z[0] < z[1] <= 1 for z in block["alt_zones"]),
+      "round %s, %d alternative sectors" % (block["notice"], len(block["alt_zones"])))
+check("a circuit with no notice is not called official",
+      not A.fia_block(recharge.Allocation())["official"])
+
+same = A.apply_limits(mex, mex.qualify, mex.race, False, {"curve_standard": "Alt 1"})
+check("changing a curve leaves the notice's recharge figures alone",
+      (same.practice, same.race_overtake, same.outlap) == (90, 90, 90)
+      and same.curve_standard == "Alt 1" and same.curve_override == mex.curve_override,
+      "%d/%d/%d, race on %s" % (same.practice, same.race_overtake, same.outlap,
+                                same.curve_standard))
+own = A.apply_limits(mex, 70, 75, False,
+                     {"practice": 60, "rate_kw_s": 50, "curve_override": "Alt 1"})
+check("figures set outright are kept, the rest follow qualifying and race",
+      (own.practice, own.race_overtake, own.outlap) == (60, 80, 80)
+      and own.rate_kw_s == 50 and own.curve_override == "Alt 1",
+      "%d/%d/%d at %d kW/s" % (own.practice, own.race_overtake, own.outlap,
+                               own.rate_kw_s))
+_written = recharge.updates_for(own, setupfile.item_index_map(A.setup_ini()))
+_map = setupfile.item_index_map(A.setup_ini())
+check("an override reaches the setup",
+      _written[_map["ERS_REGEN_MAX_MJ_P"]] == 60
+      and _written[_map["ERS_POWER_REDUCTION_RATE"]] == 50
+      and _written[_map["ERS_POWER_CURVE_PQ"]] == recharge.CURVE_INDEX["Alt 1"],
+      "practice %d, rate %d, non-race curve %d"
+      % (_written[_map["ERS_REGEN_MAX_MJ_P"]],
+         _written[_map["ERS_POWER_REDUCTION_RATE"]],
+         _written[_map["ERS_POWER_CURVE_PQ"]]))
+_junk = A.clean_extra({"practice": 999, "outlap": "x", "rate_kw_s": 75,
+                       "curve_standard": "Made up", "curve_override": "Alt 1",
+                       "something": 1})
+check("only what the car's menu offers is accepted",
+      _junk == {"curve_override": "Alt 1"}, str(_junk))
+
+A.save_user_limits("__e2e_test__", 62, 71, False, {"curve_standard": "Alt 1"})
+check("the other settings persist with the limits",
+      A.load_user_limits()["__e2e_test__"].get("extra") == {"curve_standard": "Alt 1"})
+A.forget_user_limits("__e2e_test__")
+
 print()
 
 def _crossing_branch_is_guarded() -> tuple[bool, str]:

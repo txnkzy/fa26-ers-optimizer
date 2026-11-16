@@ -66,3 +66,22 @@ track.
 * `/api/poll` carries the session `key`, and `/api/setups` accepts it, so
   maps kept from an earlier session still draw on the right circuit and can
   still be saved.
+
+## Added after the first build: the FIA limits card
+
+Asked for on 16 November: show the power curves and the rest of the notice's
+data, make it obvious the limits are the FIA's, and let all of it be changed.
+
+* The Solve page's two sliders became a card: an Official badge naming the
+  notice, the five recharge limits, the reduction rate, a power-against-speed
+  chart of the curves in force, and the alternative curve's sectors on a small
+  outline. Locked until "Change".
+* Unlocked, every figure can be set. A curve is picked from the five the car
+  has, not drawn: the car could not be given a drawn one, so the plan would be
+  for a curve it does not run.
+* What the driver sets travels as `overrides` on `/api/solve`, is kept with
+  the circuit's saved limits under `extra`, and goes through
+  `apply_limits` into both the solve and the setup. `clean_extra` drops
+  anything the car's menu does not offer.
+* Practice, out lap and the reduction rate are written to the setup but do not
+  change the maps; the page says so.

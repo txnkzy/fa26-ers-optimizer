@@ -34,6 +34,9 @@ const state = {
   view: "session",
   //: A session the driver said was not the one they are driving.
   declined: null,
+  //: The driver's own settings beyond the two recharge sliders: the other
+  //: three limits, the reduction rate, which curve each session runs.
+  extra: {},
   //: Whether these maps have been saved into a setup.
   saved: false,
   game: null,
@@ -679,6 +682,7 @@ async function load(force) {
     state.qualify = data.session.qualify;
     state.race = data.session.race;
     state.unlimited = data.session.unlimited;
+    state.extra = Object.assign({}, data.session.extra);
   }
   renderSession(grew);
   Maps.loadOutline(data.session.key);
@@ -809,20 +813,98 @@ function renderSession(grew) {
 }
 
 /* ---------------------------------------------------------------- limits */
-function renderLimits() {
-  const d = state.detail;
-  const locked = d.known && !d.overridden && !state.touched;
+/* What the FIA set for this race, shown as it stands: the five recharge
+ * figures, the reduction rate and the power curves, with where they came
+ * from said first. They are locked until "Change", because for a circuit
+ * with a notice there is nothing to set -- and unlocked, every one of them
+ * can be, from what the car's own menu offers. */
+const CURVE_FIELDS = [["curve_override", "#ff5c7a"], ["curve_standard", "#5ec8ff"],
+                      ["curve_alternative", "#b08cff"]];
+const OTHER_LIMITS = ["race_overtake", "practice", "outlap"];
 
-  $("limits-source").textContent = d.known
-    ? "Official figures for this circuit. Everything below is planned around "
-      + "them, so changing one changes every lap time."
-    : "Nothing official covers this circuit, so this is yours to set. How much "
-      + "you can recover decides how much you can spend, which makes it the "
-      + "number that matters most here.";
+/* One of the three limits the sliders do not cover: the driver's figure if
+ * they set one, the notice's while qualifying and race are the notice's, and
+ * otherwise the way the notices relate them to those two. */
+function otherLimit(name) {
+  const d = state.detail, f = d.fia;
+  if (state.extra[name] != null) return state.extra[name];
+  if (state.qualify === f.limits.qualify && state.race === f.limits.race) return f.limits[name];
+  if (name === "race_overtake") return Math.min(state.race + 5, d.limits.race.max);
+  return Math.min(Math.max(state.qualify, state.race) + 5, d.limits.qualify.max);
+}
+
+function curveName(field) {
+  return state.extra[field] || state.detail.fia.curves[field] || "";
+}
+
+/* The curve the solve will really use for a name: its own points where the
+ * notices have drawn it, otherwise the Base curve that stands in. */
+function curvePoints(field) {
+  const f = state.detail.fia, name = curveName(field);
+  if (f.curve_points[name]) return { points: f.curve_points[name], stand: false };
+  if (field === "curve_alternative") return null;
+  const base = name.endsWith("Standard") ? "Base - Standard" : "Base - Overtake";
+  return { points: f.curve_points[base], stand: true };
+}
+
+function drawCurves() {
+  const svg = $("curve-chart"), NS = "http://www.w3.org/2000/svg";
+  const X0 = 34, X1 = 352, Y0 = 6, Y1 = 104, V0 = 240, V1 = 360, P1 = 350;
+  const x = (v) => X0 + (X1 - X0) * (Math.max(V0, Math.min(V1, v)) - V0) / (V1 - V0);
+  const y = (p) => Y1 - (Y1 - Y0) * p / P1;
+  const add = (tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    svg.append(n);
+  };
+  svg.textContent = "";
+  for (const p of [0, 100, 200, 350]) {
+    add("line", { x1: X0, x2: X1, y1: y(p), y2: y(p), class: "grid" });
+    add("text", { x: X0 - 6, y: y(p) + 3, class: "tick", "text-anchor": "end" }, p);
+  }
+  for (const v of [250, 290, 340, 360]) {
+    add("line", { x1: x(v), x2: x(v), y1: Y0, y2: Y1, class: "grid" });
+    add("text", { x: x(v), y: Y1 + 13, class: "tick", "text-anchor": "middle" }, v);
+  }
+  // The alternative first, so the two every lap runs on are drawn over it.
+  for (const [field, colour] of CURVE_FIELDS.slice().reverse()) {
+    const c = curvePoints(field);
+    if (!c || !curveName(field) && field === "curve_alternative") continue;
+    const pts = [[V0, c.points[0][1]], ...c.points, [V1, 0]];
+    add("polyline", { points: pts.map((q) => x(q[0]).toFixed(1) + "," + y(q[1]).toFixed(1)).join(" "),
+                      class: "curve" + (c.stand ? " stand" : ""), stroke: colour });
+  }
+}
+
+function renderLimits() {
+  const d = state.detail, f = d.fia;
+  const locked = d.known && !d.overridden && !state.touched;
+  // Unlocked is not yet changed: it is the driver's only once a figure moves.
+  const changed = state.unlimited || Object.keys(state.extra).length > 0
+    || state.qualify !== d.published.qualify
+    || state.race !== Math.min(d.published.race, d.limits.race.max);
+  const yours = d.known && !locked && changed;
+
+  const badge = $("fia-badge");
+  badge.dataset.kind = !d.known ? "none" : yours ? "yours" : "official";
+  badge.textContent = !d.known ? "No official figure" : yours ? "Your settings" : "Official";
+  $("fia-title").textContent = !d.known ? "Nothing published for this circuit"
+    : yours ? "Not the FIA's figures for this race"
+    : f.notice ? "FIA Power Unit notice · round " + f.notice
+    : "Official 2026 figures";
+  $("limits-source").textContent = !d.known
+    ? "So this is yours to set. How much you can recover decides how much "
+      + "you can spend, which makes it the number that matters most here."
+    : yours ? "Everything is planned around what is set here, and it is what "
+      + "gets written into your setup."
+    : !locked ? "Unlocked, and nothing is changed yet. These are still the FIA's figures."
+    : f.notice ? "These come from the FIA's document for this race. You don't need to change them."
+    : "These are the FIA's figures for this circuit. You don't need to change them.";
 
   const toggle = $("limits-toggle");
   toggle.hidden = !d.known;
-  toggle.textContent = locked ? "Change" : "Use official";
+  toggle.textContent = locked ? "Change" : "Back to official";
   toggle.onclick = () => {
     if (locked) {
       state.touched = true;
@@ -831,17 +913,73 @@ function renderLimits() {
       state.qualify = d.published.qualify;
       state.race = Math.min(d.published.race, d.limits.race.max);
       state.unlimited = false;
+      state.extra = {};
       d.overridden = false;
     }
     renderLimits();
   };
 
+  $("limits-block").dataset.locked = String(locked);
   $("sliders").dataset.locked = String(locked);
   $("remember-wrap").hidden = locked;
+  $("fia-effect").hidden = locked;
   $("unlimited-hint").hidden = !state.unlimited;
 
   slider("qualify", d.limits.qualify);
   slider("race", d.limits.race);
+
+  const edited = (name, value, official) => {
+    state.touched = true;
+    if (value === official || value == null) delete state.extra[name];
+    else state.extra[name] = value;
+    renderLimits();
+  };
+  const range = d.limits.other || d.limits.qualify;
+  for (const name of OTHER_LIMITS) {
+    const input = $("x-" + name);
+    input.disabled = locked;
+    input.min = range.min / 10;
+    input.max = range.max / 10;
+    input.value = (otherLimit(name) / 10).toFixed(1);
+    input.onchange = () => {
+      const raw = Math.round(Number(input.value) * 10);
+      const value = Math.max(range.min, Math.min(range.max, isFinite(raw) ? raw : f.limits[name]));
+      // Set outright, so it stops following the two sliders.
+      state.touched = true;
+      state.extra[name] = value;
+      renderLimits();
+    };
+  }
+  const rate = $("x-rate_kw_s");
+  rate.disabled = locked;
+  rate.value = String(state.extra.rate_kw_s || f.rate_kw_s || 100);
+  rate.onchange = () => edited("rate_kw_s", Number(rate.value), f.rate_kw_s);
+
+  for (const [field] of CURVE_FIELDS) {
+    const select = $("x-" + field), official = f.curves[field] || "";
+    select.textContent = "";
+    const names = f.curve_names.slice();
+    if (official && !names.includes(official)) names.push(official);
+    if (!official) {
+      select.append(new Option(field === "curve_alternative" ? "None"
+        : "Not named (Base - Overtake)", ""));
+    }
+    for (const name of names) select.append(new Option(name, name));
+    select.value = curveName(field);
+    select.disabled = locked;
+    select.onchange = () => edited(field, select.value || null, official || null);
+  }
+  drawCurves();
+
+  // Where the alternative curve applies, on the circuit and in metres.
+  const zones = curveName("curve_alternative") ? f.alt_zones : [];
+  $("fia-sectors").hidden = !zones.length;
+  if (zones.length) {
+    $("fia-sectors-text").textContent = curveName("curve_alternative") + " replaces the race curve in "
+      + zones.length + (zones.length === 1 ? " sector: " : " sectors: ")
+      + f.alt_zones_m.map((z) => z[0] + "–" + z[1] + " m").join(", ") + ".";
+    Maps.sectors("fia-track", zones, "#b08cff");
+  }
 }
 
 function slider(which, limit) {
@@ -878,9 +1016,7 @@ function slider(which, limit) {
       state[which] = raw;
     }
     $("unlimited-hint").hidden = !state.unlimited;
-    $("remember-wrap").hidden = false;
-    slider("qualify", state.detail.limits.qualify);
-    slider("race", state.detail.limits.race);
+    renderLimits();
   };
 }
 
@@ -920,6 +1056,7 @@ async function run() {
       qualify: state.qualify,
       race: state.race,
       unlimited: state.unlimited,
+      overrides: $("limits-block").dataset.locked === "true" ? {} : state.extra,
       remember: remember,
       forget: !remember && d.overridden,
       write_alloc: $("write-alloc").checked,

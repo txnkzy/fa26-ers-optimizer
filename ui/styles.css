@@ -180,7 +180,7 @@ button { font: inherit; color: inherit; }
 .screens { flex: 1; min-height: 0; position: relative; }
 .screen { display: none; height: 100%; overflow: auto; }
 .screen.show { display: block; animation: scr .25s both; }
-.screen.center.show, .center { display: grid; place-items: center; align-content: center;
+.screen.center.show, .center { display: grid; place-items: center; align-content: safe center;
                                gap: 14px; padding: 24px; }
 .screen.center:not(.show) { display: none; }
 @keyframes scr { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -569,3 +569,56 @@ td.pick input { accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .screen.show, .zone.z, .status-dot, .live-dot, .pulse span { animation: none !important; }
 }
+
+/* -------------------------------------------------------------- fia limits */
+.fia { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+       background: var(--sunken); }
+.fia-head { display: flex; align-items: center; gap: 14px; }
+.badge { font: 600 13px var(--cond); letter-spacing: .14em; text-transform: uppercase;
+         padding: 5px 11px; border-radius: 6px; white-space: nowrap;
+         border: 1px solid #2c6b52; color: var(--good); background: rgba(123,224,180,.09); }
+.badge[data-kind="official"]::before { content: "\2713\00a0\00a0"; }
+.badge[data-kind="yours"], .badge[data-kind="none"] {
+  border-color: #7a5a22; color: var(--warn); background: rgba(255,180,84,.09); }
+.fia-title { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.fia-title b { font: 600 19px var(--cond); letter-spacing: .05em; text-transform: uppercase; }
+.fia-title span { color: var(--dim); font-size: 13px; }
+.btn.small { padding: 7px 14px; font-size: 14px; white-space: nowrap; }
+.fia-body { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 14px; }
+.fia-col > .label { margin-bottom: 8px; }
+.fia .limits { gap: 10px; }
+.fia .limit { padding: 9px 12px; background: var(--panel); }
+.fia-rows { margin-top: 8px; }
+.fia-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+           padding: 5px 2px; border-bottom: 1px solid var(--line-soft);
+           font-size: 13px; color: var(--dim); }
+.fia-row:last-child { border-bottom: 0; }
+.fia-row .num { display: flex; align-items: baseline; gap: 5px; }
+.fia-row .num i { font: 500 11px var(--mono); font-style: normal; color: var(--faint);
+                  width: 30px; }
+.fia-row input, .fia-row select {
+  font: 500 13px var(--mono); color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.fia-row input { width: 62px; text-align: right; }
+.fia-row input:focus, .fia-row select:focus { outline: none; border-color: var(--accent); }
+/* Locked, a figure reads as a figure and not as a box to type in. */
+.fia-row input:disabled, .fia-row select:disabled {
+  border-color: transparent; background: none; opacity: 1; padding-right: 0;
+  appearance: none; -webkit-appearance: none; -moz-appearance: textfield; text-align: right; }
+.fia-row input:disabled::-webkit-inner-spin-button { display: none; }
+.swatch { display: inline-block; width: 14px; height: 3px; border-radius: 2px;
+          background: var(--c); margin-right: 8px; vertical-align: middle; }
+.curve-chart { width: 100%; height: auto; display: block; }
+.curve-chart .grid { stroke: var(--line-soft); stroke-width: 1; }
+.curve-chart .tick { font: 500 9px var(--mono); fill: var(--faint); }
+.curve-chart .unit { font: 500 9px var(--mono); fill: var(--dim); }
+.curve-chart .curve { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.curve-chart .curve.stand { stroke-dasharray: 5 4; }
+.fia-sectors { display: flex; align-items: center; gap: 12px; margin-top: 10px;
+               font-size: 12px; color: var(--dim); }
+.fia-sectors svg { width: 92px; height: 56px; flex: none; }
+.fia-sectors svg .zone { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.fia .hint { margin-top: 10px; }
+#ready-card h2 { font-size: 34px; }
+#ready-card { padding-top: 20px; padding-bottom: 20px; }
+#ready-card .block { margin-top: 12px; }

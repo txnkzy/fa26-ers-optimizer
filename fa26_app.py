@@ -362,10 +362,12 @@ def load_user_limits() -> dict:
 
 
 def save_user_limits(circuit: str, qualify: int, race: int,
-                     unlimited: bool) -> None:
+                     unlimited: bool, extra: dict | None = None) -> None:
     table = load_user_limits()
     table[circuit] = {"qualify": qualify, "race": race,
                       "unlimited": bool(unlimited)}
+    if extra:
+        table[circuit]["extra"] = dict(extra)
     USER_LIMITS.parent.mkdir(parents=True, exist_ok=True)
     USER_LIMITS.write_text(json.dumps(table, indent=2, sort_keys=True),
                            encoding="utf-8")
@@ -378,25 +380,104 @@ def forget_user_limits(circuit: str) -> None:
                                encoding="utf-8")
 
 
-def apply_limits(alloc, qualify: int, race: int, unlimited: bool):
-    """An allocation carrying the user's own qualifying and race figures.
+#: What a driver may set besides the two headline recharge figures: the
+#: other three session limits, the reduction rate, and which of the car's
+#: curves each session runs.
+EXTRA_LIMITS = ("practice", "race_overtake", "outlap")
+EXTRA_CURVES = ("curve_standard", "curve_override", "curve_alternative")
 
-    The other three session variants are not asked for -- five sliders to set
-    one number is not a workflow. They follow the way the published notices
-    relate them: race-with-Overtake half a MJ above the race figure, practice
-    and the out lap at the generous end, each held to what the car accepts.
+
+def clean_extra(raw) -> dict:
+    """The driver's other settings, keeping only what the car can be given.
+
+    Anything else is dropped rather than refused: a curve name the car has no
+    setup entry for, a limit outside what its menu accepts, a rate that is
+    neither of the two the regulations allow.
     """
+    out: dict = {}
+    if not isinstance(raw, dict):
+        return out
+    top = car_limits()["qualify"]
+    for name in EXTRA_LIMITS:
+        try:
+            value = int(raw[name])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if top["min"] <= value <= top["max"]:
+            out[name] = value
+    if raw.get("rate_kw_s") in (50, 100):
+        out["rate_kw_s"] = raw["rate_kw_s"]
+    for name in EXTRA_CURVES:
+        if raw.get(name) in recharge.CURVE_INDEX:
+            out[name] = raw[name]
+    return out
+
+
+def apply_limits(alloc, qualify: int, race: int, unlimited: bool,
+                 extra: dict | None = None):
+    """An allocation carrying the user's own figures.
+
+    Qualifying and race are always given. The other three session limits
+    follow them unless set outright, the way the published notices relate
+    them: race-with-Overtake half a MJ above the race figure, practice and
+    the out lap at the generous end, each held to what the car accepts.
+    """
+    extra = extra or {}
     limits = car_limits()
     top = limits["qualify"]["max"]
+    if (qualify, race) == (alloc.qualify, alloc.race):
+        follow = {"race_overtake": alloc.race_overtake,
+                  "practice": alloc.practice, "outlap": alloc.outlap}
+    else:
+        follow = {"race_overtake": min(race + 5, limits["race"]["max"]),
+                  "practice": min(max(qualify, race) + 5, top),
+                  "outlap": min(max(qualify, race) + 5, top)}
+    follow.update({k: extra[k] for k in EXTRA_LIMITS if k in extra})
+    other = {k: extra[k] for k in ("rate_kw_s",) + EXTRA_CURVES if k in extra}
     return replace(
         alloc,
         qualify=qualify,
         race=race,
-        race_overtake=min(race + 5, limits["race"]["max"]),
-        practice=min(max(qualify, race) + 5, top),
-        outlap=min(max(qualify, race) + 5, top),
         source="no per-lap cap (you set this)" if unlimited else "you set this",
+        **follow, **other,
     )
+
+
+def is_official(alloc) -> bool:
+    return alloc.source.startswith("fia:") or alloc.source.startswith("published")
+
+
+def fia_block(alloc) -> dict:
+    """What the FIA set for this circuit, for the page to show as it stands.
+
+    The figures as published, never the driver's: this is what "official"
+    means on the page and what "Back to official" goes back to.
+    """
+    notice = None
+    if alloc.source.startswith("fia:"):
+        try:
+            notice = int(alloc.source.split(":")[1])
+        except ValueError:
+            notice = None
+    names = list(recharge.CURVE_INDEX)
+    span = float(alloc.centreline_m or 0)
+    return {
+        "official": is_official(alloc),
+        "notice": notice,
+        "limits": {k: getattr(alloc, k) for k in
+                   ("race", "race_overtake", "qualify", "practice", "outlap")},
+        "rate_kw_s": alloc.rate_kw_s,
+        "curves": {k: getattr(alloc, k) for k in EXTRA_CURVES},
+        "curve_names": names,
+        # A curve the notices have never drawn has no points, and the solve
+        # falls back to a Base curve for it; the page says so.
+        "curve_points": {n: [list(c) for c in fa26.TAPER_CURVES[n]]
+                         for n in names + [getattr(alloc, k) for k in EXTRA_CURVES]
+                         if fa26.taper_is_known(n)},
+        "alt_zones": ([[z[0] / span, z[1] / span] for z in alloc.alt_zones]
+                      if span else []),
+        "alt_zones_m": [[int(z[0]), int(z[1])] for z in (alloc.alt_zones or ())],
+    }
 
 
 # -------------------------------------------------------------------- reading
@@ -567,7 +648,9 @@ def session_detail(key: str) -> dict:
     circuit = recharge.normalise(track)
     alloc = recharge.lookup(str(best))
     saved = load_user_limits().get(circuit)
-    limits = car_limits()
+    limits = dict(car_limits())
+    limits["other"] = {"min": limits["qualify"]["min"],
+                       "max": limits["qualify"]["max"]}
 
     if saved:
         qualify = saved["qualify"]
@@ -619,6 +702,8 @@ def session_detail(key: str) -> dict:
         "known": not alloc.is_baseline,
         "source": alloc.source,
         "published": {"qualify": alloc.qualify, "race": alloc.race},
+        "fia": fia_block(alloc),
+        "extra": clean_extra((saved or {}).get("extra")),
         "qualify": qualify,
         "race": race,
         "unlimited": unlimited,
@@ -798,7 +883,9 @@ def live_estimate(key: str) -> dict:
     saved = load_user_limits().get(recharge.normalise(
         "__".join(key.split("__")[:-1])))
     cap = (saved["qualify"] / 10.0) if saved else alloc.mj("qualify")
-    powertrain = fa26.Powertrain(taper=fa26.taper_for(alloc.curve_override))
+    curve = clean_extra((saved or {}).get("extra")).get(
+        "curve_override", alloc.curve_override)
+    powertrain = fa26.Powertrain(taper=fa26.taper_for(curve))
     objective = optimise26.Objective(
         name="Qualifying", harvest_cap_mj=cap, energy_neutral=False,
         one_shot=True, min_store_fraction=0.0)
@@ -934,7 +1021,9 @@ class LiveSearch:
         saved = load_user_limits().get(
             recharge.normalise("__".join(key.split("__")[:-1])))
         cap = (saved["qualify"] / 10.0) if saved else alloc.mj("qualify")
-        powertrain = fa26.Powertrain(taper=fa26.taper_for(alloc.curve_override))
+        curve = clean_extra((saved or {}).get("extra")).get(
+            "curve_override", alloc.curve_override)
+        powertrain = fa26.Powertrain(taper=fa26.taper_for(curve))
         objective = optimise26.Objective(
             name="Qualifying", harvest_cap_mj=cap, energy_neutral=False,
             one_shot=True, min_store_fraction=0.0, charge_fractions=(0.75,))
@@ -1349,7 +1438,7 @@ class Engine:
 
     # ---------------------------------------------------------------- start
     def start(self, key: str, qualify: int, race: int, unlimited: bool,
-              write_alloc: bool) -> None:
+              write_alloc: bool, extra: dict | None = None) -> None:
         with self.lock:
             if self.running:
                 raise RuntimeError("the optimizer is already running")
@@ -1368,7 +1457,7 @@ class Engine:
             self.session_key = key
         threading.Thread(
             target=self._guard,
-            args=(key, qualify, race, unlimited, write_alloc),
+            args=(key, qualify, race, unlimited, write_alloc, extra or {}),
             daemon=True).start()
 
     def _guard(self, *args) -> None:
@@ -1406,7 +1495,7 @@ class Engine:
                 self.running = False
 
     def _solve(self, key: str, qualify: int, race: int, unlimited: bool,
-               write_alloc: bool) -> None:
+               write_alloc: bool, extra: dict | None = None) -> None:
         self.enter("read")
         track = "__".join(key.split("__")[:-1])
         circuit = recharge.normalise(track)
@@ -1520,8 +1609,10 @@ class Engine:
 
         alloc = recharge.lookup(str(paths[0]))
         published = not alloc.is_baseline
-        if (qualify, race) != (alloc.qualify, alloc.race) or unlimited:
-            alloc = apply_limits(alloc, qualify, race, unlimited)
+        official = is_official(alloc)
+        figures = (alloc.qualify, alloc.race)
+        if (qualify, race) != (alloc.qualify, alloc.race) or unlimited or extra:
+            alloc = apply_limits(alloc, qualify, race, unlimited, extra)
         self.alloc = alloc
         self.unlimited = unlimited
 
@@ -1532,17 +1623,20 @@ class Engine:
             # only the notice it came from differs. Austin was being told no
             # official figure existed for it while the table was quoting one.
             where = ("official"
-                     if published and (alloc.source.startswith("fia")
-                                       or alloc.source.startswith("published"))
+                     if official and (qualify, race) == figures
+                     else "your setting, in place of the official figure"
+                     if official
                      else "your setting, no official figure exists")
             self.say("Recharge limit %.1f MJ qualifying, %.1f race (%s)."
                      % (alloc.mj("qualify"), alloc.mj("race"), where))
         self.detail("Recharge       Q %.1f  R %.1f  R+OT %.1f  [%s]"
                     % (alloc.mj("qualify"), alloc.mj("race"),
                        alloc.mj("race_overtake"), alloc.source))
-        self.detail("Power curve    %s (race), %s (qualifying)"
+        self.detail("Power curve    %s (race), %s (qualifying)%s"
                     % (alloc.curve_standard or "unknown",
-                       alloc.curve_override or "unknown"))
+                       alloc.curve_override or "unknown",
+                       "  [you set this]"
+                       if any(k in (extra or {}) for k in EXTRA_CURVES) else ""))
         if alloc.curve_standard and not fa26.taper_is_known(alloc.curve_standard):
             self.detail("               %s has no published numbers, so the "
                         "Base curve stands in." % alloc.curve_standard)
@@ -2569,12 +2663,16 @@ class Handler(BaseHTTPRequestHandler):
                 qualify = int(body["qualify"])
                 race = int(body["race"])
                 unlimited = bool(body.get("unlimited"))
+                extra = clean_extra(body.get("overrides"))
                 if body.get("remember"):
-                    save_user_limits(circuit, qualify, race, unlimited)
+                    save_user_limits(circuit, qualify, race, unlimited, extra)
                 elif body.get("forget"):
                     forget_user_limits(circuit)
+                # The page shows one circuit's settings at a time, so what
+                # the next solve reads must be what this one was given.
+                _DETAIL_CACHE.clear()
                 ENGINE.start(body["key"], qualify, race, unlimited,
-                             bool(body.get("write_alloc", True)))
+                             bool(body.get("write_alloc", True)), extra)
                 self._json({"ok": True})
             elif route == "/api/apply":
                 self._json(ENGINE.apply(body["path"],

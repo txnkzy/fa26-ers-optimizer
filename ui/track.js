@@ -356,6 +356,7 @@ const Maps = (() => {
     view.outline = view.plain ? plainLoop() : got;
     byId("no-outline").hidden = !view.plain;
     thumb();
+    if (view.marked) sectors(view.marked.id, view.marked.zones, view.marked.colour);
     if (view.summary.length) redraw();
   }
 
@@ -369,6 +370,23 @@ const Maps = (() => {
     const whole = wholeTrack();
     svg.append(node("path", { d: whole, class: "zone", stroke: "#3a475a", "stroke-width": 7 * scale }),
                node("path", { d: whole, class: "zone", stroke: "#ffa02e", "stroke-width": 2.4 * scale }));
+  }
+
+  /* A small outline with some stretches of the lap picked out: where a
+   * rule applies, as [from, to] fractions of the lap. */
+  function sectors(id, zones, colour) {
+    const svg = byId(id);
+    if (!svg) return;
+    if (!view.outline) { view.outline = plainLoop(); view.plain = true; }
+    view.marked = { id, zones, colour };
+    frame(svg);
+    svg.textContent = "";
+    const scale = Math.max(view.outline.width, view.outline.height) / 200;
+    svg.append(node("path", { d: wholeTrack(), class: "zone", stroke: "#3a475a", "stroke-width": 5 * scale }));
+    for (const z of zones) {
+      svg.append(node("path", { d: pathBetween(z[0], Math.min(z[1], 0.99999)), class: "zone",
+                                stroke: colour, "stroke-width": 7 * scale }));
+    }
   }
 
   function render(summary) {
@@ -391,5 +409,5 @@ const Maps = (() => {
     };
   }
 
-  return { render, select, loadOutline, thumb };
+  return { render, select, loadOutline, thumb, sectors };
 })();
