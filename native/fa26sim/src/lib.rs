@@ -40,7 +40,8 @@ const P_ENTRY_DEMAND: usize = 20;
 const P_ENTRY_PREV_LEVEL: usize = 21;
 const P_ENTRY_THROTTLE_TIME: usize = 22;
 const P_LENGTH: usize = 23;
-const P_COUNT: usize = 24;
+const P_ENTRY_CLIP: usize = 24;
+const P_COUNT: usize = 25;
 
 // Indices into the `ip` (i64) parameter block.
 const I_N: usize = 0;
@@ -61,7 +62,7 @@ const F_IN_RESET: u8 = 4;
 const F_ALT_TAPER: u8 = 8;
 
 /// Number of values written to `out`.
-const OUT_COUNT: usize = 14;
+const OUT_COUNT: usize = 15;
 
 /// `fa26.curve_kw`, on points already in (kph, kW) form.
 #[inline(always)]
@@ -168,7 +169,7 @@ fn commands_along(splits: &[f64], n: usize, step: f64, length: f64) -> (Vec<f64>
 /// # Safety
 /// Every pointer must be valid for the length its parameter block implies:
 /// the per-step arrays for `n`, `speeds` for `hi - lo`, the lift buffers for
-/// `n`, `out` for 14 values.
+/// `n`, `out` for 15 values.
 #[no_mangle]
 pub unsafe extern "C" fn fa26_simulate(
     p: *const f64,
@@ -259,15 +260,20 @@ pub unsafe extern "C" fn fa26_simulate(
     let mut demand_kw = 0.0f64;
     let mut prev_level_kw = 0.0f64;
     let mut throttle_time = 0.0f64;
+    // The super-clip the car is obeying, which may be a split it has left.
+    let mut clip_latch_kw = 0.0f64;
 
     // Walk the tail of the lap to establish the demand the car arrives with.
     if !has_entry {
         for i in prime_start..n {
             let f = flags[i];
+            let cmd = cmd_deploy_at[i];
+            let clip = cmd_clip_at[i];
             if f & F_ON_THROTTLE == 0 {
                 throttle_time = 0.0;
                 demand_kw = 0.0;
                 prev_level_kw = 0.0;
+                clip_latch_kw = clip;
                 continue;
             }
             let ms = measured_speed[i];
@@ -277,13 +283,15 @@ pub unsafe extern "C" fn fa26_simulate(
                 // step / max(ms, 1.0)
                 throttle_time += step / (if 1.0 > ms { 1.0 } else { ms });
             }
-            let cmd = cmd_deploy_at[i];
-            let clip = cmd_clip_at[i];
             if throttle_time <= floor_hold_s || f & F_IN_RESET != 0 || gas_at[i] < reset_gas {
                 demand_kw = cmd;
+                clip_latch_kw = clip;
             } else {
                 // min(demand_kw, cmd)
                 demand_kw = if cmd < demand_kw { cmd } else { demand_kw };
+                if clip > 0.0 {
+                    clip_latch_kw = clip;
+                }
             }
             prev_level_kw = power.deploy_kw(
                 demand_kw,
@@ -301,6 +309,7 @@ pub unsafe extern "C" fn fa26_simulate(
         demand_kw = p[P_ENTRY_DEMAND];
         prev_level_kw = p[P_ENTRY_PREV_LEVEL];
         throttle_time = p[P_ENTRY_THROTTLE_TIME];
+        clip_latch_kw = p[P_ENTRY_CLIP];
         // start_store_kj already carries the entry's charge.
         start_store_kj = p[P_START_STORE];
         settle = false;
@@ -348,12 +357,23 @@ pub unsafe extern "C" fn fa26_simulate(
 
             let dt_guess = step / (if v > 1.0 { v } else { 1.0 });
 
-            let mut clip_kw = 0.0f64;
-            if full_throttle && cmd_clip > 0.0 && harvested < harvest_cap_kj {
-                clip_kw = if cmd_clip < max_harvest { cmd_clip } else { max_harvest };
+            throttle_time = if gas >= reset_gas { throttle_time + dt_guess } else { 0.0 };
+
+            // A super-clip is held like any demand: past the end of its split,
+            // and across the line, until the driver lifts.
+            if cmd_clip > 0.0
+                || !on_throttle
+                || throttle_time <= floor_hold_s
+                || f & F_IN_RESET != 0
+                || gas < reset_gas
+            {
+                clip_latch_kw = cmd_clip;
             }
 
-            throttle_time = if gas >= reset_gas { throttle_time + dt_guess } else { 0.0 };
+            let mut clip_kw = 0.0f64;
+            if full_throttle && clip_latch_kw > 0.0 && harvested < harvest_cap_kj {
+                clip_kw = if clip_latch_kw < max_harvest { clip_latch_kw } else { max_harvest };
+            }
 
             if !on_throttle {
                 demand_kw = 0.0;
@@ -506,11 +526,12 @@ pub unsafe extern "C" fn fa26_simulate(
     out[11] = throttle_time;
     out[12] = lift_order.len() as f64;
     out[13] = n_speeds as f64;
+    out[14] = clip_latch_kw;
     0
 }
 
 /// So the Python side can refuse a library built for a different layout.
 #[no_mangle]
 pub extern "C" fn fa26_abi_version() -> i32 {
-    1
+    2
 }

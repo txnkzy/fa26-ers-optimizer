@@ -171,6 +171,14 @@ class Profile:
         # simulation started them from a standstill and drove the whole lap
         # recovering from it, 5.8% and 4.8% slow, the two worst replays in the
         # corpus. Walking twice covers a run of empty slots at either end.
+        #
+        # The throttle maximum borrows too. Left at zero, an empty slot is a
+        # lift the driver never made, and the simulation re-arms everything
+        # there: an Interlagos lap crossed the line flat, but its slot 0 was
+        # empty and read 0.00 against a mean of 1.00, so the model granted the
+        # opening with the 200 kW floor and ended a 350 kW clip at the line,
+        # where the car deployed nothing and went on clipping for 112 m. 51 of
+        # 471 laps in the corpus had such a slot at the line, 103 somewhere.
         for _ in range(2):
             for i in range(n):
                 if counts[i]:
@@ -178,6 +186,7 @@ class Profile:
                 j = i - 1                       # wraps to the last slot at i = 0
                 self.speed[i] = self.speed[j]
                 self.lat[i] = self.lat[j]
+                self.gas[i] = self.gas[j]
                 self.gas_mean[i] = self.gas_mean[j]
                 self.brake_mean[i] = self.brake_mean[j]
         if any(lap.lat_g):

@@ -157,6 +157,10 @@ class Carry:
     the map may *ask* for, and that cap only lifts when the driver comes off
     the throttle, so a run continued without them would let the second half ask
     for power the first half had already forfeited.
+
+    `clip_kw` is the same latch on the harvesting side: the super-clip the car
+    is still obeying after the split that asked for it has ended, until the
+    driver lifts.
     """
 
     speed_ms: float
@@ -164,6 +168,7 @@ class Carry:
     demand_kw: float = 0.0
     prev_level_kw: float = 0.0
     throttle_time_s: float = 0.0
+    clip_kw: float = 0.0
 
 
 @dataclass
@@ -320,6 +325,8 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
     #: reduction rate applies here, not to delivered power.
     prev_level_kw = 0.0
     throttle_time = 0.0
+    #: The super-clip the car is obeying, which may be a split it has left.
+    clip_latch_kw = 0.0
 
     # A lap does not begin with the car freshly on the throttle. Where the
     # start/finish line sits on a straight the driver crosses it flat, having
@@ -338,21 +345,26 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
         hi = max(lo + 1, int(window[1] / step))
     for i in (() if entry is not None else range(max(0, n - int(PRIME_M / step)), n)):
         d = i * step
+        cmd, clip = commands[i]
         if not on_throttle_at[i]:
             throttle_time = 0.0
             demand_kw = 0.0
             prev_level_kw = 0.0
+            clip_latch_kw = clip
             continue
         # The clock runs from the knee, as in the main loop below.
         if gas_at[i] < fa26.DEMAND_RESET_GAS:
             throttle_time = 0.0
         else:
             throttle_time += step / max(profile.measured_speed_at(d), 1.0)
-        cmd, clip = commands[i]
         if throttle_time <= powertrain.floor_hold_s or in_reset_at[i]                 or gas_at[i] < fa26.DEMAND_RESET_GAS:
             demand_kw = cmd
+            clip_latch_kw = clip
         else:
             demand_kw = min(demand_kw, cmd)
+            # The clip latch, as in the main loop below.
+            if clip > 0.0:
+                clip_latch_kw = clip
         prev_level_kw = powertrain.deploy_kw(
             demand_kw, profile.measured_speed_at(d),
             full_throttle=(throttle_time <= powertrain.floor_hold_s
@@ -368,6 +380,7 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
         demand_kw = entry.demand_kw
         prev_level_kw = entry.prev_level_kw
         throttle_time = entry.throttle_time_s
+        clip_latch_kw = entry.clip_kw
         start_store_kj = entry.store_kj
         settle = False
     store = start_store_kj
@@ -411,19 +424,6 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
             # and is corrected by the exact dt below.
             dt_guess = step / (v if v > 1.0 else 1.0)
 
-            # A split's super-clip section is harvesting, not deploying, so the
-            # 200 kW floor does not apply there. Applying it anyway had the car
-            # deploying and harvesting in the same step, which drained the store
-            # across the lap while the totals still looked balanced.
-            clip_kw = 0.0
-            if full_throttle and cmd_clip > 0.0 and harvested < harvest_cap_kj:
-                clip_kw = cmd_clip if cmd_clip < max_harvest else max_harvest
-            # The crossing from deployment into super-clipping is already
-            # rate-limited by the deployment ramp below, and the two net out, so
-            # clipping needs no separate ramp. Giving it one charged the rate
-            # twice and cost a Barcelona replay more than half its harvest --
-            # 3.47 MJ against a measured 7.85.
-
             # The 200 kW floor is a transient obligation, not a permanent one:
             # it must be held for about a second after the throttle opens, and
             # after that power may fall, but only at the ramp rate. Treating it
@@ -439,6 +439,34 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
             # split that began 0.29 s after the knee -- the car delivered it,
             # 1.8 MJ through the long right, and the model delivered 0.12.
             throttle_time = throttle_time + dt_guess if gas >= reset_gas else 0.0
+
+            # A super-clip command is a demand like any other, and is held the
+            # same way: once the car is clipping, the split ending does not
+            # stop it -- only the driver lifting, or a new clip command, does.
+            # Interlagos, 8 November: the race map's last split clipped 350 kW
+            # into the line and the opening split asked for nothing, and on
+            # both laps that arrived flat the car harvested 345-350 kW from the
+            # line to the lift at 112-136 m. Mid-lap it is the same: Bahrain's
+            # 150 kW clip ran 170 m into the next split, Albert Park's 50 kW
+            # clip 266 m past the line, each to the lift and no further. Ending
+            # the clip with its split let the search write a clip into the line
+            # and price it as free; the car slowed all the way to turn one.
+            if (cmd_clip > 0.0 or not on_throttle or throttle_time <= floor_hold_s
+                    or in_reset_at[i % n] or gas < reset_gas):
+                clip_latch_kw = cmd_clip
+
+            # A split's super-clip section is harvesting, not deploying, so the
+            # 200 kW floor does not apply there. Applying it anyway had the car
+            # deploying and harvesting in the same step, which drained the store
+            # across the lap while the totals still looked balanced.
+            clip_kw = 0.0
+            if full_throttle and clip_latch_kw > 0.0 and harvested < harvest_cap_kj:
+                clip_kw = clip_latch_kw if clip_latch_kw < max_harvest else max_harvest
+            # The crossing from deployment into super-clipping is already
+            # rate-limited by the deployment ramp below, and the two net out, so
+            # clipping needs no separate ramp. Giving it one charged the rate
+            # twice and cost a Barcelona replay more than half its harvest --
+            # 3.47 MJ against a measured 7.85.
 
             # Deployment follows the throttle, not just full throttle. Gating it
             # on full throttle made every corner exit invisible to the search:
@@ -626,7 +654,8 @@ def simulate_py(splits, car, longitudinal, profile, powertrain,
                 dists.append(d)
 
     leaving = Carry(speed_ms=v, store_kj=store, demand_kw=demand_kw,
-                    prev_level_kw=prev_level_kw, throttle_time_s=throttle_time)
+                    prev_level_kw=prev_level_kw, throttle_time_s=throttle_time,
+                    clip_kw=clip_latch_kw)
     return Result(exit=leaving, lap_time_s=time_s, deployed_mj=deployed / 1000.0,
                   harvested_mj=harvested / 1000.0, store_end_kj=store,
                   store_min_kj=store_min, store_start_kj=store_start,
