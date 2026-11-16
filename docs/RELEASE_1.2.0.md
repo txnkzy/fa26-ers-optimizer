@@ -17,6 +17,15 @@ the top in the order you use them, with folders, the logger, past runs and
 help on the right. Everything the old layout did is still there; it has just
 stopped scrolling.
 
+**The FIA's limits, shown and marked as the FIA's.** The Solve page now shows
+everything the FIA's Power Unit notice sets for the race: all five recharge
+limits, the power reduction rate, and the power curves drawn against speed,
+with the sectors where the alternative race curve applies marked on the
+circuit. A green "Official" badge names the notice they came from, so there
+is nothing to set. If you want to anyway, "Change" unlocks every one of them,
+including which of the car's curves each session runs; the badge then says
+they are your settings, and "Back to official" undoes it.
+
 **A solve takes seconds, not minutes.** The lap simulation at the heart of
 the search — the part that prices every map the optimizer tries — has been
 rewritten as compiled code. On the machine it was measured on, a full solve

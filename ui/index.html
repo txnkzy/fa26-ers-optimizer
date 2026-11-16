@@ -165,33 +165,80 @@
 
 <!-- ============================================================== 2 solve -->
 <section class="screen center" id="screen-solve">
-  <section class="card" id="ready-card">
+  <section class="card wide" id="ready-card">
     <p class="eyebrow" id="solve-eyebrow">Ready</p>
     <h2>Ready to solve</h2>
     <p class="lede">Seven maps, one for each PU mode on the wheel.</p>
 
-    <div class="block" id="limits-block" hidden>
-      <div class="sliders limits" id="sliders">
-        <div class="slider-row limit">
-          <div class="slider-head">
-            <label for="qualify-range">Recharge limit &middot; qualifying</label>
-            <output class="slider-value" id="qualify-value">7.0<span>MJ</span></output>
-          </div>
-          <input type="range" id="qualify-range" min="40" max="91" step="1" value="70">
+    <div class="block fia" id="limits-block" hidden>
+      <div class="fia-head">
+        <span class="badge" id="fia-badge">Official</span>
+        <div class="fia-title">
+          <b id="fia-title">FIA limits</b>
+          <span id="limits-source"></span>
         </div>
-        <div class="slider-row limit">
-          <div class="slider-head">
-            <label for="race-range">Recharge limit &middot; race</label>
-            <output class="slider-value" id="race-value">8.0<span>MJ</span></output>
+        <button type="button" class="btn small" id="limits-toggle"></button>
+      </div>
+
+      <div class="fia-body">
+        <div class="fia-col">
+          <p class="label">Recharge per lap</p>
+          <div class="sliders limits" id="sliders">
+            <div class="slider-row limit">
+              <div class="slider-head">
+                <label for="qualify-range">Qualifying</label>
+                <output class="slider-value" id="qualify-value">7.0<span>MJ</span></output>
+              </div>
+              <input type="range" id="qualify-range" min="40" max="91" step="1" value="70">
+            </div>
+            <div class="slider-row limit">
+              <div class="slider-head">
+                <label for="race-range">Race</label>
+                <output class="slider-value" id="race-value">8.0<span>MJ</span></output>
+              </div>
+              <input type="range" id="race-range" min="40" max="86" step="1" value="80">
+            </div>
           </div>
-          <input type="range" id="race-range" min="40" max="86" step="1" value="80">
+          <div class="fia-rows" id="fia-rows">
+            <label class="fia-row"><span>Race with Overtake</span>
+              <span class="num"><input type="number" id="x-race_overtake" step="0.1"><i>MJ</i></span></label>
+            <label class="fia-row"><span>Practice</span>
+              <span class="num"><input type="number" id="x-practice" step="0.1"><i>MJ</i></span></label>
+            <label class="fia-row"><span>Out lap</span>
+              <span class="num"><input type="number" id="x-outlap" step="0.1"><i>MJ</i></span></label>
+            <label class="fia-row"><span>Power reduction rate</span>
+              <span class="num"><select id="x-rate_kw_s">
+                <option value="50">50</option><option value="100">100</option>
+              </select><i>kW/s</i></span></label>
+          </div>
+          <div class="fia-sectors" id="fia-sectors" hidden>
+            <svg id="fia-track" aria-hidden="true"></svg>
+            <span id="fia-sectors-text"></span>
+          </div>
+          <p class="hint" id="unlimited-hint" hidden>
+            No limit at all &mdash; VRC's <b>unlimited</b> switch, for circuits
+            with no official figure.
+          </p>
+        </div>
+
+        <div class="fia-col">
+          <p class="label">Most power the car may deploy (kW), by speed (kph)</p>
+          <svg class="curve-chart" id="curve-chart" viewBox="0 0 360 122" aria-hidden="true"></svg>
+          <div class="fia-rows curves">
+            <label class="fia-row"><span><i class="swatch" style="--c:#ff5c7a"></i>Qualifying and practice</span>
+              <select id="x-curve_override"></select></label>
+            <label class="fia-row"><span><i class="swatch" style="--c:#5ec8ff"></i>Race</span>
+              <select id="x-curve_standard"></select></label>
+            <label class="fia-row"><span><i class="swatch" style="--c:#b08cff"></i>Race, in set sectors</span>
+              <select id="x-curve_alternative"></select></label>
+          </div>
         </div>
       </div>
-      <p class="source"><span id="limits-source"></span>
-        <button type="button" class="link" id="limits-toggle"></button></p>
-      <p class="hint" id="unlimited-hint" hidden>
-        No limit at all &mdash; VRC's <b>unlimited</b> switch, for circuits
-        with no official figure.
+
+      <p class="hint" id="fia-effect" hidden>
+        Qualifying, race and Overtake recharge and the three curves change the
+        maps. Practice, out lap and the reduction rate are only written into
+        the setup.
       </p>
       <label class="check" id="remember-wrap" hidden>
         <input type="checkbox" id="remember"> <span>Remember for this circuit</span>
