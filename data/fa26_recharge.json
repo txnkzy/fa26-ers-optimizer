@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "updated": "2026-11-05T23:37:54Z"
+    "updated": "2026-11-18T00:56:20Z"
   },
   "albertpark": {
     "practice": 85,
@@ -262,12 +262,54 @@
     "source": "published:2026"
   },
   "lasvegas": {
-    "practice": 90,
+    "practice": 85,
     "qualify": 60,
     "race": 80,
     "race_overtake": 85,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:21",
+    "rate_kw_s": 50,
+    "power_limited_m": 4448,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 6201,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        300,
+        500
+      ],
+      [
+        1520,
+        3150
+      ]
+    ],
+    "speed_zones": [
+      [
+        450,
+        620,
+        240
+      ],
+      [
+        2550,
+        3100,
+        310
+      ]
+    ],
+    "reset_zones": [
+      [
+        540,
+        800
+      ],
+      [
+        5700,
+        6200,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "lasvegas"
+    ]
   },
   "lusail": {
     "practice": 90,

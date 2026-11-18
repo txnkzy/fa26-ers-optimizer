@@ -101,6 +101,12 @@
     "imported": "2026-10-11",
     "round": "R14"
   },
+  "https://www.fia.com/system/files/decision-document/2026_las_vegas_grand_prix_-_power_unit_information.pdf": {
+    "circuit": "lasvegas",
+    "event": "2026 LAS VEGAS GRAND PRIX",
+    "imported": "2026-11-18",
+    "round": "R21"
+  },
   "https://www.fia.com/system/files/decision-document/2026_mexico_city_grand_prix_-_power_unit_information.pdf": {
     "circuit": "mexico",
     "event": "2026 MEXICO CITY GRAND PRIX",
