@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "updated": "2026-11-18T00:56:20Z"
+    "updated": "2026-11-25T19:14:35Z"
   },
   "albertpark": {
     "practice": 85,
@@ -312,12 +312,62 @@
     ]
   },
   "lusail": {
-    "practice": 90,
-    "qualify": 80,
+    "practice": 85,
+    "qualify": 65,
     "race": 80,
     "race_overtake": 85,
     "outlap": 90,
-    "source": "published:2026"
+    "source": "fia:22",
+    "rate_kw_s": 100,
+    "power_limited_m": 3108,
+    "curve_standard": "Base - Standard",
+    "curve_override": "Base - Overtake",
+    "centreline_m": 5419,
+    "curve_alternative": "Alt 1",
+    "alt_zones": [
+      [
+        750,
+        1050
+      ],
+      [
+        1700,
+        3100
+      ],
+      [
+        3750,
+        4150
+      ]
+    ],
+    "speed_zones": [
+      [
+        3650,
+        4200,
+        310
+      ]
+    ],
+    "reset_zones": [
+      [
+        3750,
+        4050
+      ],
+      [
+        4150,
+        4300
+      ],
+      [
+        4500,
+        4650
+      ],
+      [
+        5050,
+        5400,
+        "q"
+      ]
+    ],
+    "aliases": [
+      "lusail",
+      "qatar"
+    ]
   },
   "madrid": {
     "practice": 90,
